@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="utf-8">
+  <title>DCIM TT — Otonom Olaylar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="assets/img/Turk-Telekom-Symbol.png">
+  <script>try{var m=localStorage.getItem('akya_theme_mode');if(m==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}var s=parseInt(localStorage.getItem('akya_ui_scale')||'100',10);document.documentElement.style.fontSize=([75,90,100,115,130].indexOf(s)>=0?s:100)+'%';}catch(e){document.documentElement.style.fontSize='100%';}</script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/tailwind-extra.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/events.css">
+</head>
+<body class="dark">
+  <div class="h-screen flex flex-col font-sans bg-slate-100 dark:bg-surface-base text-slate-900 dark:text-slate-100 transition-colors duration-150 overflow-hidden">
+    <header id="app-header" class="h-13 shrink-0 bg-white dark:bg-surface-base border-b border-slate-200 dark:border-border-subtle sticky top-0 z-40 flex items-center justify-between px-3 md:px-4 shadow-2xs select-none" data-report-hide></header>
+
+    <main class="flex-1 min-h-0 overflow-hidden bg-slate-100 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 p-2.5 sm:p-3 flex flex-col">
+      <!-- app-newuicmp-events (:host { display:flex; flex:1; min-height:0; height:100%; flex-direction:column; overflow:hidden }) -->
+      <div style="display: flex; flex: 1 1 0%; min-height: 0; height: 100%; width: 100%; flex-direction: column; overflow: hidden;">
+        <div class="h-full flex flex-col min-h-0 gap-2 overflow-hidden">
+          <div class="shrink-0" id="ev-header"></div>
+          <!-- app-data-table -->
+          <div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs flex flex-col flex-1 min-h-0 overflow-hidden w-full" id="ev-table"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/layout-data.js"></script>
+  <script src="js/mock-data.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/ui-kit.js"></script>
+  <script src="js/events.js"></script>
+</body>
+</html>

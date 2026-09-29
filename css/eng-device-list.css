@@ -1,0 +1,15 @@
+/* ==========================================================================
+   Mühendislik / Cihaz Listesi (engineering.html#device-list)
+   app-data-table bileşen stilleri (data-table.component.ts → styles) — .eng-dl ile kapsamlı
+   ========================================================================== */
+.eng-dl .scada-table td.cell-wrap,
+.eng-dl .scada-table td .cell-wrap {
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-height: 1.35;
+}
+.eng-dl .scada-table td.cell-nowrap,
+.eng-dl .scada-table td .cell-nowrap {
+  white-space: nowrap;
+}

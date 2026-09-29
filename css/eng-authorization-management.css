@@ -1,0 +1,20 @@
+/* ==========================================================================
+   Mühendislik / Yetkilendirme Yönetimi (authorization-management)
+   Orijinal bileşende .scss yok (styleUrl yorum satırında). Buradaki kurallar yalnızca
+   sayfa-içi yerleşim ve şablondaki işaret sınıfları içindir; .eng-am ile kapsamlıdır.
+   ========================================================================== */
+
+/* Modal kabuğu sayfa içine yerleşik çizildiği için kök, host yüksekliğini doldurur */
+.eng-am {
+  min-height: 0;
+}
+
+/* Şablondaki "sub-dropdown" işaret sınıfı (orijinalde stil taşımaz); açılışta hafif belirme */
+.eng-am .sub-dropdown {
+  animation: eng-am-fade 120ms ease-out;
+}
+
+@keyframes eng-am-fade {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}

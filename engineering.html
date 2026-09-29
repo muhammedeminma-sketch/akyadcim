@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="utf-8">
+  <title>DCIM TT — Mühendislik</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="assets/img/Turk-Telekom-Symbol.png">
+  <script>try{var m=localStorage.getItem('akya_theme_mode');if(m==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}var s=parseInt(localStorage.getItem('akya_ui_scale')||'100',10);document.documentElement.style.fontSize=([75,90,100,115,130].indexOf(s)>=0?s:100)+'%';}catch(e){document.documentElement.style.fontSize='100%';}</script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/tailwind-extra.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/eng-data-query-period.css">
+  <link rel="stylesheet" href="css/eng-data-save-period.css">
+  <link rel="stylesheet" href="css/eng-bulk-settings.css">
+  <link rel="stylesheet" href="css/eng-add-device.css">
+  <link rel="stylesheet" href="css/eng-device-add.css">
+  <link rel="stylesheet" href="css/eng-asset-device-add.css">
+  <link rel="stylesheet" href="css/eng-device-list.css">
+  <!-- <link rel="stylesheet" href="css/eng-report-historical-points.css"> -->
+  <link rel="stylesheet" href="css/eng-maintenance-module.css">
+  <link rel="stylesheet" href="css/eng-ticket-management.css">
+  <link rel="stylesheet" href="css/eng-sendemail-report.css">
+  <link rel="stylesheet" href="css/eng-authorization-management.css">
+  <!-- <link rel="stylesheet" href="css/eng-project-inventory.css"> -->
+</head>
+<body class="dark">
+  <div class="h-screen flex flex-col font-sans bg-slate-100 dark:bg-surface-base text-slate-900 dark:text-slate-100 transition-colors duration-150 overflow-hidden">
+    <header id="app-header" class="h-13 shrink-0 bg-white dark:bg-surface-base border-b border-slate-200 dark:border-border-subtle sticky top-0 z-40 flex items-center justify-between px-3 md:px-4 shadow-2xs select-none"></header>
+
+    <main class="flex-1 min-h-0 overflow-hidden bg-slate-100 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 p-2.5 sm:p-3 flex flex-col">
+      <!-- engineering-shell.component.html -->
+      <div class="h-[calc(100vh-4rem)] flex overflow-hidden -m-3 md:-m-4">
+        <div id="eng-sidebar" class="h-full flex shrink-0"></div>
+        <div id="eng-outlet" class="flex-1 flex flex-col min-w-0 bg-slate-100 dark:bg-[#080c14] overflow-hidden p-0"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/layout-data.js"></script>
+  <script src="js/mock-data.js"></script>
+  <script src="js/mock/eng-data-query-period.data.js"></script>
+  <script src="js/mock/eng-data-save-period.data.js"></script>
+  <script src="js/mock/eng-bulk-settings.data.js"></script>
+  <script src="js/mock/eng-add-device.data.js"></script>
+  <script src="js/mock/eng-device-add.data.js"></script>
+  <script src="js/mock/eng-asset-device-add.data.js"></script>
+  <script src="js/mock/eng-device-list.data.js"></script>
+  <!-- <script src="js/mock/eng-report-historical-points.data.js"></script> -->
+  <script src="js/mock/eng-maintenance-module.data.js"></script>
+  <script src="js/mock/eng-ticket-management.data.js"></script>
+  <script src="js/mock/eng-sendemail-report.data.js"></script>
+  <script src="js/mock/eng-authorization-management.data.js"></script>
+  <!-- <script src="js/mock/eng-project-inventory.data.js"></script> -->
+  <script src="js/shell.js"></script>
+  <script src="js/ui-kit.js"></script>
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="vendor/echarts.min.js"></script>
+  <!-- Mühendislik sayfa modülleri: her biri DCIM.engRegistry[anahtar] = { mount(el, params) } kaydeder -->
+  <script src="js/engineering/data-query-period.js"></script>
+  <script src="js/engineering/data-save-period.js"></script>
+  <script src="js/engineering/bulk-settings.js"></script>
+  <script src="js/engineering/add-device.js"></script>
+  <script src="js/engineering/device-add.js"></script>
+  <script src="js/engineering/asset-device-add.js"></script>
+  <script src="js/engineering/device-list.js"></script>
+  <!-- <script src="js/engineering/report-historical-points.js"></script> -->
+  <script src="js/engineering/maintenance-module.js"></script>
+  <script src="js/engineering/ticket-management.js"></script>
+  <script src="js/engineering/sendemail-report.js"></script>
+  <script src="js/engineering/authorization-management.js"></script>
+  <!-- <script src="js/engineering/project-inventory.js"></script> -->
+  <script src="js/engineering.js"></script>
+</body>
+</html>

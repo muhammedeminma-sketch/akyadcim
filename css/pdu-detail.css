@@ -1,0 +1,6 @@
+/* PDU Detay Sayfası — sayfaya özel ekler
+   location-tree 'floor' düğümü 'pi pi-layers' kullanır; derlenmiş PrimeIcons sürümünde bu glif yok.
+   Boş ikon görünmemesi için en yakın glif (pi-clone) atanır. */
+.pi-layers:before {
+  content: "\e955";
+}

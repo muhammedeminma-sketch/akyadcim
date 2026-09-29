@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="utf-8">
+  <title>DCIM TT — Kapak Kilitleri</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="assets/img/Turk-Telekom-Symbol.png">
+  <script>try{var m=localStorage.getItem('akya_theme_mode');if(m==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}var s=parseInt(localStorage.getItem('akya_ui_scale')||'100',10);document.documentElement.style.fontSize=([75,90,100,115,130].indexOf(s)>=0?s:100)+'%';}catch(e){document.documentElement.style.fontSize='100%';}</script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/tailwind-extra.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body class="dark">
+  <div class="h-screen flex flex-col font-sans bg-slate-100 dark:bg-surface-base text-slate-900 dark:text-slate-100 transition-colors duration-150 overflow-hidden">
+    <header id="app-header" class="h-13 shrink-0 bg-white dark:bg-surface-base border-b border-slate-200 dark:border-border-subtle sticky top-0 z-40 flex items-center justify-between px-3 md:px-4 shadow-2xs select-none" data-report-hide></header>
+
+    <main class="flex-1 min-h-0 overflow-hidden bg-slate-100 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 p-2.5 sm:p-3 flex flex-col">
+      <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <div class="w-full flex flex-col gap-2 p-1 pb-6">
+
+          <!-- Page Header -->
+          <div class="shrink-0 mb-1 pb-2 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 select-none">
+            <div class="flex items-center gap-3">
+              <div>
+                <nav class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 mb-0.5 font-medium">
+                  <a href="2d.html" class="hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"><i class="pi pi-home text-[10px]"></i></a>
+                  <i class="pi pi-chevron-right text-[8px] text-slate-400"></i>
+                  <span class="text-slate-700 dark:text-slate-300 font-bold">İzleme</span>
+                  <i class="pi pi-chevron-right text-[8px] text-slate-400"></i>
+                  <span class="text-slate-700 dark:text-slate-300 font-bold">Kapak Kilitleri</span>
+                </nav>
+                <div class="flex items-center gap-2">
+                  <h1 class="text-sm md:text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100">Kapak Kilitleri</h1>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5 shrink-0 ml-auto">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  TAKİP AKTİF
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Monitor Toolbar -->
+          <section id="monitor-toolbar" class="operator-toolbar shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 p-2 rounded-[2px] border border-slate-200 dark:border-border-subtle bg-white dark:bg-surface-card"></section>
+
+          <!-- Summary Cards -->
+          <div id="summary-cards" class="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+
+          <!-- Live Connection & Update Timestamp -->
+          <section class="shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-[2px] border border-slate-200 dark:border-border-subtle bg-white dark:bg-surface-card">
+            <div class="flex items-center gap-2 min-w-0">
+              <i class="pi pi-clock text-xs text-slate-400"></i>
+              <div class="text-[10px] text-slate-600 dark:text-slate-300 truncate" id="last-updated">Canlı veri bağlantısı kuruluyor</div>
+            </div>
+            <div class="hidden sm:flex items-center gap-1.5 text-[9.5px] font-mono text-slate-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>10s Otomatik Canlı Akış</span>
+            </div>
+          </section>
+
+          <!-- Main Views Container -->
+          <div class="flex-1 min-h-0 flex flex-col" id="views"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Cabinet Detail Drawer -->
+  <div id="drawer-backdrop" class="dcim-drawer-backdrop fixed inset-0 z-40 bg-slate-950/45 dark:bg-slate-950/65 backdrop-blur-[2px]"></div>
+  <aside id="cabinet-drawer" class="dcim-drawer-panel fixed top-0 right-0 bottom-0 z-50 w-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col select-none" style="width: min(84vw, 1480px); min-width: min(100vw, 560px); max-width: 100vw;"></aside>
+
+  <script src="js/layout-data.js"></script>
+  <script src="js/mock-data.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/ui-components.js"></script>
+  <script src="js/locks.js"></script>
+</body>
+</html>

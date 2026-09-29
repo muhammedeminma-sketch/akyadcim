@@ -1,0 +1,11 @@
+/* ==========================================================================
+   Mühendislik / Bakım Modülü (engineering.html#maintenance-module) — kök: .eng-mm
+   Kaynak bileşenin (.html/.ts) kendi .scss dosyası yok; scada-input / scada-select / scada-textarea /
+   scada-table stilleri css/styles.css'ten gelir. Sayfaya özel ek stil gerekmedi.
+   ========================================================================== */
+.eng-mm textarea.scada-textarea { resize: vertical; }
+
+/* Sayfa numarası / sayfa başına kayıt girdileri: katmansız .scada-input { width:100% } kuralı
+   @layer utilities içindeki w-12 / w-14'ü ezdiği için ("/ 8" metni alt satıra kayıyordu) genişlik sabitlendi. */
+.eng-mm input.scada-input.w-12 { width: 3rem; flex: none; }
+.eng-mm input.scada-input.w-14 { width: 3.5rem; flex: none; }

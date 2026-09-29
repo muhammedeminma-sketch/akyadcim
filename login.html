@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="utf-8">
+  <title>DCIM TT — Giriş</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="assets/img/Turk-Telekom-Symbol.png">
+  <script>try{var m=localStorage.getItem('akya_theme_mode');if(m==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}var s=parseInt(localStorage.getItem('akya_ui_scale')||'100',10);document.documentElement.style.fontSize=([75,90,100,115,130].indexOf(s)>=0?s:100)+'%';}catch(e){document.documentElement.style.fontSize='100%';}</script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/tailwind-extra.css">
+  <link rel="stylesheet" href="css/components.css">
+  <style>
+    /* login.component.scss :host */
+    .login-host { display: flex; flex-direction: column; width: 100%; height: 100vh; max-height: 100vh; height: 100dvh; max-height: 100dvh; overflow: hidden; box-sizing: border-box; }
+  </style>
+</head>
+<body class="dark">
+  <div class="login-host">
+    <div class="h-full max-h-screen max-h-[100dvh] w-full relative flex flex-col justify-between p-3 sm:p-4 md:p-5 select-none bg-slate-950 overflow-hidden box-border">
+      <!-- Background Image with Ambient Overlay -->
+      <div class="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-500 scale-105 pointer-events-none" style="background-image: url('assets/img/login-arkaplan.png');"></div>
+      <div class="absolute inset-0 bg-gradient-to-b from-slate-950/85 via-slate-950/70 to-slate-950/90 backdrop-blur-[2px] pointer-events-none"></div>
+
+      <!-- Top Header Navigation -->
+      <header class="w-full max-w-6xl mx-auto flex items-center justify-between z-20 py-1 sm:py-1.5 shrink-0">
+        <div class="flex items-center gap-2.5 sm:gap-3 bg-slate-900/70 backdrop-blur-md px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-700/50 shadow-xl">
+          <img src="assets/img/logo-akya-white.png" alt="Akya Logo" class="h-7 sm:h-8 md:h-9 w-auto object-contain" />
+          <div class="h-5 sm:h-6 w-[1px] bg-slate-700/80"></div>
+          <span class="text-xs md:text-sm font-bold tracking-wide text-slate-100">Veri Merkezi Altyapı Yönetimi</span>
+        </div>
+
+        <div class="flex items-center gap-2 bg-slate-900/70 backdrop-blur-md px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-700/50 shadow-xl">
+          <i class="pi pi-globe text-sky-400 text-sm"></i>
+          <span class="text-xs text-slate-300 font-semibold hidden sm:inline">Dil:</span>
+          <select id="lang-select" class="bg-slate-900/90 border border-slate-700 text-slate-100 text-xs rounded-lg px-2.5 py-1 font-bold focus:outline-none focus:border-sky-400 cursor-pointer">
+            <option value="tr" selected>Türkçe</option>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+            <option value="fr">Français</option>
+            <option value="es">Español</option>
+            <option value="ru">Русский</option>
+            <option value="ja">日本語</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+      </header>
+
+      <!-- Glassmorphism Login Card -->
+      <main class="w-full max-w-md mx-auto my-auto z-20 py-2 sm:py-3 flex flex-col justify-center shrink min-h-0">
+        <div class="bg-slate-900/80 backdrop-blur-xl border border-slate-700/70 rounded-2xl p-5 sm:p-6 md:p-7 shadow-2xl shadow-slate-950/90 space-y-4 sm:space-y-5 relative overflow-hidden">
+          <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-500 via-blue-500 to-cyan-400"></div>
+
+          <div class="text-center pb-0.5">
+            <img src="assets/img/Turk-Telekom-Logo-Mobile.png" alt="Türk Telekom Logo" class="h-12 sm:h-13 md:h-14 w-auto mx-auto object-contain drop-shadow-2xl" />
+          </div>
+
+          <!-- Alert / Messages -->
+          <div id="login-error" class="hidden p-2.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+            <i class="pi pi-exclamation-circle text-sm shrink-0"></i>
+            <span data-msg></span>
+          </div>
+          <div id="login-success" class="hidden p-2.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+            <i class="pi pi-check-circle text-sm shrink-0"></i>
+            <span data-msg></span>
+          </div>
+
+          <!-- Giriş Türü Seçimi -->
+          <div id="type-selector" class="hidden space-y-2.5 pt-1">
+            <div class="text-center pb-1">
+              <h3 class="text-sm font-bold text-white">Giriş Türü Seçiniz</h3>
+              <p class="text-xs text-slate-400">Lütfen erişmek istediğiniz portal tipini seçiniz.</p>
+            </div>
+            <button type="button" data-login-type="kurum" class="w-full py-2.5 bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/50 font-bold text-xs rounded-xl transition-all flex items-center justify-between px-4 cursor-pointer">
+              <div class="flex items-center gap-2">
+                <i class="pi pi-building text-base text-sky-400"></i>
+                <span>Kurum Girişi (Operatör / Sistem)</span>
+              </div>
+              <i class="pi pi-chevron-right text-xs"></i>
+            </button>
+            <button type="button" data-login-type="musteri" class="w-full py-2.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-between px-4 cursor-pointer">
+              <div class="flex items-center gap-2">
+                <i class="pi pi-users text-base text-slate-400"></i>
+                <span>Müşteri Girişi (Müşteri Portalı)</span>
+              </div>
+              <i class="pi pi-chevron-right text-xs"></i>
+            </button>
+          </div>
+
+          <!-- Giriş Formu -->
+          <form id="login-form" class="space-y-3.5 pt-0.5" autocomplete="off" novalidate>
+            <div class="space-y-1">
+              <label class="block text-xs font-bold text-slate-200" for="username">Kullanıcı Adı</label>
+              <div class="relative">
+                <input id="username" type="text" name="username" required placeholder="Kullanıcı adınızı girin"
+                  class="w-full bg-slate-950/90 backdrop-blur-md border border-slate-700/90 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 transition-all" />
+                <i class="pi pi-user absolute right-3.5 top-3 text-slate-400 text-xs pointer-events-none"></i>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <label class="block text-xs font-bold text-slate-200" for="password">Şifre</label>
+              <div class="relative">
+                <input id="password" type="password" name="password" required placeholder="Şifrenizi girin"
+                  class="w-full bg-slate-950/90 backdrop-blur-md border border-slate-700/90 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 transition-all" />
+                <button type="button" id="toggle-password" class="absolute right-3 top-2.5 p-1 text-slate-400 hover:text-sky-400 focus:outline-none cursor-pointer transition-colors" title="Şifreyi Göster">
+                  <i class="pi pi-eye text-sm"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Beni Hatırla -->
+            <div class="flex items-center justify-between pt-0.5">
+              <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer select-none">
+                <input id="remember-me" type="checkbox" class="w-3.5 h-3.5 rounded-[2px] border-slate-600 bg-slate-950 cursor-pointer" style="accent-color: #0ea5e9;" />
+                <span>Beni Hatırla</span>
+              </label>
+              <span class="text-[11px] text-sky-400 hover:text-sky-300 font-semibold cursor-pointer transition-colors" id="forgot-password">Şifremi Unuttum</span>
+            </div>
+
+            <div class="space-y-2 pt-1.5">
+              <button type="submit" id="login-submit" class="w-full py-2.5 sm:py-3 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-sky-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+                <i class="pi pi-sign-in text-sm" data-icon></i>
+                <span>Giriş Yap</span>
+              </button>
+              <button type="button" id="login-back" class="w-full py-2 sm:py-2.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                <i class="pi pi-arrow-left text-xs"></i>
+                <span>Giriş Tipi Seç / Geri</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="w-full max-w-6xl mx-auto flex flex-wrap items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-2 sm:pt-2.5 z-20 shrink-0">
+        <span>© 2026 Akya Software &amp; Türk Telekomünikasyon A.Ş. Tüm Hakları Saklıdır.</span>
+        <div class="flex items-center gap-4">
+          <span class="hover:text-slate-200 cursor-pointer transition-colors">Gizlilik Politikası</span>
+          <span class="hover:text-slate-200 cursor-pointer transition-colors">Kullanım Şartları</span>
+          <span class="text-sky-400 font-mono font-bold">v4.8.13 (Enterprise)</span>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <script src="js/login.js"></script>
+</body>
+</html>

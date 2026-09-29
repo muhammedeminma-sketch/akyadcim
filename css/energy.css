@@ -1,0 +1,628 @@
+/* ==========================================================================
+   DCIM Sunum — Enerji Genel Görünüm (energy.html) bileşen stilleri
+   - energy-general-view.component.scss  → .sidebar-tree-scroll
+   - ups-dashboard.component.scss        → .ups-host (":host" karşılığı; birebir taşındı)
+   - energy-table-dashboard.component.scss → .etd-host
+   - Genel Bakış enerji akış şeması (kaynakta yok, sunum eki) → .en-flow-*
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   energy-general-view.component.scss — Sidebar ağacı kaydırma çubuğu
+   -------------------------------------------------------------------------- */
+.sidebar-tree-scroll {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  max-height: 100% !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+.sidebar-tree-scroll::-webkit-scrollbar { width: 4px; }
+.sidebar-tree-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-tree-scroll::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 4px; }
+.sidebar-tree-scroll::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.6); }
+
+/* UPS alt menü düğmeleri (schemaMenuConfigMap butonları) yatay kaydırma */
+.en-subtabs { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.4) transparent; }
+.en-subtabs::-webkit-scrollbar { height: 4px; }
+.en-subtabs::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 4px; }
+
+/* ==========================================================================
+   ups-dashboard.component.scss (birebir; :host → .ups-host)
+   ========================================================================== */
+.ups-host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+
+  /* DESIGN SYSTEM TOKENS (LIGHT MODE DEFAULT) */
+  --ups-bg: #f1f3f6;
+  --ups-dots: #cbd5e1;
+  --ups-dots-size: 40px;
+  --ups-alarm-bg: #fde8e8;
+  --ups-alarm-dots: #fecaca;
+
+  --ups-card-bg: #ffffff;
+  --ups-card-border: #e2e8f0;
+  --ups-card-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.1);
+  --ups-card-accent-main: #0056b3;
+  --ups-card-accent-battery: #0056b3;
+  --ups-card-accent-output: #0056b3;
+  --ups-card-accent-bypass: #64748b;
+
+  --ups-comp-bg: #ffffff;
+  --ups-comp-border: #1e293b;
+  --ups-comp-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  --ups-comp-glow: none;
+
+  --ups-cable-bg: rgba(226, 232, 240, 0.3);
+  --ups-cable-border: rgba(148, 163, 184, 0.6);
+  --ups-cable-flow-bg: rgba(255, 224, 224, 0.95);
+  --ups-cable-pulse: #e90a0a;
+
+  --ups-text-main: #1e293b;
+  --ups-text-muted: #64748b;
+  --ups-text-sub: #94a3b8;
+  --ups-border-subtle: #f1f5f9;
+  --ups-border-row: #f8fafc;
+
+  --ups-batt-body-bg: #f8fafc;
+  --ups-batt-border: #1e293b;
+  --ups-batt-term-bg: #1e293b;
+  --ups-batt-term-color: #ffffff;
+
+  --ups-gauge-bg: #f1f5f9;
+  --ups-bar-bg: #f1f5f9;
+  --ups-bar-border: #e2e8f0;
+
+  --ups-svg-primary: #0056b3;
+  --ups-input-bg: #f0f7ff;
+  --ups-input-border: #bfdbfe;
+  --ups-input-text: #2563eb;
+}
+
+/* DARK MODE TOKENS (:host-context(.dark)) */
+html.dark .ups-host,
+body.dark .ups-host {
+  --ups-bg: #0b1120;
+  --ups-dots: rgba(148, 163, 184, 0.12);
+  --ups-alarm-bg: #1a0b0e;
+  --ups-alarm-dots: rgba(244, 63, 94, 0.2);
+
+  --ups-card-bg: rgba(15, 23, 42, 0.92);
+  --ups-card-border: rgba(51, 65, 85, 0.65);
+  --ups-card-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --ups-card-accent-main: #3b82f6;
+  --ups-card-accent-battery: #0284c7;
+  --ups-card-accent-output: #06b6d4;
+  --ups-card-accent-bypass: #8b5cf6;
+
+  --ups-comp-bg: rgba(15, 23, 42, 0.95);
+  --ups-comp-border: #0284c7;
+  --ups-comp-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(56, 189, 248, 0.1);
+  --ups-comp-glow: 0 0 14px rgba(56, 189, 248, 0.25);
+
+  --ups-cable-bg: rgba(30, 41, 59, 0.6);
+  --ups-cable-border: rgba(71, 85, 105, 0.55);
+  --ups-cable-flow-bg: rgba(244, 63, 94, 0.15);
+  --ups-cable-pulse: #f43f5e;
+
+  --ups-text-main: #f8fafc;
+  --ups-text-muted: #94a3b8;
+  --ups-text-sub: #64748b;
+  --ups-border-subtle: rgba(51, 65, 85, 0.6);
+  --ups-border-row: rgba(51, 65, 85, 0.35);
+
+  --ups-batt-body-bg: #090d16;
+  --ups-batt-border: #334155;
+  --ups-batt-term-bg: #0284c7;
+  --ups-batt-term-color: #f8fafc;
+
+  --ups-gauge-bg: rgba(51, 65, 85, 0.5);
+  --ups-bar-bg: #090d16;
+  --ups-bar-border: #334155;
+
+  --ups-svg-primary: #38bdf8;
+  --ups-input-bg: #0f172a;
+  --ups-input-border: #1e3a8a;
+  --ups-input-text: #93c5fd;
+}
+
+.ups-host .ups-dashboard-wrapper {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: var(--ups-bg);
+  overflow: hidden;
+  padding-bottom: 0;
+  box-sizing: border-box;
+  transition: background-color 0.4s ease, background-image 0.4s ease;
+}
+.ups-host .ups-dashboard-wrapper.show-dots {
+  background-image: radial-gradient(var(--ups-dots) 1.5px, transparent 0);
+  background-size: 40px 40px;
+  background-attachment: fixed;
+}
+.ups-host .ups-dashboard-wrapper.alarm-state.show-dots {
+  background-color: var(--ups-alarm-bg);
+  background-image: radial-gradient(var(--ups-alarm-dots) 1.5px, transparent 0);
+}
+@media screen and (min-width: 2560px) {
+  .ups-host .ups-dashboard-wrapper.show-dots {
+    background-image: radial-gradient(var(--ups-dots) 2.2px, transparent 0);
+    background-size: 60px 60px;
+  }
+  .ups-host .ups-dashboard-wrapper.alarm-state.show-dots {
+    background-image: radial-gradient(var(--ups-alarm-dots) 2.2px, transparent 0);
+  }
+}
+
+.ups-host .centering-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ups-host .scaling-box {
+  width: 1400px;
+  height: 900px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  flex-shrink: 0;
+  transition: transform 0.1s ease-out;
+}
+
+/* FLOW ANIMATIONS */
+@keyframes flow-horizontal {
+  from { background-position: 0 0; }
+  to { background-position: 40px 0; }
+}
+@keyframes flow-vertical {
+  from { background-position: 0 0; }
+  to { background-position: 0 40px; }
+}
+
+/* CABLE INFRASTRUCTURE */
+.ups-host .cable {
+  position: absolute;
+  z-index: 1;
+  border-radius: 0;
+  background: var(--ups-cable-bg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  transition: background 0.4s ease, border-color 0.4s ease;
+}
+.ups-host .cable::after {
+  content: '';
+  position: absolute;
+  opacity: 0;
+  display: none;
+}
+.ups-host .cable.flowing { background: var(--ups-cable-flow-bg); }
+.ups-host .cable.flowing::after {
+  display: block;
+  opacity: 1;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(90deg, var(--ups-cable-pulse), var(--ups-cable-pulse) 15px, transparent 15px, transparent 40px);
+  background-size: 40px 100%;
+  animation: flow-horizontal 1.2s linear infinite;
+}
+.ups-host .cable-3.flowing::after,
+.ups-host .cable-8.flowing::after {
+  background: repeating-linear-gradient(180deg, var(--ups-cable-pulse), var(--ups-cable-pulse) 15px, transparent 15px, transparent 40px);
+  background-size: 100% 40px;
+  animation: flow-vertical 1.2s linear infinite;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  right: 2px;
+}
+.ups-host .cable-1,
+.ups-host .cable-2,
+.ups-host .cable-4,
+.ups-host .cable-5,
+.ups-host .cable-6,
+.ups-host .cable-7 {
+  height: 12px !important;
+  border-top: 1.5px solid var(--ups-cable-border);
+  border-bottom: 1.5px solid var(--ups-cable-border);
+  border-left: none;
+  border-right: none;
+}
+.ups-host .cable-3,
+.ups-host .cable-8 {
+  width: 12px !important;
+  border-left: 1.5px solid var(--ups-cable-border);
+  border-right: 1.5px solid var(--ups-cable-border);
+  border-top: none;
+  border-bottom: none;
+}
+.ups-host .cable-1 { top: 139px; left: 250px; width: 380px; }
+.ups-host .cable-2 { top: 139px; left: 705px; width: 305px; }
+.ups-host .cable-3 { top: 140px; left: 999px; width: 12px; height: 272px; z-index: 5; }
+.ups-host .cable-4 { top: 409px; left: 250px; width: 220px; }
+.ups-host .cable-5 { top: 409px; left: 535px; width: 280px; }
+.ups-host .cable-6 { top: 409px; left: 860px; width: 140px; }
+.ups-host .cable-7 { top: 409px; left: 1000px; width: 135px; }
+.ups-host .cable-8 { top: 410px; left: 641px; width: 12px; height: 100px; }
+
+/* COMPONENT ICONS (RECTIFIER, INVERTER, BYPASS, SWITCHES) */
+.ups-host .comp-icon {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  background: var(--ups-comp-bg);
+  border: 3px solid var(--ups-comp-border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: var(--ups-comp-shadow);
+  color: var(--ups-svg-primary);
+  transition: all 0.3s ease;
+}
+.ups-host .comp-icon svg {
+  width: 100px;
+  height: 100px;
+  stroke-width: 4px;
+  stroke: var(--ups-svg-primary);
+  color: var(--ups-svg-primary);
+}
+.ups-host .comp-icon.i-1 { top: 100px; left: 175px; }
+.ups-host .comp-icon.i-2 { top: 370px; left: 175px; }
+.ups-host .comp-icon.i-3 { top: 370px; left: 465px; }
+.ups-host .comp-icon.i-4 { top: 370px; left: 810px; }
+.ups-host .comp-icon.i-5 { top: 100px; left: 630px; }
+.ups-host .comp-icon.i-6 { top: 370px; left: 1125px; }
+
+/* DATA CARDS & SCADA TABLES */
+.ups-host .data-card {
+  position: absolute;
+  background: var(--ups-card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--ups-card-border);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  box-shadow: var(--ups-card-shadow);
+  color: var(--ups-text-main);
+  z-index: 20;
+  min-width: 280px;
+  transition: all 0.3s ease;
+}
+.ups-host .table-bypass { top: 190px; left: 140px; border-top: 3.5px solid var(--ups-card-accent-bypass); }
+.ups-host .table-main { top: 460px; left: 140px; border-top: 3.5px solid var(--ups-card-accent-main); }
+.ups-host .table-battery { top: 470px; left: 510px; min-width: 320px; border-top: 3.5px solid var(--ups-card-accent-battery); }
+.ups-host .table-output { top: 460px; left: 1025px; border-top: 3.5px solid var(--ups-card-accent-output); }
+
+.ups-host .label {
+  text-align: left;
+  color: var(--ups-text-muted);
+  font-weight: 800;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ups-host .scada-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+.ups-host .scada-table th {
+  padding: 6px 4px;
+  border-bottom: 2px solid var(--ups-border-subtle);
+  color: var(--ups-text-muted);
+  font-weight: 800;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ups-host .scada-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--ups-border-row);
+  text-align: left;
+  font-weight: 800;
+  color: var(--ups-text-main);
+  text-transform: uppercase;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ups-host .scada-table .label {
+  padding: 6px 4px;
+  border-right: 1px solid var(--ups-border-subtle);
+  font-family: inherit;
+}
+.ups-host .row-val {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 5px;
+  border-top: 1px solid var(--ups-border-subtle);
+  color: var(--ups-text-main);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ups-host .row-val .label { font-family: inherit; }
+.ups-host .upper {
+  font-size: 10px;
+  color: var(--ups-text-muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ups-host .unit {
+  font-size: 10px;
+  color: var(--ups-text-sub);
+  font-weight: 500;
+  margin-left: 3px;
+}
+
+/* STATUS COLORS (STANDARDIZED SCADA PALETTE) */
+.ups-host .sta-v-normal { color: #10b981 !important; font-weight: bold !important; }
+.ups-host .sta-v-uyari { color: #f59e0b !important; font-weight: bold !important; }
+.ups-host .sta-v-alarm { color: #ef4444 !important; font-weight: bold !important; }
+.ups-host .sta-v-eski { color: #f97316 !important; font-weight: bold !important; }
+.ups-host .sta-v-disabled { color: var(--ups-text-sub) !important; font-weight: bold !important; }
+
+/* BATTERY PARK SCHEMATIC */
+.ups-host .batt-park-wrap {
+  position: absolute;
+  top: 385px;
+  left: 615px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10;
+}
+.ups-host .batt-visual { width: 110px; height: 55px; display: flex; align-items: center; }
+.ups-host .batt-t {
+  width: 8px;
+  height: 18px;
+  background: var(--ups-batt-term-bg);
+  color: var(--ups-batt-term-color);
+  font-size: 12px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1px;
+  transition: background-color 0.3s ease;
+}
+.ups-host .batt-body {
+  flex: 1;
+  height: 45px;
+  border: 4px solid var(--ups-batt-border);
+  margin: 0 2px;
+  padding: 3px;
+  background: var(--ups-batt-body-bg);
+  border-radius: 4px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+.ups-host .batt-fill {
+  height: 100%;
+  background: var(--ups-card-accent-battery);
+  border-radius: 2px;
+  transition: width 1.5s ease-in-out, background-color 0.5s ease;
+}
+.ups-host .batt-fill.sta-v-normal { background: linear-gradient(90deg, #059669, #10b981) !important; }
+.ups-host .batt-fill.sta-v-uyari { background: linear-gradient(90deg, #d97706, #f59e0b) !important; }
+.ups-host .batt-fill.sta-v-alarm { background: linear-gradient(90deg, #dc2626, #ef4444) !important; }
+.ups-host .batt-fill.sta-v-eski { background: #f97316 !important; }
+.ups-host .batt-fill.sta-v-disabled { background: #64748b !important; }
+.ups-host .batt-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ups-text-main);
+  margin-top: 8px;
+  letter-spacing: 1px;
+}
+.ups-host .status-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--ups-border-subtle);
+  color: var(--ups-text-main);
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 6px;
+  border: 1px solid var(--ups-card-border);
+}
+
+/* CIRCULAR BATTERY GAUGE */
+.ups-host .gauge-wrap { position: relative; width: 85px; height: 85px; margin: 15px auto; }
+.ups-host .gauge-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.ups-host .gauge-bg { fill: none; stroke: var(--ups-gauge-bg); stroke-width: 4.5; transition: stroke 0.3s ease; }
+.ups-host .gauge-fill { fill: none; stroke: currentColor; stroke-width: 4.5; stroke-linecap: round; transition: stroke-dasharray 1s ease-in-out; }
+.ups-host .gauge-txt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+.ups-host .g-val {
+  font-size: 20px;
+  font-weight: 900;
+  display: block;
+  line-height: 1;
+  color: var(--ups-text-main);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ups-host .g-sub { font-size: 7px; color: var(--ups-text-sub); font-weight: 800; text-transform: uppercase; margin-top: 2px; }
+
+/* INFO GRID */
+.ups-host .info-grid { border-top: 1px solid var(--ups-border-subtle); padding-top: 12px; }
+.ups-host .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center; }
+.ups-host .info-l { font-size: 10px; color: var(--ups-text-muted); font-weight: 800; text-transform: uppercase; }
+.ups-host .info-v {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ups-text-main);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* PHASE LOAD BARS */
+.ups-host .load-bars { display: flex; justify-content: space-around; align-items: flex-start; min-height: 110px; height: auto; margin-top: 15px; }
+.ups-host .l-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ups-host .l-bg {
+  width: 18px;
+  height: 55px;
+  background: var(--ups-bar-bg);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--ups-bar-border);
+  transition: all 0.3s ease;
+}
+.ups-host .l-fill {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background: var(--ups-card-accent-output);
+  transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+}
+.ups-host .l-fill.sta-v-normal { background: linear-gradient(0deg, #059669, #10b981) !important; }
+.ups-host .l-fill.sta-v-uyari { background: linear-gradient(0deg, #d97706, #f59e0b) !important; }
+.ups-host .l-fill.sta-v-alarm { background: linear-gradient(0deg, #dc2626, #ef4444) !important; }
+.ups-host .l-fill.sta-v-eski { background: #f97316 !important; }
+.ups-host .l-fill.sta-v-disabled { background: #64748b !important; }
+.ups-host .l-txt {
+  font-size: 10px;
+  font-weight: 900;
+  margin-top: 2px;
+  color: var(--ups-text-main);
+  line-height: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ups-host .table-output .upper { display: block; margin-top: 16px; margin-bottom: 8px; }
+
+/* SVG UTILITY STROKES */
+.ups-host .svg-blue { stroke: #2563eb; }
+.ups-host .svg-red { stroke: #ef4444; }
+.ups-host .svg-orange { stroke: #f97316; }
+.ups-host .svg-blue-light { stroke: #38bdf8; }
+.ups-host .svg-gray { stroke: #94a3b8; }
+.ups-host .svg-primary { stroke: var(--ups-svg-primary); }
+
+/* --- Sunum eki: şema üstü başlık / senaryo bandı (orijinal tasarım tokenlarıyla) --- */
+.ups-host .ups-title { position: absolute; top: 18px; left: 140px; z-index: 20; color: var(--ups-text-main); }
+.ups-host .ups-title .t-name { font-size: 26px; font-weight: 900; letter-spacing: 0.5px; line-height: 1.1; }
+.ups-host .ups-title .t-sub { font-size: 12px; font-weight: 800; color: var(--ups-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+.ups-host .ups-banner {
+  position: absolute;
+  top: 24px;
+  left: 520px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid;
+}
+.ups-host .ups-banner.b-alarm { color: #ef4444; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.45); }
+.ups-host .ups-banner.b-uyari { color: #f59e0b; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.45); }
+.ups-host .ups-banner.b-lost { color: #f97316; background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.45); }
+.ups-host .ups-banner .b-sub { font-size: 11px; font-weight: 700; text-transform: none; color: var(--ups-text-muted); letter-spacing: 0; }
+.ups-host .status-badge.sb-alarm { color: #ef4444; border-color: rgba(239, 68, 68, 0.5); }
+.ups-host .status-badge.sb-uyari { color: #f59e0b; border-color: rgba(245, 158, 11, 0.5); }
+.ups-host .status-badge.sb-lost { color: #f97316; border-color: rgba(249, 115, 22, 0.5); }
+.ups-host .status-badge.sb-normal { color: #10b981; border-color: rgba(16, 185, 129, 0.5); }
+.ups-host .lost-mask .data-card,
+.ups-host .lost-mask .comp-icon,
+.ups-host .lost-mask .batt-park-wrap { opacity: 0.55; filter: grayscale(0.6); }
+
+/* ==========================================================================
+   energy-table-dashboard.component.scss (:host → .etd-host)
+   ========================================================================== */
+.etd-host .sta-v-normal { color: #28a745 !important; }
+.etd-host .sta-v-uyari { color: #F8DF00 !important; font-weight: bold !important; }
+.etd-host .sta-v-alarm { color: #e90a0a !important; font-weight: bold !important; animation: sta-pulse 1.8s infinite; }
+.etd-host .sta-v-eski { color: #FF8E0A !important; }
+.etd-host .sta-v-disabled { color: #6c757d !important; }
+.etd-host .dot-alarm {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #e90a0a !important;
+  animation: sta-pulse 1.5s infinite;
+  box-shadow: 0 0 6px rgba(233, 10, 10, 0.7);
+  flex-shrink: 0;
+}
+.etd-host .dot-uyari {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #F8DF00 !important;
+  box-shadow: 0 0 5px rgba(248, 223, 0, 0.7);
+  flex-shrink: 0;
+}
+@keyframes sta-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.2); }
+}
+.etd-host thead tr { position: sticky; top: 0; z-index: 10; }
+.etd-host ::-webkit-scrollbar { width: 6px; height: 6px; }
+.etd-host ::-webkit-scrollbar-track { background: transparent; }
+.etd-host ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 3px; }
+.etd-host ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.6); }
+
+/* ==========================================================================
+   Genel Bakış — Enerji akış şeması (sunum eki; SVG)
+   ========================================================================== */
+.en-flow-svg { width: 100%; height: auto; display: block; }
+.en-flow-svg .n-box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; }
+.en-flow-svg .n-title { fill: #64748b; font-size: 10px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; }
+.en-flow-svg .n-val { fill: #0f172a; font-size: 15px; font-weight: 900; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.en-flow-svg .n-sub { fill: #64748b; font-size: 10px; font-weight: 600; }
+.en-flow-svg .lane { fill: #94a3b8; font-size: 10px; font-weight: 800; letter-spacing: 1px; }
+.en-flow-svg .ln-base { fill: none; stroke: #e2e8f0; stroke-width: 6; stroke-linecap: round; }
+.en-flow-svg .ln-flow { fill: none; stroke: #10b981; stroke-width: 2.5; stroke-dasharray: 8 10; stroke-linecap: round; animation: en-flow-dash 1.1s linear infinite; }
+.en-flow-svg .ln-idle { fill: none; stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 3 5; }
+.en-flow-svg .ln-flow.f-warn { stroke: #f59e0b; }
+.en-flow-svg .st-normal { stroke: #10b981; }
+.en-flow-svg .st-warning { stroke: #f59e0b; }
+.en-flow-svg .st-alarm { stroke: #f43f5e; stroke-width: 2; }
+.en-flow-svg .st-idle { stroke: #94a3b8; stroke-dasharray: 4 3; }
+.en-flow-svg .dot-normal { fill: #10b981; }
+.en-flow-svg .dot-warning { fill: #f59e0b; }
+.en-flow-svg .dot-alarm { fill: #f43f5e; }
+.en-flow-svg .dot-lost { fill: #f97316; }
+.en-flow-svg .dot-idle { fill: #94a3b8; }
+.en-flow-svg .t-alarm { fill: #f43f5e; }
+.en-flow-svg .t-warning { fill: #d97706; }
+.en-flow-svg .t-normal { fill: #059669; }
+html.dark .en-flow-svg .n-box { fill: #131d30; stroke: #1b263b; }
+html.dark .en-flow-svg .n-title { fill: #94a3b8; }
+html.dark .en-flow-svg .n-val { fill: #f1f5f9; }
+html.dark .en-flow-svg .n-sub { fill: #94a3b8; }
+html.dark .en-flow-svg .lane { fill: #475569; }
+html.dark .en-flow-svg .ln-base { stroke: #1b263b; }
+html.dark .en-flow-svg .ln-idle { stroke: #475569; }
+html.dark .en-flow-svg .t-warning { fill: #fbbf24; }
+html.dark .en-flow-svg .t-normal { fill: #34d399; }
+@keyframes en-flow-dash { to { stroke-dashoffset: -18; } }
+
+/* Jeneratör gösterge iğnesi: SVG içinde dönme merkezi (0,0) */
+.gauge-card .needle-group { transform-box: view-box; transform-origin: 0 0; }
+
+@media print {
+  .en-flow-svg .ln-flow { animation: none; }
+}

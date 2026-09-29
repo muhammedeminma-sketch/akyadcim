@@ -1,0 +1,36 @@
+/* ==========================================================================
+   Kullanıcı Ayarları — account-settings.component.scss karşılığı
+   (:host yerleşimi HTML'de satır içi; burada yalnız SCADA kaydırma çubuğu)
+   ========================================================================== */
+.as-host ::-webkit-scrollbar,
+.as-modal ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.as-host ::-webkit-scrollbar-track,
+.as-modal ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.as-host ::-webkit-scrollbar-thumb,
+.as-modal ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 2px;
+}
+.as-host ::-webkit-scrollbar-thumb:hover,
+.as-modal ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+/* Yeni eklenen / güncellenen satırı kısa süre vurgula (sunum eklentisi) */
+@keyframes as-row-flash {
+  0% { background-color: rgba(14, 165, 233, 0.28); }
+  100% { background-color: transparent; }
+}
+.as-row-flash > td {
+  animation: as-row-flash 2.4s ease-out 1;
+}
+
+/* Şifre gücü çubuğu geçişi */
+.as-strength-bar {
+  transition: width 200ms ease, background-color 200ms ease;
+}

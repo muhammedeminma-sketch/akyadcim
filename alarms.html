@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="utf-8">
+  <title>DCIM TT — Alarmlar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="assets/img/Turk-Telekom-Symbol.png">
+  <script>try{var m=localStorage.getItem('akya_theme_mode');if(m==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}var s=parseInt(localStorage.getItem('akya_ui_scale')||'100',10);document.documentElement.style.fontSize=([75,90,100,115,130].indexOf(s)>=0?s:100)+'%';}catch(e){document.documentElement.style.fontSize='100%';}</script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/tailwind-extra.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body class="dark">
+  <div class="h-screen flex flex-col font-sans bg-slate-100 dark:bg-surface-base text-slate-900 dark:text-slate-100 transition-colors duration-150 overflow-hidden">
+    <header id="app-header" class="h-13 shrink-0 bg-white dark:bg-surface-base border-b border-slate-200 dark:border-border-subtle sticky top-0 z-40 flex items-center justify-between px-3 md:px-4 shadow-2xs select-none" data-report-hide></header>
+
+    <main class="flex-1 min-h-0 overflow-hidden bg-slate-100 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 p-2.5 sm:p-3 flex flex-col">
+      <div class="h-full flex flex-col min-h-0 gap-2 overflow-hidden">
+
+        <!-- Page Header (app-page-header) -->
+        <div class="shrink-0 mb-1 pb-2 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 select-none">
+          <div class="flex items-center gap-3">
+            <div>
+              <nav class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 mb-0.5 font-medium">
+                <a href="2d.html" class="hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"><i class="pi pi-home text-[10px]"></i></a>
+                <i class="pi pi-chevron-right text-[8px] text-slate-400"></i>
+                <span class="text-slate-700 dark:text-slate-300 font-bold">Alarmlar-Noktalar</span>
+                <i class="pi pi-chevron-right text-[8px] text-slate-400"></i>
+                <span class="text-slate-700 dark:text-slate-300 font-bold" id="crumb-last">Alarmlar</span>
+              </nav>
+              <div class="flex items-center gap-2">
+                <h1 class="text-sm md:text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100" id="page-title">ANLIK ALARMLAR</h1>
+                <span class="px-2 py-0.5 text-[10px] font-extrabold rounded-[2px] bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30" id="page-badge">CANLI</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5 shrink-0 ml-auto">
+            <div class="flex items-center gap-2" id="header-actions"></div>
+          </div>
+        </div>
+
+        <!-- Sekmeler: Aktif / Tarihsel -->
+        <div class="shrink-0 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1 bg-slate-200/70 dark:bg-slate-900/70 p-0.5 rounded-[2px] border border-slate-200 dark:border-border-subtle" id="alarm-tabs">
+            <button type="button" data-tab="active"></button>
+            <button type="button" data-tab="history"></button>
+          </div>
+          <div class="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>CMA/S00 · Canlı alarm akışı</span>
+            <span class="text-slate-400">|</span>
+            <span id="last-refresh">--:--:--</span>
+          </div>
+        </div>
+
+        <!-- Alarm Şiddeti Özet Sayaçları -->
+        <div class="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-2" id="severity-cards"></div>
+
+        <!-- SCADA Data Table (app-data-table) -->
+        <div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs flex flex-col flex-1 min-h-0 overflow-hidden w-full" id="alarm-table"></div>
+
+        <!-- Analitik -->
+        <div class="shrink-0 grid grid-cols-1 lg:grid-cols-2 gap-2" id="alarm-analytics"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/layout-data.js"></script>
+  <script src="js/mock-data.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/alarms.js"></script>
+</body>
+</html>

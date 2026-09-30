@@ -1,7 +1,7 @@
 /* ==========================================================================
    DCIM Sunum — Kapak Kilitleri Monitörü
    (NewUICMPLockMonitorComponent + monitor-toolbar, summary-cards,
-    cabinet-topology-view, cabinet-card-grid, cabinet-table-view, cabinet-detail-drawer)
+    cabinet-topology-view, cabinet-card-grid, cabinet-table-view, cabinet-inline-detail)
    ========================================================================== */
 (function () {
   'use strict';
@@ -184,6 +184,7 @@
   function renderViews() {
     const host = document.getElementById('views');
     const list = visibleCabinets();
+    if (rackCtl) { rackCtl.destroy(); rackCtl = null; }
     if (state.loading && !state.cabinets.length) {
       host.innerHTML = '<div class="h-full min-h-48 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400"><i class="pi pi-spin pi-spinner mr-2 text-brand-500"></i><span>Yükleniyor...</span></div>';
       return;
@@ -204,10 +205,21 @@
     return { x: minX - 35, y: minY - 45, w: maxX - minX + 70, h: maxY - minY + 80 };
   }
 
+  // Açılış ölçeği: tam sığdırmanın %150'si yeni %100 kabul edilir (Sığdır/Sıfırla buraya döner)
+  const OPEN_ZOOM = 1.5;
+  // Kabine odak: tam sığdırmanın 3.5 katı (orijinal focusOnCabinet)
+  const FOCUS_ZOOM = 3.5;
+
   function renderTopView(host, list) {
     const all = state.cabinets;
     const bounds = computeBounds(all);
-    if (!state.baseVb) { state.baseVb = bounds; state.vb = Object.assign({}, bounds); }
+    if (!state.baseVb) {
+      const w = bounds.w / OPEN_ZOOM, h = bounds.h / OPEN_ZOOM;
+      state.fullVb = bounds;
+      // Yatayda ortalı, dikeyde üst kenara hizalı (üst sıra POD başlıkları görünür kalsın)
+      state.baseVb = { x: bounds.x + (bounds.w - w) / 2, y: bounds.y, w, h };
+      state.vb = Object.assign({}, state.baseVb);
+    }
     const visibleIds = new Set(list.map(c => c.id));
 
     // POD bölgeleri
@@ -255,9 +267,12 @@
       '</g>';
     }).join('');
 
+    // Seçili kabin varsa sayfa ikiye bölünür: solda salon haritası, sağda inline detay (cabinet-inline-detail)
+    const selected = state.selected;
     host.innerHTML =
-      '<div class="w-full h-[70vh] sm:h-[calc(100vh-14rem)] min-h-[480px] sm:min-h-[600px] flex-1 flex flex-col lg:flex-row gap-2.5 sm:gap-3 items-stretch">' +
-        '<div class="h-full rounded-[3px] overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm transition-all duration-300 w-full flex-1">' +
+      '<div class="lock-split w-full h-[70vh] sm:h-[calc(100vh-14rem)] min-h-[480px] sm:min-h-[600px] flex-1 flex flex-col lg:flex-row gap-2.5 sm:gap-3 items-stretch">' +
+        '<div class="h-full rounded-[3px] overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm transition-all duration-300 ' +
+          (selected ? 'w-full lg:w-1/2 xl:w-[46%] h-[380px] lg:h-full shrink-0 lg:shrink' : 'w-full flex-1') + '">' +
           '<div class="relative w-full h-full min-h-[440px] flex-1 bg-slate-100 dark:bg-[#070c16] rounded-[2px] border border-slate-300 dark:border-slate-800 overflow-hidden select-none" data-topo>' +
             '<div class="absolute inset-0 pointer-events-none topology-grid-pattern"></div>' +
             '<div class="absolute top-2 sm:top-3 left-2 sm:left-3 z-30 flex flex-wrap items-center gap-1.5 sm:gap-2 pointer-events-auto max-w-[calc(100%-1rem)]">' +
@@ -289,9 +304,11 @@
             '<div class="absolute bottom-2.5 left-3 z-30 pointer-events-none text-[10px] text-slate-600 dark:text-slate-400 flex items-center gap-2 bg-white/95 dark:bg-slate-950/90 px-3 py-1.5 rounded-[2px] border border-slate-200 dark:border-slate-800 shadow-md"><i class="pi pi-arrows-alt text-brand-500 dark:text-brand-400"></i><span>Sürükle (Pan) · Tekerlek (Zoom) · Kabinete tıkla (Detay)</span></div>' +
           '</div>' +
         '</div>' +
+        (selected ? '<div class="w-full lg:w-1/2 xl:w-[54%] h-[560px] lg:h-full flex-1 min-h-0" data-detail-host></div>' : '') +
       '</div>';
     bindTopView(host);
     updateZoomPct(host);
+    if (selected) renderInlineDetail(host.querySelector('[data-detail-host]'), selected);
   }
 
   const vbStr = () => state.vb.x + ' ' + state.vb.y + ' ' + state.vb.w + ' ' + state.vb.h;
@@ -300,9 +317,38 @@
     if (pct) pct.textContent = Math.round((state.baseVb.w / state.vb.w) * 100) + '%';
   }
 
+  function applyVb() {
+    const host = document.getElementById('views');
+    const svg = host.querySelector('[data-topo-svg]');
+    if (svg) svg.setAttribute('viewBox', vbStr());
+    updateZoomPct(host);
+  }
+
+  // viewBox animasyonu (orijinal animateViewBoxTo: 350 ms, easeOutCubic)
+  let vbAnim = null;
+  function stopVbAnim() { if (vbAnim) cancelAnimationFrame(vbAnim); vbAnim = null; }
+  function animateVb(target, ms) {
+    stopVbAnim();
+    const start = Object.assign({}, state.vb), t0 = performance.now(), dur = ms || 350;
+    const step = now => {
+      const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      ['x', 'y', 'w', 'h'].forEach(k => { state.vb[k] = start[k] + (target[k] - start[k]) * e; });
+      applyVb();
+      vbAnim = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    vbAnim = requestAnimationFrame(step);
+  }
+
+  // Seçilen kabini ortalayıp yakınlaştırır; sonrasında pan/zoom serbest kalır
+  function focusCabinet(c) {
+    if (!c || !state.fullVb) return;
+    const w = state.fullVb.w / FOCUS_ZOOM, h = w * (state.baseVb.h / state.baseVb.w);
+    animateVb({ x: c.x + c.w / 2 - w / 2, y: c.y + c.h / 2 - h / 2, w, h });
+  }
+
   function bindTopView(host) {
     const svg = host.querySelector('[data-topo-svg]');
-    const apply = () => { svg.setAttribute('viewBox', vbStr()); updateZoomPct(host); };
+    const apply = () => { stopVbAnim(); applyVb(); };
     const zoomAt = (factor, cx, cy) => {
       const nw = Math.max(state.baseVb.w * 0.12, Math.min(state.baseVb.w * 2.5, state.vb.w * factor));
       const nh = nw * (state.vb.h / state.vb.w);
@@ -329,7 +375,8 @@
 
     let drag = null;
     svg.addEventListener('pointerdown', e => {
-      drag = { x: e.clientX, y: e.clientY, vx: state.vb.x, vy: state.vb.y, moved: false };
+      stopVbAnim();
+      drag ={ x: e.clientX, y: e.clientY, vx: state.vb.x, vy: state.vb.y, moved: false };
     });
     svg.addEventListener('pointermove', e => {
       if (drag) {
@@ -352,7 +399,7 @@
     const up = e => {
       if (drag && !drag.moved) {
         const g = e.target.closest('[data-cab]');
-        if (g) openDrawer(state.cabinets.find(c => c.id === g.getAttribute('data-cab')));
+        if (g) selectCabinet(state.cabinets.find(c => c.id === g.getAttribute('data-cab')));
       }
       drag = null;
     };
@@ -445,7 +492,7 @@
       ).join('') + '</div></div>';
     host.querySelectorAll('[data-card]').forEach(el => el.addEventListener('click', e => {
       if (e.target.closest('[data-unlock]')) return;
-      openDrawer(state.cabinets.find(c => c.id === el.getAttribute('data-card')));
+      selectCabinet(state.cabinets.find(c => c.id === el.getAttribute('data-card')));
     }));
     bindUnlockButtons(host);
   }
@@ -500,7 +547,7 @@
       ).join('') + '</tbody></table></div></div></div>';
     host.querySelectorAll('[data-row]').forEach(r => r.addEventListener('click', e => {
       if (e.target.closest('[data-unlock]')) return;
-      openDrawer(state.cabinets.find(c => c.id === r.getAttribute('data-row')));
+      selectCabinet(state.cabinets.find(c => c.id === r.getAttribute('data-row')));
     }));
     bindUnlockButtons(host);
   }
@@ -547,7 +594,7 @@
     host.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
     host.querySelectorAll('[data-alert]').forEach(el => el.addEventListener('click', () => {
       close();
-      openDrawer(state.cabinets.find(c => c.id === el.getAttribute('data-alert')));
+      selectCabinet(state.cabinets.find(c => c.id === el.getAttribute('data-alert')));
     }));
     document.body.appendChild(host);
   }
@@ -572,7 +619,7 @@
     });
     d.body.querySelectorAll('[data-goto]').forEach(el => el.addEventListener('click', () => {
       d.close();
-      openDrawer(state.cabinets.find(c => c.id === el.getAttribute('data-goto')));
+      selectCabinet(state.cabinets.find(c => c.id === el.getAttribute('data-goto')));
     }));
   }
 
@@ -629,9 +676,8 @@
     }, 1200);
   }
 
-  function refreshCabinetViews(c) {
+  function refreshCabinetViews() {
     renderViews();
-    if (state.selected && state.selected.id === c.id) renderDrawerInfo(c);
   }
 
   // Geri sayım göstergelerini saniyede bir güncelle
@@ -643,79 +689,78 @@
   }, 1000);
 
   // ---------------------------------------------------------------------------
-  // Kabin Detay Çekmecesi (cabinet-detail-drawer + cabinet-detail-info)
+  // Kabin Inline Detay Paneli (cabinet-inline-detail + cabinet-detail-info)
+  // Orijinaldeki gibi popup/çekmece değil: Top View sayfayı ikiye böler.
   // ---------------------------------------------------------------------------
-  const drawer = document.getElementById('cabinet-drawer');
-  const backdrop = document.getElementById('drawer-backdrop');
   let rackCtl = null;
 
-  function closeDrawer() {
-    drawer.classList.remove('is-open');
-    backdrop.classList.remove('is-open');
-    if (rackCtl) rackCtl.destroy();
-    rackCtl = null;
-    state.selected = null;
-    renderViews();
-  }
-  backdrop.addEventListener('click', closeDrawer);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && drawer.classList.contains('is-open')) closeDrawer(); });
-
-  function openDrawer(c) {
+  function selectCabinet(c) {
     if (!c) return;
     hideTooltip();
     state.selected = c;
-    const statusTag = c.overallState === 'open'
-      ? '<span class="px-2 py-0.5 text-[9px] font-mono font-bold rounded-[2px] shrink-0 border uppercase bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-500/30">Kapak Açık</span>'
-      : c.overallState === 'alarm'
-        ? '<span class="px-2 py-0.5 text-[9px] font-mono font-bold rounded-[2px] shrink-0 border uppercase bg-orange-500/15 text-orange-600 dark:text-orange-300 border-orange-500/30">Alarm</span>'
-        : '<span class="px-2 py-0.5 text-[9px] font-mono font-bold rounded-[2px] shrink-0 border uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30">Güvenli</span>';
-    drawer.innerHTML =
-      '<header class="shrink-0 px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 flex items-center justify-between gap-3">' +
-        '<div class="flex items-center gap-3 min-w-0">' +
-          '<div class="w-9 h-9 rounded-[3px] flex items-center justify-center shrink-0 border shadow-xs ' + (c.overallState === 'open' ? 'bg-rose-500/15 border-rose-500/30 text-rose-500 dark:text-rose-400' : 'bg-brand-500/15 border-brand-500/30 text-brand-600 dark:text-brand-400') + '"><i class="pi pi-server text-base"></i></div>' +
-          '<div class="min-w-0">' +
-            '<div class="flex items-center gap-2"><h2 class="text-sm font-black text-slate-900 dark:text-white tracking-wide truncate" title="' + esc(c.description) + '">' + esc(c.description) + '</h2>' + statusTag + '</div>' +
-            '<p class="text-[10px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5 mt-0.5"><span class="font-mono font-bold text-slate-700 dark:text-slate-300">' + esc(c.id) + '</span><span>•</span><span>' + esc(c.floor) + '</span><span>•</span><span class="text-sky-600 dark:text-sky-400">' + esc(c.pod) + '</span></p>' +
+    state.viewMode = 'top';
+    renderToolbar();
+    renderViews();
+    focusCabinet(c);
+  }
+
+  function closeDetail() {
+    state.selected = null;
+    renderViews();
+    animateVb(state.baseVb);
+  }
+
+  function renderInlineDetail(el, c) {
+    el.innerHTML =
+      '<div class="h-full w-full flex flex-col rounded-[3px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden select-none">' +
+        '<header class="shrink-0 px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/90 flex items-center justify-between gap-3">' +
+          '<div class="flex items-center gap-2.5 min-w-0">' +
+            '<div class="w-8 h-8 rounded-[3px] flex items-center justify-center shrink-0 border shadow-xs ' + (c.overallState === 'open' ? 'bg-rose-500/15 border-rose-500/30 text-rose-500 dark:text-rose-400' : 'bg-brand-500/15 border-brand-500/30 text-brand-600 dark:text-brand-400') + '"><i class="pi pi-server text-sm"></i></div>' +
+            '<div class="min-w-0">' +
+              '<div class="flex items-center gap-2">' +
+                '<h2 class="text-xs sm:text-sm font-black text-slate-900 dark:text-white tracking-wide truncate" title="' + esc(c.description || c.id) + '">' + esc(c.description || c.id || 'Kabinet Detayı') + '</h2>' +
+                '<span class="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded-[2px] shrink-0 border uppercase ' + (c.overallState === 'open' ? 'bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-500/30 animate-pulse' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30') + '">' + (c.overallState === 'open' ? 'Kapak Açık' : 'Güvenli') + '</span>' +
+              '</div>' +
+              '<p class="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5 mt-0.5">' +
+                '<span class="font-mono font-bold text-slate-700 dark:text-slate-300">' + esc(c.id) + '</span><span>•</span><span>' + esc(c.floor) + '</span>' +
+                (c.pod ? '<span>•</span><span class="text-sky-600 dark:text-sky-400 font-semibold">' + esc(c.pod) + '</span>' : '') +
+                '<span>•</span><span>' + esc(c.room || 'Ana Salon') + '</span>' +
+              '</p>' +
+            '</div>' +
           '</div>' +
-        '</div>' +
-        '<div class="flex items-center gap-2 shrink-0">' +
-          (state.floor === 'T00' ? '<a href="2d.html?cabinet=' + encodeURIComponent(c.cabinetCode) + '" title="2D Dijital İkizde Göster" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-[2px] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"><span class="hidden sm:inline">2D Krokide Göster</span><i class="pi pi-arrow-up-right text-[10px]"></i></a>' : '') +
-          '<button type="button" data-close title="Kapat" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-times text-base"></i></button>' +
-        '</div>' +
-      '</header>' +
-      '<div class="flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar bg-slate-100/70 dark:bg-[#080d16]">' +
-        '<div class="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">' +
-          '<div class="lg:col-span-6 xl:col-span-6 space-y-2">' +
-            '<div class="flex items-center justify-between px-1"><span class="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5"><i class="pi pi-box text-brand-500 dark:text-brand-400 text-[10px]"></i>İzometrik Kabin Görünümü</span><span class="text-[9px] font-mono text-slate-500">Vektörel DCIM Modeli</span></div>' +
-            '<div class="relative w-full rounded-[3px] overflow-hidden select-none shadow-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-transparent" data-rack></div>' +
+          '<div class="flex items-center gap-1.5 shrink-0">' +
+            '<a href="cabinet-detail.html?cabinet=' + encodeURIComponent(c.cabinetCode) + '" title="Kabin Yönetim Ekranını Aç" class="px-2.5 sm:px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-[11px] rounded-[2px] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"><span class="hidden sm:inline">Kabin Ekranı</span><i class="pi pi-arrow-up-right text-[10px]"></i></a>' +
+            '<button type="button" data-close-detail title="Detay Panelini Kapat (Tam Ekrana Dön)" class="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-times text-xs sm:text-sm"></i></button>' +
           '</div>' +
-          '<div class="lg:col-span-6 xl:col-span-6 space-y-2">' +
-            '<div class="flex items-center justify-between px-1"><span class="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5"><i class="pi pi-info-circle text-brand-500 dark:text-brand-400 text-[10px]"></i>Kabin &amp; Sensör Detayları</span><span class="text-[9px] font-mono text-slate-500">Canlı XDB Noktaları</span></div>' +
-            '<div data-info></div>' +
+        '</header>' +
+        '<div class="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 custom-scrollbar bg-slate-50/70 dark:bg-[#080d16]">' +
+          '<div class="grid grid-cols-1 xl:grid-cols-12 gap-3.5 sm:gap-4 items-start">' +
+            '<div class="xl:col-span-6 space-y-2">' +
+              '<div class="flex items-center justify-between px-1"><span class="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5"><i class="pi pi-box text-brand-500 dark:text-brand-400 text-[10px]"></i>İzometrik Kabin Görünümü</span><span class="text-[9px] font-mono text-slate-500">Pure 3D DCIM Rack</span></div>' +
+              '<div class="relative w-full rounded-[3px] overflow-hidden select-none shadow-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-transparent" data-rack></div>' +
+            '</div>' +
+            '<div class="xl:col-span-6 space-y-2">' +
+              '<div class="flex items-center justify-between px-1"><span class="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5"><i class="pi pi-info-circle text-brand-500 dark:text-brand-400 text-[10px]"></i>Kabin &amp; Sensör Detayları</span><span class="text-[9px] font-mono text-slate-500">Canlı XDB Noktaları</span></div>' +
+              '<div data-info></div>' +
+            '</div>' +
           '</div>' +
         '</div>' +
       '</div>';
-    drawer.querySelector('[data-close]').addEventListener('click', closeDrawer);
+    el.querySelector('[data-close-detail]').addEventListener('click', closeDetail);
 
-    const scale = DCIM.theme.scale() / 100;
-    const height = Math.round(Math.max(480, Math.min(950, window.innerHeight - 170)) * scale);
-    if (rackCtl) rackCtl.destroy();
-    rackCtl = DCIM.components.createRack3d(drawer.querySelector('[data-rack]'), {
+    rackCtl = DCIM.components.createRack3d(el.querySelector('[data-rack]'), {
       name: c.cabinetCode,
       frontDoorState: c.front ? c.front.state : 'closed',
       rearDoorState: c.rear ? c.rear.state : 'closed',
       assets: c.assets,
-      heightPx: height,
+      heightPx: Math.round(560 * DCIM.theme.scale() / 100),
       onAssetClick: a => DCIM.components.assetDetail(a, c.cabinetCode)
     });
-    renderDrawerInfo(c);
-    drawer.classList.add('is-open');
-    backdrop.classList.add('is-open');
-    renderViews();
+    renderDetailInfo(c);
   }
 
-  function renderDrawerInfo(c) {
-    const info = drawer.querySelector('[data-info]');
+  function renderDetailInfo(c) {
+    const info = document.querySelector('#views [data-info]');
     if (!info) return;
     const section = (icon, title, badge, body) =>
       '<section class="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-[3px] p-3 shadow-2xs space-y-2">' +
@@ -793,7 +838,7 @@
   // ---------------------------------------------------------------------------
   function load(manual) {
     state.loading = true;
-    if (!manual) { state.cabinets = []; state.baseVb = null; }
+    if (!manual) { stopVbAnim(); state.cabinets = []; state.baseVb = null; }
     renderToolbar();
     renderViews();
     setTimeout(() => {
@@ -812,7 +857,7 @@
   setInterval(() => { if (!state.loading && state.cabinets.length) { state.lastUpdated = new Date(); renderLastUpdated(); } }, 10000);
 
   load(false);
-  // Diğer sayfalardan ?cabinet=CODE ile gelinmişse detay çekmecesini aç
+  // Diğer sayfalardan ?cabinet=CODE ile gelinmişse inline detay panelini aç
   const target = params.get('cabinet');
-  if (target) setTimeout(() => openDrawer(state.cabinets.find(c => c.cabinetCode === target)), 450);
+  if (target) setTimeout(() => selectCabinet(state.cabinets.find(c => c.cabinetCode === target)), 450);
 })();

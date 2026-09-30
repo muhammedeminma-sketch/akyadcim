@@ -1,5 +1,5 @@
 /* DCIM Sunum — Tamamlayıcı Tailwind sınıfları.
- * css/styles.css (22.09 derlemesi) içinde bulunmayan 169 sınıf, projenin kendi
+ * css/styles.css (22.09 derlemesi) içinde bulunmayan 178 sınıf, projenin kendi
  * @theme token'larıyla üretildi (tools/build-extra-css.js). Elle düzenlemeyin. */
 /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
 @layer properties;
@@ -99,6 +99,12 @@
   }
   :where(.h-\[70vh\]) {
     height: 70vh;
+  }
+  :where(.h-\[380px\]) {
+    height: 380px;
+  }
+  :where(.h-\[560px\]) {
+    height: 560px;
   }
   :where(.max-h-16) {
     max-height: calc(var(--spacing) * 16);
@@ -446,6 +452,14 @@
         background-color: color-mix(in oklab, var(--color-slate-100) 70%, transparent);
       }
     }
+    .hover\:bg-slate-200\/70:hover {
+      background-color: color-mix(in srgb, oklch(92.9% 0.013 255.508) 70%, transparent);
+    }
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-slate-200\/70:hover {
+        background-color: color-mix(in oklab, var(--color-slate-200) 70%, transparent);
+      }
+    }
     .hover\:bg-slate-500\/20:hover {
       background-color: color-mix(in srgb, oklch(55.4% 0.046 257.417) 20%, transparent);
     }
@@ -489,6 +503,9 @@
     .sm\:gap-1\.5 {
       gap: calc(var(--spacing) * 1.5);
     }
+    .sm\:gap-4 {
+      gap: calc(var(--spacing) * 4);
+    }
     .sm\:text-2xl {
       font-size: var(--text-2xl);
       line-height: var(--tw-leading, var(--text-2xl--line-height));
@@ -506,11 +523,17 @@
     }
   }
   @media (width >= 64rem) {
+    .lg\:w-1\/2 {
+      width: calc(1 / 2 * 100%);
+    }
     .lg\:w-56 {
       width: calc(var(--spacing) * 56);
     }
     .lg\:w-auto {
       width: auto;
+    }
+    .lg\:shrink {
+      flex-shrink: 1;
     }
     .lg\:grid-cols-7 {
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -528,6 +551,12 @@
     }
     .xl\:col-span-6 {
       grid-column: span 6 / span 6;
+    }
+    .xl\:w-\[46\%\] {
+      width: 46%;
+    }
+    .xl\:w-\[54\%\] {
+      width: 54%;
     }
     .xl\:grid-cols-12 {
       grid-template-columns: repeat(12, minmax(0, 1fr));

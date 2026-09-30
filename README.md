@@ -15,7 +15,7 @@ Herhangi bir kullanıcı adı/şifre ile giriş yapılır → `2d.html`.
 | `login.html` | `NewUICMPLoginComponent` |
 | `2d.html` | `NewUICMPDigitalTwin2DComponent` (+ schematic-viewer, cabinet-isometric-drawer, ups/climate tabloları) |
 | `3d.html` | `NewUICMPDigitalTwin3DComponent` (Three.js r166 + OrbitControls) |
-| `locks.html` | `NewUICMPLockMonitorComponent` (+ summary-cards, toolbar, topology, card-grid, table, detail-drawer) |
+| `locks.html` | `NewUICMPLockMonitorComponent` (+ summary-cards, toolbar, topology, card-grid, table, inline-detail) |
 | `alarms.html` | `NewUICMPActiveAlarmsComponent` + `NewUICMPHistoricalAlarmsComponent` |
 | `pdu-detail.html` | `NewUICMPPduDetailComponent` |
 | `cabinet-detail.html` | `NewUICMPCabinetManagerComponent` |
@@ -32,6 +32,7 @@ Herhangi bir kullanıcı adı/şifre ile giriş yapılır → `2d.html`.
 | `account-settings.html` | `NewUICMPAccountSettingsComponent` |
 | `permission-settings.html` | `NewUIPermissionSettingsComponent` (sihirbaz) + sunum için RBAC rol matrisi |
 | `audit-logs.html` | `user-logs-report` (+ `user-logs-report-popup`), tam sayfa |
+| `lock-authorization.html` | SUNUM EKLENTİSİ — Kilit Yetkilendirme (orijinalde karşılığı yok; Kapak Kilitleri + Yetki Ayarları tasarım diliyle) |
 
 Sayfalar arası derin bağlantılar: `2d.html?cabinet=1BJ53`, `3d.html?cabinet=1BJ53`, `3d.html?focus=UPS%20A5`,
 `locks.html?view=cards&cabinet=1AZ39`, `alarms.html?tab=history`, `alarms.html?filter=alarm`,
@@ -52,11 +53,19 @@ Etap 3 sayfaları (tam liste her sayfa JS'inin başındaki açıklama bloğunda)
 | `account-settings.html` | `?tab=corporate\|customer\|password`, `?open=add`, `?edit=<das_uid>`, `?auth=1` |
 | `permission-settings.html` | `?tab=roles\|wizard`, `?role=operator`, `?uid=00549854&step=3` |
 | `audit-logs.html` | `?q=1AZ39`, `?result=denied\|success\|failed`, `?user=deniz.koc`, `?cat=KAPAK`, `?report=1` |
+| `lock-authorization.html` | `?tab=users\|groups\|logs`, `?pod=POD-8`, `?cabinet=1BN52`, `?status=timed`, `?result=denied`, `?new=1&user=deniz.koc`, `?grant=YTK-0119`, `?test=1`, `?reset=1` |
+
+`lock-authorization.html` oturumdaki yetki değişikliklerini sessionStorage `dcim_lock_auth_v1`'de tutar (sekme kapanınca
+sıfırlanır; sunum öncesi `?reset=1`). Yetki ekleme/düzenleme/iptal kayıtları `dcim_audit_session` kuyruğuna YETKİ kaydı olarak
+yazılır ve `audit-logs.html`'de görünür. "Erişim Testi" yalnızca yetki kararını hesaplar; kilide komut gönderilmez.
+Senaryo: Can Öztürk (yüklenici) 1BN52 arka kapak yetkisi 20 dk önce doldu → kart reddedildi; Hakan Yıldız 1BX54 bakım yetkisi
+planlı (3 sa sonra); Emre Çelik 1BG41 bakım penceresi (İE-2026-0931) aktif; Selin Aydın 1AZ39 talebi kapsam dışı.
 
 ## Menü
 
 Üst menü `navigation.config.ts` ile aynı kategori/etiketlere sahiptir (etiketler `messages.tr.json`). Sunumda
 hazır olmayan öğeler (şu an yalnızca "Mühendislik") menüde görünür ama devre dışıdır (`opacity-40 pointer-events-none cursor-not-allowed`).
+"Kilit Yetkilendirme" orijinal menüde yoktur; sunum için Yönetim altına eklenmiştir.
 "Kabin Yönetimi" orijinal menüde yoktur (kabinden açılır); sunum için Varlıklar altına eklenmiştir.
 "Müşteri Listesi" orijinalde `all-assets` ekranına gider; sunumda `customer-pages.html?tab=matched`'e bağlanmıştır.
 

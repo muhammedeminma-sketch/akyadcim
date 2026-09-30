@@ -69,6 +69,9 @@
   background-position: 0 0;
 }
 .dark .topology-grid-pattern { background-image: radial-gradient(rgba(56, 189, 248, 0.2) 1.1px, transparent 1.1px); }
+/* Top View + inline detay split'i: lg+ ekranda yükseklik içerikle büyümesin (flex-1 → flex:none),
+   h-[calc(100vh-14rem)] kesin kalsın; sağ panel kendi içinde kaysın. */
+@media (width >= 64rem) { .lock-split { flex: none; } }
 
 .pod-zone-panel { fill: #f8fafc; fill-opacity: 1; stroke: #cbd5e1; stroke-width: 1.25; stroke-dasharray: 4,4; }
 .pod-zone-header { fill: #f1f5f9; stroke: #e2e8f0; stroke-width: 1; }

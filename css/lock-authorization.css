@@ -1,0 +1,63 @@
+/* ==========================================================================
+   DCIM Sunum — Kilit Yetkilendirme (lock-authorization.html) sayfa stilleri
+   Renkler projenin @theme token'larıyla aynıdır (sky-600 / slate / surface-*).
+   ========================================================================== */
+
+/* Kenar çubuğu (app-sidebar) — ana içerikle aynı kart çerçevesi */
+.la-sidebar-host {
+  border: 1px solid #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dark .la-sidebar-host { border-color: var(--color-border-subtle, #1b263b); }
+.la-sidebar-host > aside { border-right-width: 0; }
+
+/* Seçilebilir kart / çip (kullanıcı, POD, kabin, izin, süre seçenekleri) */
+.la-choice {
+  border-color: #e2e8f0;
+  background-color: #ffffff;
+  color: #334155;
+}
+.la-choice:hover:not(:disabled) { border-color: #94a3b8; background-color: #f8fafc; }
+.la-choice.is-on {
+  border-color: rgba(2, 132, 199, 0.65);
+  background-color: rgba(14, 165, 233, 0.08);
+  color: #0369a1;
+  box-shadow: inset 0 0 0 1px rgba(2, 132, 199, 0.25);
+}
+.dark .la-choice { border-color: #334155; background-color: rgba(15, 23, 42, 0.55); color: #cbd5e1; }
+.dark .la-choice:hover:not(:disabled) { border-color: #475569; background-color: rgba(30, 41, 59, 0.7); }
+.dark .la-choice.is-on {
+  border-color: rgba(56, 189, 248, 0.6);
+  background-color: rgba(14, 165, 233, 0.12);
+  color: #7dd3fc;
+}
+
+/* Sihirbaz paneli yüksekliği */
+.la-wizard { max-height: 92vh; }
+@media (max-width: 767px) { .la-wizard { max-height: none; } }
+
+/* datetime-local seçici koyu temada okunur kalsın */
+.dark .la-dt { color-scheme: dark; }
+
+/* Bu sayfada kullanılan, styles.css / tailwind-extra.css derlemelerinde bulunmayan yardımcı sınıflar
+   (Tailwind v4 varsayılan değerleriyle aynı). Ortak CSS dosyalarını değiştirmemek için burada tutulur.
+   tailwind-extra.css ile aynı kural: varyantsız sınıflar :where() ile sıfır özgüllükte — dark:/hover: kurallarını ezmez. */
+@layer utilities {
+  :where(.left-4\.5) { left: 1.125rem; }
+  :where(.top-0\.5) { top: 0.125rem; }
+  :where(.pl-0\.5) { padding-left: 0.125rem; }
+  :where(.align-top) { vertical-align: top; }
+  :where(.gap-x-5) { column-gap: 1.25rem; }
+  :where(.min-w-4) { min-width: 1rem; }
+  :where(.min-w-40) { min-width: 10rem; }
+  :where(.max-h-24) { max-height: 6rem; }
+  :where(.max-w-\[240px\]) { max-width: 240px; }
+  :where(.text-\[10\.5px\]) { font-size: 10.5px; }
+  :where(.text-white\/80) { color: rgb(255 255 255 / 0.8); }
+  :where(.text-white\/90) { color: rgb(255 255 255 / 0.9); }
+  :where(.bg-sky-500\/60) { background-color: rgb(14 165 233 / 0.6); }
+  :where(.bg-amber-50\/60) { background-color: rgb(255 251 235 / 0.6); }
+  .hover\:opacity-80:hover { opacity: 0.8; }
+  .dark\:bg-slate-950\/30:where(.dark, .dark *) { background-color: rgb(2 6 23 / 0.3); }
+}

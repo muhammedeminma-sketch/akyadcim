@@ -302,6 +302,7 @@
       label: 'Yönetim', icon: 'pi pi-cog', items: [
         { key: 'accounts', label: 'Kullanıcı Ayarları', icon: 'pi pi-users', href: 'account-settings.html' },
         { key: 'permissions', label: 'Yetki Ayarları', icon: 'pi pi-shield', href: 'permission-settings.html' },
+        { key: 'lock-auth', label: 'Kilit Yetkilendirme', icon: 'pi pi-key', href: 'lock-authorization.html' },
         { key: 'audit', label: 'Audit ve Loglar', icon: 'pi pi-book', href: 'audit-logs.html' }
       ]
     }

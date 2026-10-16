@@ -6,7 +6,8 @@ Backend, MQTT, XDB yok; tüm veri `js/mock-data.js` içinde tohumlu (her açıl�
 ## Açma
 
 `login.html` dosyasına çift tıklamak yeterli (`file://` üzerinde çalışır, ES modülü veya internet gerekmez).
-Herhangi bir kullanıcı adı/şifre ile giriş yapılır → `2d.html`.
+Giriş: kullanıcı adı `admin`, şifre `1234` (başka bilgiyle giriş yapılmaz) → `2d.html`. Oturum yoksa tüm sayfalar
+`login.html`'e yönlenir (sunum için istemci tarafı kontrol; gerçek güvenlik değildir). `tools/smoke.js` bu denetimden muaftır.
 
 ## Sayfalar
 
@@ -32,12 +33,26 @@ Herhangi bir kullanıcı adı/şifre ile giriş yapılır → `2d.html`.
 | `account-settings.html` | `NewUICMPAccountSettingsComponent` |
 | `permission-settings.html` | `NewUIPermissionSettingsComponent` (sihirbaz) + sunum için RBAC rol matrisi |
 | `audit-logs.html` | `user-logs-report` (+ `user-logs-report-popup`), tam sayfa |
+| `bms.html` | `BmsShowcaseComponent` (`/dcim/showcase/bms`, Babylon.js 3D bina: ana bina 3 kat + IDC4; KAT-1 gerçek yerleşim + ortak senaryo alarmları, diğer katlar "demo") |
+| `pms.html` | `EnergyGeneralViewComponent` PMS sürümü: `pms-dashboard` (Genel Bakış), `analyzers-view`, `app-energy-single-line` (`js/pms/single-line.js`), Kompanzasyon, Jeneratör A/B kolu, `rectifier-dashboard`, UPS (`ups-dashboard`; energy.js portu) |
 | `lock-authorization.html` | SUNUM EKLENTİSİ — Kilit Yetkilendirme (orijinalde karşılığı yok; Kapak Kilitleri + Yetki Ayarları tasarım diliyle) |
 
 Sayfalar arası derin bağlantılar: `2d.html?cabinet=1BJ53`, `3d.html?cabinet=1BJ53`, `3d.html?focus=UPS%20A5`,
 `locks.html?view=cards&cabinet=1AZ39`, `alarms.html?tab=history`, `alarms.html?filter=alarm`,
 `pdu-detail.html?cabinet=1AV42&pdu=B`, `cabinet-detail.html?cabinet=1BJ53`, `customer-pages.html?tab=matched`,
 `system-health.html?state=stale`, `reports.html#energy-pue`, `reports.html?cabinet=1AV42#energy`.
+
+BMS / PMS sayfaları (tam liste `js/bms.js` ve `js/pms.js` başındaki açıklama bloğunda):
+
+| Sayfa | Örnek derin bağlantılar |
+|---|---|
+| `bms.html` | `?floor=KAT-1|KAT-2|KAT-3|IDC4`, `?cab=1BJ53`, `?alarm=KAT1_SAL1_A5_UPS_MODE&dev=KAT1_SAL1_A5_UPS&from=pms`, `?dev=UPS%20B7`, `?theme=light` |
+| `pms.html` | `?view=overview|analyzers|single-line|compensation|generator|rectifier|ups`, `?view=single-line&schema=IDC4|IDC1-GENEL|IDC1-A|IDC1-B`, `?view=ups&ups=A5`, `?view=generator&gen=B`, `?alarm=IDC1_A_K3GRID_KDP1_Q36_DV_TRIP&dev=IDC1_A_K3GRID_KDP1_Q36_DV&from=bms` |
+
+PMS senaryosu: IDC1 A Blok K3 Grid KDP-1 **Q36 kesici açtı** (TRIP, çıkış enerjisiz, yük B tarafına geçti), IDC1 B Chiller-1 **Q89 aşırı akım**,
+IDC1 B Jeneratör-3 **Q9 haberleşme kaybı**, IDC4 **TR-4 sargı sıcaklığı** uyarısı; A kolu jeneratörleri (GEN4–6) haftalık yüksüz testte, B kolu (GEN1–3) beklemede.
+Tek hat şemaları `P24A01_S01/sql/SCH_PMS_import_2026-10-14.sql`'deki gerçek SCH kayıtlarından üretildi (`js/mock/pms-single-line.data.js`); ölçümler mock.
+BMS ↔ PMS geçişleri ("PMS'e geç", "Tek hatta göster", "Mekânsal konum (BMS)") orijinaldeki URL sözleşmesiyle çalışır.
 
 Etap 3 sayfaları (tam liste her sayfa JS'inin başındaki açıklama bloğunda):
 
@@ -66,6 +81,10 @@ planlı (3 sa sonra); Emre Çelik 1BG41 bakım penceresi (İE-2026-0931) aktif; 
 Üst menü `navigation.config.ts` ile aynı kategori/etiketlere sahiptir (etiketler `messages.tr.json`). Sunumda
 hazır olmayan öğeler (şu an yalnızca "Mühendislik") menüde görünür ama devre dışıdır (`opacity-40 pointer-events-none cursor-not-allowed`).
 "Kilit Yetkilendirme" orijinal menüde yoktur; sunum için Yönetim altına eklenmiştir.
+"BMS · Bina Yönetimi" ve "PMS · Güç Yönetimi" orijinal menüdeki gibidir; eski "Enerji Genel Görünüm" (`energy.html`) orijinalde PMS'e dönüştüğü için
+menüden kalktı, dosya eski derin bağlantılar için duruyor.
+Başlıkta Akya logosunun altında Türk Telekom logosu vardır (sunum eklentisi; `assets/img/tt-logo-dark.png` / `tt-logo-light.png`,
+`Turk-Telekom-Symbol.png`'den kırpıldı, tema `css/components.css` `.tt-logo-*` ile seçilir).
 "Kabin Yönetimi" orijinal menüde yoktur (kabinden açılır); sunum için Varlıklar altına eklenmiştir.
 "Müşteri Listesi" orijinalde `all-assets` ekranına gider; sunumda `customer-pages.html?tab=matched`'e bağlanmıştır.
 
@@ -101,6 +120,7 @@ js/ui-components.js     CSS 3D izometrik rack, 42U şasi, cihaz detay penceresi
 js/*.js                 Sayfa mantıkları
 js/reports/*.js         Rapor modülleri
 vendor/three.bundle.min.js  three + OrbitControls (IIFE, window.THREE)
+vendor/babylon.bundle.min.js @babylonjs/core 9.30.0, BMS'in kullandığı alt küme (esbuild IIFE, window.BABYLON)
 vendor/chart.umd.min.js     Chart.js 4.5.1 (front_end/node_modules'tan)
 vendor/echarts.min.js       ECharts 6.0.0 (front_end/node_modules'tan)
 tools/                  Üretim ve denetim betikleri

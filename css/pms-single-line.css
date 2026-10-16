@@ -1,0 +1,354 @@
+/* ==========================================================================
+   DCIM Sunum — PMS Tek Hat (js/pms/single-line.js)
+   Kaynak: new-ui/pages/energy/single-line/single-line.component.scss (bileşen kapsamlı sınıflar
+   global CSS'te Tailwind ile çakışmasın diye "sl-" önekiyle). Tema: html.dark.
+   Sakin zemin, tek vurgu tonu (camgöbeği) yalnız enerjili iletkenlerde. Elektriksel durum renksiz
+   (gri ton + biçim); önem renkleri yalnız alarm halkasında (K-07).
+   ========================================================================== */
+
+.pms-sl {
+  --sl-bg: #eef1f5;
+  --sl-grid: rgba(15, 23, 42, 0.045);
+  --sl-grid-major: rgba(15, 23, 42, 0.08);
+  --sl-dead: #8d98a8;
+  /* Açık zeminde (#eef1f5) yeterli kontrast için koyu camgöbeği (cyan-700, ~4.7:1) */
+  --sl-live: #0e7490;
+  --sl-live-hi: #cffafe;
+  --sl-halo: rgba(14, 116, 144, 0.16);
+  --sl-ink: #334155;
+  --sl-ink-soft: #64748b;
+  --sl-text: #0f172a;
+  --sl-muted: #5b6878;
+  --sl-zone: #6b7685;
+  --sl-border: #9aa5b4;
+  --sl-panel: rgba(255, 255, 255, 0.92);
+  --sl-panel-border: rgba(15, 23, 42, 0.12);
+  --sl-hover: rgba(14, 116, 144, 0.10);
+  --sl-shadow: rgba(2, 6, 23, 0.18);
+  --sl-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  color-scheme: light;
+}
+
+html.dark .pms-sl {
+  --sl-bg: #0b1119;
+  --sl-grid: rgba(148, 163, 184, 0.045);
+  --sl-grid-major: rgba(148, 163, 184, 0.085);
+  --sl-dead: #4a5567;
+  --sl-live: #22d3ee;
+  --sl-live-hi: #ecfeff;
+  --sl-halo: rgba(34, 211, 238, 0.13);
+  --sl-ink: #c3cdd9;
+  --sl-ink-soft: #8a97a8;
+  --sl-text: #e6ebf1;
+  --sl-muted: #8b98a9;
+  --sl-zone: #5f6c7d;
+  --sl-border: #2c3644;
+  --sl-panel: rgba(13, 20, 30, 0.9);
+  --sl-panel-border: rgba(148, 163, 184, 0.16);
+  --sl-hover: rgba(34, 211, 238, 0.10);
+  --sl-shadow: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+/* Modül kabı (el içinde tam yükseklik) + app-schematic-toolbar (mb-1.5) */
+.pms-sl-host { width: 100%; }
+.pms-sl-toolbar { padding-bottom: 6px; }
+
+/* styles.css / tailwind-extra.css'te olmayan Tailwind sınıfları */
+.self-stretch { align-self: stretch; }
+.disabled\:cursor-default:disabled { cursor: default; }
+
+.sl-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--sl-bg);
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  user-select: none;
+}
+
+.sl-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  text-rendering: geometricPrecision;
+}
+.sl-svg.sl-panning { cursor: grabbing; }
+
+/* ── Izgara ── */
+.sl-grid-minor { stroke: var(--sl-grid); stroke-width: 0.6; }
+.sl-grid-major { stroke: var(--sl-grid-major); stroke-width: 0.8; }
+
+/* ── Bölge sınırları ── */
+.sl-border {
+  fill: none;
+  stroke: var(--sl-border);
+  stroke-width: 1.25;
+  stroke-dasharray: 8 6;
+}
+
+/* ── İletkenler ── */
+.sl-cond {
+  fill: none;
+  stroke: var(--sl-dead);
+  stroke-width: 3.5;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+.sl-cond.sl-bus { stroke-width: 6; stroke-linecap: butt; }
+.sl-cond.sl-tie { stroke-width: 3; }
+.sl-cond.sl-live { stroke: var(--sl-live); }
+
+.sl-halo path {
+  fill: none;
+  stroke: var(--sl-halo);
+  stroke-width: 11;
+  stroke-linecap: round;
+}
+.sl-halo path.sl-bus { stroke-width: 15; }
+
+.sl-flow path {
+  fill: none;
+  stroke: var(--sl-live-hi);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 2 22;
+  opacity: 0.85;
+  animation: sl-flow 1.6s linear infinite;
+}
+.sl-flow path.sl-rev { animation-direction: reverse; }
+
+@keyframes sl-flow {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.sl-junctions circle { fill: var(--sl-dead); }
+.sl-junctions circle.sl-live { fill: var(--sl-live); }
+
+/* ── Bölge etiketleri ── */
+.sl-zone-labels text {
+  fill: var(--sl-zone);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ── Semboller (tek çizgi kalınlığı: 2) ── */
+.sl-sym,
+.sl-sym-mask {
+  fill: var(--sl-bg);
+  stroke: var(--sl-ink);
+  stroke-width: 2;
+}
+.sl-sym-mask { stroke: none; }
+.sl-sym-open { fill: none; stroke: var(--sl-ink); stroke-width: 2; }
+.sl-sym-thin { fill: none; stroke: var(--sl-ink); stroke-width: 1.5; stroke-linecap: round; }
+.sl-sym-glyph { fill: var(--sl-ink); font-weight: 600; }
+.sl-brk-closed { fill: var(--sl-ink); stroke: var(--sl-ink); stroke-width: 2; }
+.sl-brk-open { fill: var(--sl-bg); stroke: var(--sl-ink); stroke-width: 2; }
+.sl-brk-blade,
+.sl-brk-contact { fill: none; stroke: var(--sl-ink); stroke-width: 2; stroke-linecap: round; }
+.sl-fixed-mark { fill: none; stroke: var(--sl-ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sl-hit { fill: transparent; stroke: none; }
+
+.sl-nodes { isolation: auto; }
+.sl-node { cursor: pointer; }
+.sl-node.sl-hovered .sl-hit { fill: var(--sl-hover); }
+
+/* ── Alarm halkası ── */
+.sl-sev-ring { fill: none; stroke-width: 2.5; stroke-dasharray: none; }
+.sl-sev-ring.sl-pulse { animation: sl-pulse 2s ease-in-out infinite; }
+
+@keyframes sl-pulse {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.35; }
+}
+
+.sl-sev-badge text { fill: #fff; font-size: 11px; font-weight: 700; }
+
+/* ── Etiketler ── */
+.sl-tag {
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--sl-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.sl-tag-name { fill: var(--sl-text); font-size: 12.5px; font-weight: 600; }
+.sl-tag-state { fill: var(--sl-muted); font-family: var(--sl-mono); font-size: 9.5px; letter-spacing: 0.08em; }
+.sl-tag-val { fill: var(--sl-muted); font-family: var(--sl-mono); font-size: 10px; }
+.sl-tag-num { fill: var(--sl-text); }
+
+/* ── HUD ── */
+.sl-hud { position: absolute; z-index: 2; pointer-events: none; }
+.sl-hud-tl { top: 10px; left: 12px; }
+.sl-hud-title { color: var(--sl-text); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+.sl-hud-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+  color: var(--sl-muted);
+  font-family: var(--sl-mono);
+  font-size: 10.5px;
+}
+.sl-hud-stats b { color: var(--sl-text); font-weight: 600; }
+
+/* "Klasik görünüm" düğmesi sağ üstte; notlar altında (orijinalde üst üste biniyordu) */
+.sl-hud-tr { top: 42px; right: 12px; }
+.sl-hud-notes { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.sl-hud-notes[hidden] { display: none; }
+.sl-note {
+  max-width: 340px;
+  padding: 4px 8px;
+  border: 1px solid var(--sl-panel-border);
+  border-radius: 3px;
+  background: var(--sl-panel);
+  color: var(--sl-muted);
+  font-size: 10.5px;
+}
+/* Uyarı notu: sol şerit Uyarı önem tonunda (SEVERITY_COLOR.uyari) */
+.sl-note.sl-warn { border-left: 3px solid #d97706; color: var(--sl-text); font-weight: 600; }
+
+.sl-classic-toggle { position: absolute; top: 8px; right: 8px; z-index: 10; }
+
+.sl-hud-br { right: 12px; bottom: 12px; }
+.sl-controls { display: flex; gap: 4px; pointer-events: auto; }
+.sl-controls button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--sl-panel-border);
+  border-radius: 3px;
+  background: var(--sl-panel);
+  color: var(--sl-text);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sl-controls button:hover { border-color: var(--sl-live); background: linear-gradient(var(--sl-hover), var(--sl-hover)), var(--sl-panel); }
+.sl-controls button:focus-visible { outline: 2px solid var(--sl-live); outline-offset: 1px; }
+.sl-controls button.sl-fit { font-size: 11.5px; font-weight: 600; }
+
+.sl-hud-bl { left: 12px; bottom: 12px; }
+.sl-legend {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 3px 14px;
+  padding: 7px 10px;
+  border: 1px solid var(--sl-panel-border);
+  border-radius: 3px;
+  background: var(--sl-panel);
+  color: var(--sl-muted);
+  font-size: 10.5px;
+}
+.sl-legend .sl-lg { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sl-legend svg { width: 18px; height: 18px; overflow: visible; }
+.sl-legend .sl-cond { stroke-width: 3; }
+.sl-legend .sl-sym, .sl-legend .sl-sym-open, .sl-legend .sl-brk-closed, .sl-legend .sl-brk-open,
+.sl-legend .sl-brk-blade, .sl-legend .sl-fixed-mark { stroke-width: 1.6; }
+.sl-legend .sl-fixed-mark { transform: scale(0.85); }
+
+.sl-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sl-muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* ── Hover kartı ── */
+.sl-card {
+  position: absolute;
+  z-index: 3;
+  width: 236px;
+  padding: 8px 10px;
+  border: 1px solid var(--sl-panel-border);
+  border-radius: 4px;
+  background: var(--sl-panel);
+  box-shadow: 0 6px 20px var(--sl-shadow);
+  color: var(--sl-text);
+  font-size: 11.5px;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+.sl-card[hidden] { display: none; }
+.sl-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sl-card-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-card-kind { color: var(--sl-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; }
+.sl-card-dev {
+  margin: 1px 0 5px;
+  color: var(--sl-muted);
+  font-family: var(--sl-mono);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-card-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+.sl-card-row span { color: var(--sl-muted); }
+.sl-card-row b { font-weight: 600; }
+.sl-card-row.sl-mono { font-family: var(--sl-mono); font-size: 10.5px; }
+.sl-card-sep { height: 1px; margin: 5px 0; background: var(--sl-panel-border); }
+
+/* ── Seçim kartı (energy-general-view .sel-card; max-w-[calc(100%-1rem)] max-h-[60%]) ── */
+.sl-sel-card { max-width: calc(100% - 1rem); max-height: 60%; }
+.sl-sel-card button:disabled { opacity: 0.5; cursor: default; }
+.sl-sel-alarms { flex: 0 1 auto; }
+
+/* ── Alarm işareti (focus girdisi) ── */
+.sl-borders, .sl-halo, .sl-conductors, .sl-flow, .sl-junctions, .sl-zone-labels, .sl-node { transition: opacity 0.3s ease; }
+.sl-svg.sl-dimmed .sl-borders, .sl-svg.sl-dimmed .sl-halo, .sl-svg.sl-dimmed .sl-conductors, .sl-svg.sl-dimmed .sl-flow,
+.sl-svg.sl-dimmed .sl-junctions, .sl-svg.sl-dimmed .sl-zone-labels, .sl-svg.sl-dimmed .sl-node:not(.sl-is-focus) { opacity: 0.45; }
+
+.sl-focus-mark { cursor: pointer; }
+.sl-fm-wave, .sl-fm-ring { pointer-events: none; }
+.sl-fm-wave {
+  fill: none;
+  stroke: var(--fm);
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sl-fm-wave 1.8s ease-out infinite;
+}
+.sl-fm-wave2 { animation-delay: 0.9s; }
+
+@keyframes sl-fm-wave {
+  0% { transform: scale(0.9); opacity: 0.85; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+
+.sl-fm-ring { fill: color-mix(in srgb, var(--fm) 12%, transparent); stroke: var(--fm); stroke-width: 3; }
+.sl-fm-pin { fill: var(--fm); stroke: var(--sl-bg); stroke-width: 2; filter: drop-shadow(0 2px 3px var(--sl-shadow)); }
+.sl-fm-bang { fill: #fff; font-size: 14px; font-weight: 800; }
+.sl-fm-box { fill: var(--sl-panel); stroke: var(--fm); stroke-width: 1.2; filter: drop-shadow(0 3px 6px var(--sl-shadow)); }
+.sl-fm-box-bar { fill: var(--fm); }
+.sl-fm-label { fill: var(--sl-text); font-size: 11px; font-weight: 600; }
+.sl-fm-time { fill: var(--sl-muted); font-family: var(--sl-mono); font-size: 9.5px; }
+
+/* ── Klasik görünüm (eski schematic-viewer renkleri: SCH activeColor/passiveColor; ızgara ve akış yok) ── */
+.sl-classic { --sl-live: #d9534f; --sl-dead: #5cb85c; }
+.sl-classic .sl-gridbg, .sl-classic .sl-halo, .sl-classic .sl-flow { display: none; }
+.sl-classic .sl-cond { stroke-width: 5; stroke-linecap: round; }
+.sl-classic .sl-cond.sl-bus { stroke-width: 8; }
+.sl-classic .sl-brk-closed { fill: #d9534f; stroke: #d9534f; }
+.sl-classic .sl-brk-open { fill: #5cb85c; stroke: #5cb85c; }
+.sl-classic .sl-sym { fill: #868686; }
+.sl-classic .sl-sym-glyph { fill: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-flow path { animation: none; opacity: 0; }
+  .sl-sev-ring.sl-pulse { animation: none; }
+  .sl-fm-wave { animation: none; opacity: 0; }
+  .sl-borders, .sl-halo, .sl-conductors, .sl-flow, .sl-junctions, .sl-zone-labels, .sl-node { transition: none; }
+}

@@ -20,7 +20,7 @@ const out = outArg || path.join(os.tmpdir(), 'dcim-smoke-' + Date.now() + '.png'
 const url = 'file:///' + path.join(root, page.replace(/[?#].*$/, '')).replace(/\\/g, '/') + (page.match(/[?#].*$/) || [''])[0];
 
 const res = spawnSync(chrome, [
-  '--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
+  '--headless=new', '--enable-automation', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
   '--user-data-dir=' + profile, '--window-size=' + w + ',' + h, '--virtual-time-budget=5000',
   '--enable-logging=stderr', '--log-level=0', '--screenshot=' + out, url
 ], { encoding: 'utf8', timeout: 90000 });

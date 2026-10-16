@@ -1209,3 +1209,10 @@ svg {
 .details-table-container.description-hidden:hover .details-table-row:not(.user-added-row) strong {
   text-align: right;
 }
+
+/* Başlık: Akya logosunun altında Türk Telekom yatay logosu (sunum). Tema html.dark sınıfıyla seçilir. */
+.tt-logo { height: 15px; display: none; }
+html.dark .tt-logo-dark { display: block; }
+html:not(.dark) .tt-logo-light { display: block; }
+.tt-logo-login { height: 16px; }
+@media (min-width: 640px) { .tt-logo-login { height: 18px; } }

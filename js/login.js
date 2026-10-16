@@ -33,7 +33,10 @@
 
   // Hatırlanan kullanıcı
   const remembered = store.get('dcim_remember_user');
-  if (remembered) {
+  // Eski sürümlerden kalan (admin olmayan) hatırlanan kullanıcı silinir
+  const validUser = raw => { try { return JSON.parse(raw).usr === 'admin'; } catch (e) { return false; } };
+  if (remembered && !validUser(remembered)) store.remove('dcim_remember_user');
+  else if (remembered) {
     try {
       userInput.value = JSON.parse(remembered).usr || '';
       remember.checked = true;
@@ -68,12 +71,22 @@
     showMessage('success', 'Şifre sıfırlama bağlantısı kayıtlı e-posta adresinize gönderildi (demo).');
   });
 
+  const DEMO_USER = 'admin';
+  const DEMO_PASS = '1234';
+
   form.addEventListener('submit', e => {
     e.preventDefault();
     const usr = userInput.value.trim();
     const pwd = passInput.value;
     if (!usr || !pwd) {
       showMessage('error', 'Lütfen kullanıcı adı ve şifre alanlarını doldurunuz.');
+      return;
+    }
+    // Sunum hesabı: yalnız admin / 1234 (sunum için istemci tarafı kontrol; gerçek kimlik doğrulama değildir)
+    if (usr.toLowerCase() !== DEMO_USER || pwd !== DEMO_PASS) {
+      showMessage('error', 'Kullanıcı adı veya şifre hatalı.');
+      passInput.value = '';
+      passInput.focus();
       return;
     }
     showMessage(null);
@@ -83,7 +96,7 @@
     const fullname = usr.toLowerCase() === 'operator' || usr.toLowerCase() === 'admin'
       ? 'DCIM Operatör'
       : usr.split(/[._\s-]+/).filter(Boolean).map(p => p.charAt(0).toLocaleUpperCase('tr-TR') + p.slice(1)).join(' ');
-    const user = JSON.stringify({ usr, fullname });
+    const user = JSON.stringify({ usr: DEMO_USER, fullname });
 
     setTimeout(() => {
       store.session('dcim_user', user);

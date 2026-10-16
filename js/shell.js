@@ -84,12 +84,23 @@
   // Oturum (login.js yazar)
   // ---------------------------------------------------------------------------
   const session = {
+    // Geçerli oturum yalnız login.js'in yazdığı admin kaydıdır
+    valid(raw) {
+      try { return !!raw && JSON.parse(raw).usr === 'admin'; } catch (e) { return false; }
+    },
     user() {
       const raw = storage.sessionGet('dcim_user') || storage.get('dcim_remember_user');
       if (raw) {
         try { return JSON.parse(raw); } catch (e) { /* yok say */ }
       }
       return { usr: 'operator', fullname: 'DCIM Operatör' };
+    },
+    // Oturum yoksa giriş sayfasına yönlendirir. tools/smoke.js (navigator.webdriver) denetimden muaftır.
+    guard() {
+      if (/(^|\/)login\.html$/i.test(window.location.pathname) || navigator.webdriver) return true;
+      const ok = this.valid(storage.sessionGet('dcim_user')) || this.valid(storage.get('dcim_remember_user'));
+      if (!ok) window.location.replace('login.html');
+      return ok;
     },
     initials(u) {
       const name = (u && (u.fullname || u.usr)) || 'Guest';
@@ -271,6 +282,7 @@
         { key: 'customers', label: 'Müşteri Eşleştirme', icon: 'pi pi-users', href: 'customer-pages.html' }
       ]
     },
+    { key: 'bms', label: 'BMS · Bina Yönetimi', icon: 'pi pi-building', href: 'bms.html' },
     {
       label: 'Varlıklar', icon: 'pi pi-server', items: [
         // Orijinalde all-assets'e gider; sunumda eşleşen müşteri listesine bağlandı
@@ -281,8 +293,10 @@
       ]
     },
     {
-      label: 'Enerji', icon: 'pi pi-bolt', items: [
-        { key: 'energy', label: 'Enerji Genel Görünüm', icon: 'pi pi-bolt', href: 'energy.html' },
+      // Orijinalde "Enerji" kategorisi PMS olarak yenilendi (Enerji Genel Görünüm → PMS Dashboard, aynı route).
+      // energy.html dosyası eski derin bağlantılar için yerinde duruyor.
+      label: 'PMS · Güç Yönetimi', icon: 'pi pi-bolt', items: [
+        { key: 'pms', label: 'PMS Dashboard', icon: 'pi pi-bolt', href: 'pms.html' },
         { key: 'connectivity', label: 'SDP Kablolama Topolojisi', icon: 'pi pi-sitemap', href: 'connectivity.html' }
       ]
     },
@@ -317,7 +331,7 @@
       if (!cat.items) {
         if (!cat.href) return '';
         const cls = cat.key && cat.key === active ? NAV_ACTIVE : NAV_IDLE;
-        return '<a href="' + cat.href + '" class="' + cls + ' px-2.5 py-3 h-full transition-all flex items-center"><span>' + esc(cat.label) + '</span></a>';
+        return '<a href="' + cat.href + '" class="' + cls + ' px-2.5 py-3 h-full transition-all flex items-center whitespace-nowrap"><span>' + esc(cat.label) + '</span></a>';
       }
       const activeItems = cat.items.filter(i => i.href);
       if (!activeItems.length) return '';
@@ -330,7 +344,7 @@
         return '<a href="' + item.href + '" class="' + cls + '" title="' + esc(item.label) + '"><span>' + esc(item.label) + '</span></a>';
       }).join('');
       return '<div class="relative h-full flex items-center">' +
-        '<button type="button" data-nav-toggle="' + esc(cat.label) + '" class="' + (catActive || isOpen ? NAV_ACTIVE : NAV_IDLE) + ' px-2.5 py-3 h-full transition-all flex items-center gap-1 text-xs cursor-pointer">' +
+        '<button type="button" data-nav-toggle="' + esc(cat.label) + '" class="' + (catActive || isOpen ? NAV_ACTIVE : NAV_IDLE) + ' px-2.5 py-3 h-full transition-all flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">' +
           '<span>' + esc(cat.label) + '</span><i class="pi pi-chevron-down text-[8px] opacity-60"></i>' +
         '</button>' +
         (isOpen ? '<div data-nav-menu class="absolute left-0 top-full mt-0.5 w-48 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-xl z-50 py-1 text-xs divide-y divide-slate-100 dark:divide-slate-800 animate-fade-in"><div class="py-1">' + items + '</div></div>' : '') +
@@ -352,8 +366,11 @@
 
     return (
       '<div class="flex items-center gap-4">' +
-        '<a href="2d.html" class="flex items-center shrink-0" title="Akya Software">' +
-          '<img src="assets/img/logo-akya-white.png" alt="Akya Logo" class="h-7 w-auto object-contain invert dark:invert-0 transition-all" />' +
+        // Akya logosunun altında Türk Telekom (sunum): koyu/açık tema varyantı css/components.css .tt-logo-* ile seçilir
+        '<a href="2d.html" class="flex flex-col items-start justify-center gap-0.5 shrink-0" title="Akya Software · Türk Telekom">' +
+          '<img src="assets/img/logo-akya-white.png" alt="Akya Logo" class="h-5 w-auto object-contain invert dark:invert-0 transition-all" />' +
+          '<img src="assets/img/tt-logo-dark.png" alt="Türk Telekom Logo" class="tt-logo tt-logo-dark w-auto object-contain" />' +
+          '<img src="assets/img/tt-logo-light.png" alt="Türk Telekom Logo" class="tt-logo tt-logo-light w-auto object-contain" />' +
         '</a>' +
         '<nav class="hidden md:flex items-center gap-1 text-xs h-full">' + renderNav(active) + '</nav>' +
       '</div>' +
@@ -474,6 +491,7 @@
   DCIM.ui = { esc, fmtDateTime, fmtTime, fmtDateKey, fmtNum, statusBadge, badgeLabel, button, buttonClasses, dialog, toast, storage };
   DCIM.theme = theme;
   DCIM.session = session;
+  session.guard();
   function setActive(key) {
     activeKey = key || '';
     mountHeader();

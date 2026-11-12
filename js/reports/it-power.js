@@ -40,11 +40,11 @@
         { value: 'CMR/T01', label: '1.Kat' },
         { value: 'CMR/T02', label: '2.Kat' },
         { value: 'CMR/T03', label: '3.Kat' },
-        { value: 'CMR/T04', label: 'IDC4' }
+        { value: 'CMR/T04', label: 'DCB' }
       ];
       const PERIODS = ['instant', 'daily', 'weekly', 'monthly', 'custom'];
       const TOP_N = [5, 10, 20, 50, 100];
-      const RID_FLOOR = { K1S1: '1.Kat', K2S1: '2.Kat', K3S1: '3.Kat', IDC4: 'IDC4' };
+      const RID_FLOOR = { K1S1: '1.Kat', K2S1: '2.Kat', K3S1: '3.Kat', DCB: 'DCB' };
 
       const state = {
         selectedKats: KATS.map(k => k.value),
@@ -169,52 +169,51 @@
       const RANK_CLS = ['bg-amber-400/20 text-amber-500 border border-amber-400/40', 'bg-slate-300/20 text-slate-400 border border-slate-300/40', 'bg-amber-700/20 text-amber-600 border border-amber-700/40'];
       function popupHtml() {
         if (!state.showDataPopup) return '';
+        const RM = DCIM.reportModal;
         const off = !hasData() || state.isLoadingData;
+        const dis = off ? ' disabled' : '';
         let body;
         if (state.isLoadingData) {
-          body = '<div class="flex flex-col items-center justify-center py-12">' +
+          body = '<div class="rpt-state">' +
             '<i class="pi pi-spin pi-spinner text-sky-500 text-3xl mb-3"></i>' +
             '<p class="text-sm text-slate-600 dark:text-slate-300 font-medium">' + esc(T.processingData) + '</p>' +
             (state.progressMessage ? '<div class="w-64 bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden mt-3"><div class="bg-sky-500 h-full transition-all duration-300" style="width: ' + state.progressPercent + '%"></div></div>' +
               '<p class="text-xs text-sky-500 font-mono mt-1">' + esc(state.progressMessage) + '</p>' : '') +
           '</div>';
         } else if (hasData()) {
-          body = '<div class="space-y-4">' + state.popupData.map(g =>
-            '<div class="space-y-2">' +
-              '<div class="text-xs font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wider flex items-center gap-2"><i class="pi pi-list"></i><span>' + esc(g.label) + '</span></div>' +
-              '<div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
-                '<table class="w-full text-xs text-left text-slate-700 dark:text-slate-300">' +
-                  '<thead class="bg-slate-100 dark:bg-surface-panel text-slate-800 dark:text-slate-200 uppercase font-semibold text-[11px] border-b border-slate-200 dark:border-border-subtle"><tr>' +
-                    '<th class="px-3 py-2.5 w-16 text-center">' + esc(T.colRank) + '</th>' +
-                    [T.colFloor, T.colDeviceName, T.colMaxPower, T.colDate].map(h => '<th class="px-3 py-2.5">' + esc(h) + '</th>').join('') +
-                  '</tr></thead>' +
-                  '<tbody class="divide-y divide-slate-100 dark:divide-border-subtle">' +
-                    g.results.map((it, i) =>
-                      '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover/50">' +
-                        '<td class="px-3 py-2 text-center"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ' + (RANK_CLS[i] || 'text-slate-400') + '">' + (i + 1) + '</span></td>' +
-                        '<td class="px-3 py-2 font-medium">' + esc(it.cmr) + '</td>' +
-                        '<td class="px-3 py-2 text-slate-900 dark:text-slate-100 font-medium">' + esc(it.deviceDesc) + '</td>' +
-                        '<td class="px-3 py-2 font-mono font-semibold ' + (it.numericValue >= 1000 ? 'text-rose-500 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400') + '">' + esc(it.value) + '</td>' +
-                        '<td class="px-3 py-2 text-slate-500 dark:text-slate-400 font-mono">' + esc(it.date) + '</td>' +
-                      '</tr>').join('') +
-                  '</tbody></table></div>' +
-            '</div>').join('') + '</div>';
+          body = state.popupData.map(g =>
+            '<div>' +
+              '<div class="px-3 py-2 text-xs font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wider flex items-center gap-2 border-b border-slate-200 dark:border-slate-800"><i class="pi pi-list"></i><span>' + esc(g.label) + '</span></div>' +
+              '<table class="rpt-table"><thead><tr>' +
+                  '<th class="w-16 text-center">' + esc(T.colRank) + '</th>' +
+                  [T.colFloor, T.colDeviceName, T.colMaxPower, T.colDate].map(h => '<th>' + esc(h) + '</th>').join('') +
+                '</tr></thead>' +
+                '<tbody>' +
+                  g.results.map((it, i) =>
+                    '<tr>' +
+                      '<td class="text-center"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ' + (RANK_CLS[i] || 'text-slate-400') + '">' + (i + 1) + '</span></td>' +
+                      '<td class="font-medium text-slate-700 dark:text-slate-300">' + esc(it.cmr) + '</td>' +
+                      '<td class="text-slate-900 dark:text-slate-100 font-medium">' + esc(it.deviceDesc) + '</td>' +
+                      '<td class="font-mono font-semibold ' + (it.numericValue >= 1000 ? 'text-rose-500 dark:text-rose-400' : 'text-sky-600 dark:text-sky-400') + '">' + esc(it.value) + '</td>' +
+                      '<td class="text-slate-500 dark:text-slate-400 font-mono">' + esc(it.date) + '</td>' +
+                    '</tr>').join('') +
+                '</tbody></table>' +
+            '</div>').join('');
         } else {
           body = kit.emptyState({ icon: 'pi pi-inbox', message: T.noData });
         }
-        return '<div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100000] flex items-center justify-center p-4" data-popup-backdrop>' +
-          '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">' +
-            '<div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-surface-panel">' +
-              '<h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2"><i class="pi pi-desktop text-sky-500"></i><span>' + esc(T.popupTitle + ' - ' + T.periods[state.reportPeriod]) + '</span></h3>' +
-              '<div class="flex items-center gap-2">' +
-                R5.button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: T.pdfDownload, disabled: off, attrs: 'data-act="pdf"' }) +
-                R5.button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: T.excelDownload, disabled: off, attrs: 'data-act="excel"' }) +
-                R5.button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: T.zipDownload, disabled: off, attrs: 'data-act="zip"' }) +
-                '<button type="button" data-act="close-popup" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded transition-colors"><i class="pi pi-times text-base"></i></button>' +
-              '</div>' +
-            '</div>' +
-            '<div class="p-4 overflow-y-auto flex-1 space-y-4">' + body + '</div>' +
-          '</div></div>';
+        const rowCount = state.popupData.reduce((n, g) => n + ((g.results && g.results.length) || 0), 0);
+        // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur)
+        return RM.html({
+          title: T.popupTitle, subtitle: T.title, icon: 'pi pi-desktop', tone: 'sky', size: 'lg', z: 'z-[100000]',
+          attrs: 'data-popup-backdrop',
+          badge: statusBadge('info', T.periods[state.reportPeriod]),
+          actions: RM.btn('pdf', 'pi pi-file-pdf', T.pdfDownload, 'data-act="pdf"' + dis) +
+            RM.btn('excel', 'pi pi-file-excel', T.excelDownload, 'data-act="excel"' + dis) +
+            RM.btn('zip', 'pi pi-folder', T.zipDownload, 'data-act="zip"' + dis),
+          summary: !state.isLoadingData && hasData() ? RM.total(rowCount) : '',
+          body
+        }).replace('data-rpt-close', 'data-rpt-close data-act="close-popup"');
       }
 
       el.innerHTML = '<div class="space-y-4" data-main></div><div data-popup></div>';

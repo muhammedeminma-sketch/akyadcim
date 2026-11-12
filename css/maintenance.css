@@ -1,0 +1,11 @@
+/* ==========================================================================
+   DCIM Sunum — Bakım Modülü (maintenance.html) sayfa stilleri
+   Çoğu görünüm Tailwind sınıflarıyla çizilir; burada yalnız tablo hücre sarma ve tarih alanı teması var.
+   ========================================================================== */
+#mnt-root .cell-wrap { white-space: normal; overflow-wrap: anywhere; }
+#mnt-root td { vertical-align: middle; }
+.dark #mnt-root input[type="date"],
+.dark [data-drawer-panel] input[type="date"] { color-scheme: dark; }
+/* Kartların sayaç çipleri kart yüksekliğini taşırmasın */
+#mnt-root a[data-go] .space-y-4 > span { margin-top: 0.75rem; }
+#mnt-root [data-dt="table"] td { white-space: nowrap; }

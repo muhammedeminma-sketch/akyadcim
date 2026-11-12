@@ -3,11 +3,19 @@
    cabinet-manager.component.html / .ts birebir port:
    - Üst bar: kabin adı, TAKİP AKTİF rozeti, lokasyon, Cihaz Ekle, Kabin Takibi (alarm renklenmesi)
    - 3 panel: PDU Üniteleri | 42U Ön/Arka rack (zoom + pan) | Sensörler + Kapasite Limitleri
-   - Cihaz Detay / Ekleme penceresi (Varlık Takip, Fiziksel Altyapı, ön/arka görsel + port yönetimi)
+     · rafa yalnız ASM assignment = 0 (Kullanımda) cihazlar çizilir; slotlarda model kütüphanesi (CAT)
+       SVG ön/arka yüzleri (preserveAspectRatio="none"), çizimsiz cihazda metin yüzü
+     · dikey (0U) IT PDU'lar U ızgarasının yanında boydan boya şerit (önden: çiftler sol, tekler sağ)
+     · Güç Tüketimi: PDU'lardan ölçülen kabin toplamı / kabin güç limiti
+     · lg altı: Kabin / PDU / Sensörler sekmeleri ve Ön / Arka görünüm seçici
+   - Cihaz Detay / Ekleme paneli (Varlık Takip, Fiziksel Altyapı, ön/arka görsel + port yönetimi):
+     sağdan açılan satır içi panel — açılınca PDU paneli daralıp kaybolur (cd-layout--asset-open);
+     "Ağ Topolojisini Aç", Barkod/RFID tekrar denetimi, hurdaya ayrılan cihazda yalnız HURDA-DEPO lokasyonu
    - Port Ekle/Düzenle ve Port Detay pencereleri, PDU Ekle / Sensör Eşik diyalogları
-   XDB / ASM / CAT / LNK yerine js/mock-data.js (DCIM.data.cabinetMgr) kullanılır; kayıtlar bellek içidir.
-   URL: ?cabinet=1BJ53 [&device=U6|<assetId>] [&edit=1] [&port=NIC1] [&add=1|U30] [&cls=R750] [&ai=front]
-        [&dialog=sensor|pdu|position] [&tracking=0] [&zoom=1.5]
+   XDB / ASM / CAT / LNK yerine js/mock-data.js (DCIM.data.cabinetMgr) + js/mock/cabinet-detail.data.js
+   (tüm katlar, assignment, HURDA-DEPO, dikey PDU) kullanılır; kayıtlar bellek içidir.
+   URL: ?cabinet=1DU06|2EA05|3FA09 [&device=U6|<assetId>|VPDU-A] [&edit=1] [&port=NIC1] [&add=1|U30] [&cls=R750]
+        [&dialog=sensor|pdu|position] [&tracking=0] [&zoom=1.5] [&assign=2] [&scraploc=0] [&tab=rack|pdu|sensors]
    ========================================================================== */
 (function () {
   'use strict';
@@ -17,6 +25,7 @@
   const kit = DCIM.kit;
   const D = DCIM.data;
   const M = D.cabinetMgr;
+  const CD = D.cabinetDetail;
   DCIM.shell.init({ active: 'cabinet' });
 
   const params = new URLSearchParams(window.location.search);
@@ -59,8 +68,11 @@
     pduInstantPower: '-',
     cabinetTotalPower: '-',
     pduAlarmMessage: '',
+    measuredPowerWatts: null,
     sensors: emptySensors(),
-    slots: { front: [], back: [] },
+    slots: { front: [], back: [], vpduEven: [], vpduOdd: [] },
+    mobileTab: ['rack', 'pdu', 'sensors'].indexOf(params.get('tab')) >= 0 ? params.get('tab') : 'rack',
+    mobileRackSide: 'front',
     rackZoomLevel: 1,
     zoom: { front: 1, back: 1 },
     pan: { front: { x: 0, y: 0 }, back: { x: 0, y: 0 } },
@@ -248,6 +260,8 @@
     const devs = M.pduDevs(state.code, { live, inhibited: !state.tracking });
     const pList = [];
     let grandTotalPow = 0;
+    let connectedPow = 0;
+    let anyConnected = false;
     devs.forEach(dev => {
       const ios = [];
       if (Array.isArray(dev.bi)) dev.bi.forEach(b => { if (Array.isArray(b.io)) ios.push.apply(ios, b.io); });
@@ -283,6 +297,8 @@
       }
       const comm = getPduCommStatus(dev.sta !== undefined ? dev.sta : dev.status);
       grandTotalPow += powVal;
+      // Kapasite kutusundaki ölçülen tüketim: yalnız bağlı (haberleşen) PDU'lar
+      if (comm.classNo >= 3) { connectedPow += powVal; anyConnected = true; }
       pList.push({
         id: dev.id,
         name: formatPduDisplayName(dev.id || 'PDU'),
@@ -304,6 +320,7 @@
       if (!state.selectedPduName || !pList.some(p => p.name === state.selectedPduName)) state.selectedPduName = pList[0].name;
     } else state.selectedPduName = '';
     updateSelectedPduMetrics(grandTotalPow);
+    state.measuredPowerWatts = anyConnected ? Math.round(connectedPow) : null;
     const alarmPdu = pList.find(p => p.isAlarm || p.status === 'alarm');
     const warningPdu = pList.find(p => p.isWarning || p.status === 'warning');
     state.pduAlarmMessage = alarmPdu ? alarmPdu.name + ' Alarm Durumunda (' + (alarmPdu.statusLabel || 'ALARM') + ')'
@@ -359,16 +376,22 @@
   // ---------------------------------------------------------------------------
   // 42U slot üretimi (generateSlots birebir: kaplanan U'lar 'covered')
   // ---------------------------------------------------------------------------
-  function generateSlots(devices) {
+  function generateSlots(devices, cab) {
     const occ = new Map();
-    (devices || []).forEach(d => {
+    // Yalnız kullanımdaki cihazlar rafa çizilir (assignment 0 = Kullanımda); stok/hurda/bakım kayıtları
+    // kabin + U taşısa da süzülür, aksi halde aynı U'ya bindirirdi.
+    (devices || []).filter(d => CD.inUse(d)).forEach(d => {
       const startU = Number(d.startU) || 0;
       const uSize = Math.max(1, Number(d.uSize) || 1);
       const displayName = (d.manufacturer || d.model) ? ((d.manufacturer || '') + ' ' + (d.model || '')).trim() : '-';
       if (startU >= 1 && startU <= TOTAL_U) {
+        // Katalogdaki (CAT) cihaz yüz çizimleri; çizimi olmayan yüzde metin yüzü kalır
+        const f = M.face(d, 'front');
+        const b = M.face(d, 'back');
+        const imgs = { frontImg: f ? CD.stretchSvgFace(f.img) : '', backImg: b ? CD.stretchSvgFace(b.img) : '' };
         for (let i = 0; i < uSize; i++) {
           const u = startU + i;
-          if (u <= TOTAL_U) occ.set(u, { asset: d, startU, uSize, isTopSlot: u === startU + uSize - 1, customerType: d.customerType === 'internal' ? 'internal' : 'external', assetName: displayName, assetType: d.assetType || 'Sunucu' });
+          if (u <= TOTAL_U) occ.set(u, Object.assign({ asset: d, startU, uSize, isTopSlot: u === startU + uSize - 1, customerType: d.customerType === 'internal' ? 'internal' : 'external', assetName: displayName, assetType: d.assetType || 'Sunucu' }, imgs));
         }
       }
     });
@@ -378,8 +401,17 @@
       if (it) list.push(it.isTopSlot ? Object.assign({}, it, { uNumber: u }) : { uNumber: u, customerType: 'covered', uSize: 1 });
       else list.push({ uNumber: u, customerType: 'empty', uSize: 1 });
     }
-    return { front: list, back: list.map(s => Object.assign({}, s)) };
+    // U konumu olmayan, kullanımdaki IT PDU = dikey (0U) PDU; 3D ile aynı yerleşim:
+    // önden bakışta sıradaki çiftler sol, tekler sağ kenarda (arkadan bakışta ters)
+    const vpdu = (cab ? CD.verticalPdus(cab) : []).filter(p => CD.inUse(p)).map(p => ({ asset: p, startU: 0, uSize: 0, customerType: p.customerType === 'internal' ? 'internal' : 'external', assetName: p.displayName, assetType: p.assetType }));
+    return {
+      front: list,
+      back: list.map(s => Object.assign({}, s)),
+      vpduEven: vpdu.filter((_, i) => i % 2 === 0),
+      vpduOdd: vpdu.filter((_, i) => i % 2 === 1)
+    };
   }
+  const findVpdu = id => state.cab ? CD.verticalPdus(state.cab).find(p => p.id === id) || null : null;
 
   // Kabin kapasitesi (checkCabinetCapacity — CAT Cabinet limitleri + cihaz jsn weight/power)
   function computeCapacity(cab, excludeAssetId) {
@@ -388,6 +420,7 @@
     let totalPower = 0;
     cab.assets.forEach(a => {
       if (excludeAssetId && a.id === excludeAssetId) return;
+      if (!CD.inUse(a)) return;
       const d = detailOf(a, cab);
       if (Number(d.weight)) totalWeight += Number(d.weight);
       if (Number(d.power)) totalPower += Number(d.power);
@@ -408,10 +441,11 @@
       manufacturer: a.manufacturer,
       model: a.model,
       name: a.displayName
-    }, edits[a.id] || {});
+    }, a.assetType === 'IT PDU' ? { deviceClass: 'IT PDU ' + (a.model || ''), deviceType: 'IT PDU', position: 0, uCapacity: 0, powerConnections: 1, power: 0 } : {},
+    CD.asmOverride(a) || {}, edits[a.id] || {});
   }
   function portsOf(a, cab) {
-    if (!portStore[a.id]) portStore[a.id] = M.ports(a, cab).map(p => Object.assign({ isAutoNumbered: false }, p));
+    if (!portStore[a.id]) portStore[a.id] = (a.assetType === 'IT PDU' ? [] : M.ports(a, cab)).map(p => Object.assign({ isAutoNumbered: false }, p));
     return portStore[a.id];
   }
 
@@ -420,7 +454,7 @@
   // ---------------------------------------------------------------------------
   let firstLoad = true;
   function loadCabinet(code) {
-    const cab = D.findCabinet(String(code || '').toUpperCase().replace(/^K/, '')) || D.findCabinet('1BJ53');
+    const cab = D.findCabinet(String(code || '').toUpperCase().replace(/^K/, '')) || D.findCabinet('1DU06');
     state.code = cab.code;
     state.cab = cab;
     const saved = storage.get('aymon_cabinet_tracking_' + cab.code);
@@ -436,8 +470,9 @@
     }
     firstLoad = false;
     refreshData(false);
-    state.slots = generateSlots(cab.assets);
+    state.slots = generateSlots(cab.assets, cab);
     state.capacity = computeCapacity(cab);
+    if (dm) { dm = null; dmHost.innerHTML = ''; }
     renderPage();
     const url = new URL(window.location.href);
     url.searchParams.set('cabinet', cab.code);
@@ -449,7 +484,7 @@
     fetchSensorData(live);
   }
   function reloadRack() {
-    state.slots = generateSlots(state.cab.assets);
+    state.slots = generateSlots(state.cab.assets, state.cab);
     state.capacity = computeCapacity(state.cab);
     renderRack();
     renderSensors();
@@ -464,8 +499,8 @@
   }
   function topBarHtml() {
     const cab = state.cab;
-    const opts = D.cabinets.slice().sort((a, b) => a.code.localeCompare(b.code)).map(c =>
-      '<option value="' + esc(c.code) + '">' + esc(c.code + ' · ' + c.pod + (c.note ? ' · ' + c.note : '')) + '</option>').join('');
+    const opts = CD.allCabinets.slice().sort((a, b) => a.code.localeCompare(b.code)).map(c =>
+      '<option value="' + esc(c.code) + '">' + esc(c.code + ' · ' + CD.floorLabel(c) + ' · ' + c.pod + (c.note ? ' · ' + c.note : '')) + '</option>').join('');
     const navLink = (href, icon, label, title) =>
       '<a href="' + href + '" title="' + esc(title) + '" class="px-2 py-1 bg-slate-100 dark:bg-surface-panel hover:bg-slate-200 dark:hover:bg-surface-hover text-slate-700 dark:text-slate-300 font-bold text-[10px] rounded-[2px] border border-slate-200 dark:border-border-subtle transition-colors flex items-center gap-1 cursor-pointer"><i class="' + icon + ' text-[10px] text-sky-600 dark:text-sky-400"></i><span>' + label + '</span></a>';
     return '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] px-3 py-1.5 sm:py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs shrink-0">' +
@@ -493,12 +528,25 @@
           navLink('3d.html?cabinet=' + encodeURIComponent(cab.code), 'pi pi-box', '3D', 'Dijital İkiz (3D) üzerinde göster') +
           navLink('locks.html?view=cards&cabinet=' + encodeURIComponent(cab.code), 'pi pi-lock', 'Kilit', 'Kapak Kilitleri') +
         '</div>' +
+        '<div class="max-lg:hidden flex flex-wrap items-center gap-2 sm:gap-3">' +
         '<button type="button" data-act="add-device" class="px-2.5 sm:px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-[2px] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"><i class="pi pi-plus text-xs"></i><span>Cihaz Ekle</span></button>' +
         '<div class="flex items-center gap-1.5 bg-slate-50 dark:bg-surface-panel px-2 sm:px-2.5 py-1 rounded-[2px] border border-slate-200 dark:border-border-subtle text-xs font-bold">' +
           '<input type="checkbox" id="cabinetTracking"' + (state.tracking ? ' checked' : '') + ' class="rounded-[2px] text-sky-600 focus:ring-sky-500 w-3.5 h-3.5 cursor-pointer" />' +
           '<label for="cabinetTracking" class="cursor-pointer text-slate-800 dark:text-slate-200 text-[10px] sm:text-xs select-none">Kabin Takibi (Alarm Renklenmesi)</label>' +
         '</div>' +
+        '</div>' +
       '</div>' +
+    '</div>';
+  }
+
+  // Mobil/tablet (lg altı) panel sekmeleri: Kabin / PDU / Sensörler. Cihaz detayı açıkken gizlenir.
+  function mobileTabsHtml() {
+    const tab = (key, icon, label) =>
+      '<button type="button" data-mtab="' + key + '" class="h-9 flex-1 flex items-center justify-center gap-1.5 text-xs font-bold rounded-[2px] transition-colors cursor-pointer ' +
+        (state.mobileTab === key ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 active:bg-slate-200 dark:active:bg-slate-800') + '">' +
+        '<i class="' + icon + ' text-xs"></i><span class="truncate">' + label + '</span></button>';
+    return '<div data-mtabs class="lg:hidden shrink-0 grid grid-cols-3 gap-1 p-1 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs' + (dm ? ' hidden' : '') + '">' +
+      tab('rack', 'pi pi-server', 'Kabin') + tab('pdu', 'pi pi-bolt', 'PDU Üniteleri') + tab('sensors', 'pi pi-wave-pulse', 'Sensörler') +
     '</div>';
   }
 
@@ -531,7 +579,7 @@
       '<div class="flex items-center justify-between border-b border-slate-200 dark:border-border-subtle pb-1.5 shrink-0">' +
         '<h2 class="text-xs font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5"><i class="pi pi-bolt text-sky-600 dark:text-sky-400 text-xs"></i><span>PDU Üniteleri</span></h2>' +
         '<div class="flex items-center gap-1">' +
-          '<button type="button" data-act="add-pdu" class="px-1.5 py-0.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-[9px] rounded-[2px] transition-colors cursor-pointer">PDU Ekle</button>' +
+          '<button type="button" data-act="add-pdu" class="max-lg:hidden px-1.5 py-0.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-[9px] rounded-[2px] transition-colors cursor-pointer">PDU Ekle</button>' +
           '<button type="button" data-act="pdu-report" class="px-1.5 py-0.5 bg-slate-100 dark:bg-surface-panel hover:bg-slate-200 dark:hover:bg-surface-hover text-slate-800 dark:text-slate-200 font-bold text-[9px] rounded-[2px] border border-slate-200 dark:border-border-subtle transition-colors cursor-pointer">Rapor</button>' +
         '</div>' +
       '</div>' +
@@ -583,7 +631,16 @@
     const dot = state.tracking ? (internal ? 'bg-sky-500 shadow-[0_0_4px_#38bdf8]' : 'bg-purple-500 shadow-[0_0_4px_#c084fc]') : 'bg-slate-400 dark:bg-slate-500';
     const u = slot.uSize || 1;
     const range = slot.startU ? 'U' + slot.startU + (u > 1 ? '-U' + (slot.startU + u - 1) : '') : 'U' + slot.uNumber;
-    return '<div data-slot="' + slot.uNumber + '" data-side="' + side + '" data-asset="' + esc(slot.asset.id) + '" style="flex: ' + u + ' ' + u + ' 0px" class="w-full min-h-0 px-1 sm:px-1.5 border rounded-[1px] flex items-center justify-between cursor-pointer transition-all shadow-xs overflow-hidden leading-none relative group ' + cls + '" title="' + esc(slot.assetName + ' · ' + slot.asset.hostname) + '">' +
+    // Katalogdaki (CAT) cihaz ön / arka yüz SVG çizimi; çizimi olmayan cihazda metin yüzü kalır
+    const img = side === 'front' ? slot.frontImg : slot.backImg;
+    const open = '<div data-slot="' + slot.uNumber + '" data-side="' + side + '" data-asset="' + esc(slot.asset.id) + '" style="flex: ' + u + ' ' + u + ' 0px" class="w-full min-h-0 px-1 sm:px-1.5 border rounded-[1px] flex items-center justify-between cursor-pointer transition-all shadow-xs overflow-hidden leading-none relative group ' + cls + '" title="' + esc(slot.assetName + (slot.assetType ? ' · ' + slot.assetType : '')) + '">';
+    if (img) {
+      return open +
+        '<img src="' + img + '" alt="" draggable="false" class="absolute inset-0 w-full h-full pointer-events-none select-none" style="object-fit: fill;" />' +
+        '<span class="absolute left-0.5 top-1/2 -translate-y-1/2 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity font-bold text-[7px] sm:text-[7.5px] max-lg:text-[9px]! px-0.5 py-px rounded-[1px] font-mono bg-slate-900/70 text-white/90">' + range + '</span>' +
+      '</div>';
+    }
+    return open +
       '<div class="flex items-center gap-1.5 min-w-0 truncate">' +
         '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + dot + '"></span>' +
         '<span class="font-bold shrink-0 text-[8px] sm:text-[8.5px] bg-slate-200/90 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-1 py-0.5 rounded-[1px] font-mono border border-slate-300 dark:border-slate-700">' + range + '</span>' +
@@ -604,23 +661,47 @@
     const z = state.zoom[side];
     const title = side === 'front' ? 'ÖN GÖRÜNÜM' : 'ARKA GÖRÜNÜM';
     const slots = side === 'front' ? state.slots.front : state.slots.back;
-    return '<div data-rack-vp="' + side + '" class="flex-1 min-h-0 h-full overflow-hidden relative flex items-center justify-center p-1 sm:p-2 bg-slate-100/40 dark:bg-slate-900/30 rounded-[3px] border border-slate-200 dark:border-border-subtle select-none' + (z > 1 ? ' cursor-grab' : '') + '">' +
-      '<div data-chassis="' + side + '" class="origin-center flex flex-col min-h-0 h-full w-full max-w-[260px] sm:max-w-[300px] md:max-w-[340px] bg-slate-200/90 dark:bg-slate-900/90 border-2 border-slate-300 dark:border-slate-700 rounded-[4px] shadow-xs overflow-hidden p-1 sm:p-1.5 shrink-0 transition-all duration-75" style="transform:' + chassisTransform(side) + ';transform-origin:center center">' +
+    return '<div data-rack-vp="' + side + '" class="flex-1 max-lg:flex-none min-h-0 h-full max-lg:h-auto overflow-hidden max-lg:overflow-visible relative flex items-center max-lg:items-start justify-center p-1 sm:p-2 bg-slate-100/40 dark:bg-slate-900/30 rounded-[3px] border border-slate-200 dark:border-border-subtle select-none' + (z > 1 ? ' cursor-grab' : '') + (state.mobileRackSide !== side ? ' max-lg:hidden' : '') + '">' +
+      '<div data-chassis="' + side + '" class="origin-center flex flex-col min-h-0 h-full max-lg:h-[66rem] w-full max-w-[260px] sm:max-w-[300px] md:max-w-[340px] max-lg:max-w-[440px]! bg-slate-200/90 dark:bg-slate-900/90 border-2 border-slate-300 dark:border-slate-700 rounded-[4px] shadow-xs overflow-hidden p-1 sm:p-1.5 shrink-0 transition-all duration-75" style="transform:' + chassisTransform(side) + ';transform-origin:center center">' +
         '<div class="flex items-center justify-between px-2 py-1 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-[2px] mb-1 shrink-0 select-none">' +
           '<div class="flex items-center gap-1.5"><i class="pi pi-server text-[10px] text-slate-500 dark:text-slate-400"></i><span class="font-black text-slate-800 dark:text-slate-100 text-[10px] sm:text-[11px] tracking-wide uppercase">' + title + '</span></div>' +
           '<div class="flex items-center gap-1">' + (z !== 1 ? '<span class="text-[8px] font-mono text-slate-500 dark:text-slate-400 font-bold">%' + Math.round(z * 100) + '</span>' : '') + '</div>' +
         '</div>' +
-        '<div class="flex-1 min-h-0 flex flex-col justify-between gap-[1px] sm:gap-[1.5px] font-mono select-none bg-slate-100 dark:bg-slate-950 p-1 rounded-[2px] border border-slate-300 dark:border-slate-800 shadow-inner">' +
-          slots.map(s => slotHtml(s, side)).join('') +
+        // 42U ızgara; yanlarda dikey PDU şeritleri (arkadan bakışta kenarlar ters)
+        '<div class="flex-1 min-h-0 flex gap-[2px]">' +
+          vpduStripsHtml(side === 'front' ? state.slots.vpduEven : state.slots.vpduOdd) +
+          '<div class="flex-1 min-w-0 min-h-0 flex flex-col justify-between gap-[1px] sm:gap-[1.5px] font-mono select-none bg-slate-100 dark:bg-slate-950 p-1 rounded-[2px] border border-slate-300 dark:border-slate-800 shadow-inner">' +
+            slots.map(s => slotHtml(s, side)).join('') +
+          '</div>' +
+          vpduStripsHtml(side === 'front' ? state.slots.vpduOdd : state.slots.vpduEven) +
         '</div>' +
         '<div class="flex items-center justify-between px-2 py-0.5 bg-slate-200/80 dark:bg-slate-800/80 border-t border-slate-300 dark:border-slate-700 mt-1 shrink-0 text-[8.5px] font-mono text-slate-500 dark:text-slate-400 select-none"><span>42U CHASSIS</span><span>' + (side === 'front' ? 'FRONT' : 'REAR') + '</span></div>' +
       '</div>' +
     '</div>';
   }
+  // Dikey (0U) PDU şeritleri: ASM'de U konumu olmayan, kullanımdaki IT PDU'lar rafın yanında boydan boya
+  function vpduStripsHtml(list) {
+    return (list || []).map(p => {
+      const cls = state.tracking
+        ? (p.customerType === 'internal' ? 'border-sky-500 bg-sky-500/15' : 'border-purple-500 bg-purple-500/15')
+        : 'border-emerald-500/70 bg-slate-200/60 dark:bg-slate-800/60';
+      return '<div data-vpdu="' + esc(p.asset.id) + '" title="' + esc('Dikey PDU · ' + p.assetName + (p.asset.serial ? ' · ' + p.asset.serial : '')) + '" class="w-[16px] max-lg:w-[22px] h-full shrink-0 border rounded-[1px] cursor-pointer hover:brightness-110 transition-all overflow-hidden flex items-center justify-center py-1 ' + cls + '">' +
+        '<span class="font-sans font-bold text-[8px] max-lg:text-[10px]! text-slate-900 dark:text-white whitespace-nowrap truncate max-h-full [writing-mode:vertical-rl] rotate-180 cd-vpdu-text">' + esc(p.assetName) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
   function rackPanelInnerHtml() {
     const z = state.rackZoomLevel;
+    const sideBtn = (key, icon, label) =>
+      '<button type="button" data-mside="' + key + '" class="h-9 flex-1 flex items-center justify-center gap-1.5 text-xs font-bold rounded-[2px] transition-colors cursor-pointer ' +
+        (state.mobileRackSide === key ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 active:bg-slate-200 dark:active:bg-slate-800') + '"><i class="' + icon + ' text-xs"></i><span class="truncate">' + label + '</span></button>';
     return '<div class="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-border-subtle pb-1.5 gap-2 shrink-0">' +
-        '<div class="flex items-center gap-1 bg-slate-50 dark:bg-surface-panel px-1.5 py-0.5 rounded-[2px] border border-slate-200 dark:border-border-subtle select-none">' +
+        // Mobil/tablet: ön / arka görünüm seçici (iki kabin yan yana sığmaz)
+        '<div class="lg:hidden w-full grid grid-cols-2 gap-1 p-0.5 bg-slate-50 dark:bg-surface-panel border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
+          sideBtn('front', 'pi pi-arrow-right', 'ÖN GÖRÜNÜM') + sideBtn('back', 'pi pi-arrow-left', 'ARKA GÖRÜNÜM') +
+        '</div>' +
+        '<div class="max-lg:hidden flex items-center gap-1 bg-slate-50 dark:bg-surface-panel px-1.5 py-0.5 rounded-[2px] border border-slate-200 dark:border-border-subtle select-none">' +
           '<button type="button" data-act="rack-zoom-out"' + (z <= 1 ? ' disabled' : '') + ' title="Uzaklaştır (Ekrana Tam Sığdır)" class="p-0.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors cursor-pointer disabled:opacity-35"><i class="pi pi-minus text-[10px]"></i></button>' +
           '<span class="font-mono font-bold text-[10px] text-slate-700 dark:text-slate-300 min-w-[32px] text-center">%' + Math.round(z * 100) + '</span>' +
           '<button type="button" data-act="rack-zoom-in"' + (z >= 3 ? ' disabled' : '') + ' title="Yakınlaştır (Scroll ile de yapılabilir)" class="p-0.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors cursor-pointer disabled:opacity-35"><i class="pi pi-plus text-[10px]"></i></button>' +
@@ -631,7 +712,7 @@
           '<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-[2px] bg-purple-500"></span> Dış Müşteri</span>' +
         '</div>' +
       '</div>' +
-      '<div class="grid grid-cols-2 gap-2 sm:gap-3 flex-1 min-h-0 h-full overflow-hidden">' + viewportHtml('front') + viewportHtml('back') + '</div>';
+      '<div class="grid grid-cols-2 max-lg:grid-cols-1 gap-2 sm:gap-3 flex-1 min-h-0 h-full overflow-hidden max-lg:overflow-y-auto">' + viewportHtml('front') + viewportHtml('back') + '</div>';
   }
 
   // ---------------------------------------------------------------------------
@@ -663,11 +744,12 @@
       '</div>';
     };
     const c = state.capacity;
+    const mw = state.measuredPowerWatts;
     return '<div class="space-y-2 flex-1 min-h-0 overflow-y-auto pr-0.5">' +
         '<div class="flex items-center justify-between border-b border-slate-200 dark:border-border-subtle pb-1.5 shrink-0">' +
           '<h2 class="text-xs font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5"><i class="pi pi-wave-pulse text-sky-600 dark:text-sky-400 text-xs"></i><span>Sensörler</span></h2>' +
           '<div class="flex items-center gap-1">' +
-            '<button type="button" data-act="sensor-settings" class="px-1.5 py-0.5 bg-slate-100 dark:bg-surface-panel text-slate-800 dark:text-slate-200 font-bold text-[9px] rounded-[2px] border border-slate-200 dark:border-border-subtle cursor-pointer hover:bg-slate-200 dark:hover:bg-surface-hover">Ayarlar</button>' +
+            '<button type="button" data-act="sensor-settings" class="max-lg:hidden px-1.5 py-0.5 bg-slate-100 dark:bg-surface-panel text-slate-800 dark:text-slate-200 font-bold text-[9px] rounded-[2px] border border-slate-200 dark:border-border-subtle cursor-pointer hover:bg-slate-200 dark:hover:bg-surface-hover">Ayarlar</button>' +
             '<button type="button" data-act="sensor-report" class="px-1.5 py-0.5 bg-slate-100 dark:bg-surface-panel text-slate-800 dark:text-slate-200 font-bold text-[9px] rounded-[2px] border border-slate-200 dark:border-border-subtle cursor-pointer hover:bg-slate-200 dark:hover:bg-surface-hover">Rapor</button>' +
           '</div>' +
         '</div>' +
@@ -684,8 +766,9 @@
           '<div class="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden"><div class="bg-sky-500 h-full rounded-full transition-all duration-300" style="width:' + (c.hasWeight ? pct(c.totalWeight, c.weightLimit) : 0) + '%"></div></div>' +
         '</div>' +
         '<div>' +
-          '<div class="flex items-center justify-between text-slate-600 dark:text-slate-400 text-[10px] mb-0.5"><span>Güç Tüketimi:</span><strong class="text-amber-600 dark:text-amber-400 font-mono">' + (c.hasPower ? c.totalPower + ' / ' + c.powerLimit + ' W' : '-') + '</strong></div>' +
-          '<div class="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden"><div class="bg-amber-500 h-full rounded-full transition-all duration-300" style="width:' + (c.hasPower ? pct(c.totalPower, c.powerLimit) : 0) + '%"></div></div>' +
+          // Ölçülen tüketim (PDU toplamı) / kabin güç limiti (CAT)
+          '<div class="flex items-center justify-between text-slate-600 dark:text-slate-400 text-[10px] mb-0.5"><span>Güç Tüketimi:</span><strong class="text-amber-600 dark:text-amber-400 font-mono">' + (mw !== null ? mw + (c.hasPower ? ' / ' + c.powerLimit : '') + ' W' : '-') + '</strong></div>' +
+          '<div class="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden"><div class="bg-amber-500 h-full rounded-full transition-all duration-300" style="width:' + (mw !== null && c.hasPower ? pct(mw, c.powerLimit) : 0) + '%"></div></div>' +
         '</div>' +
       '</div>';
   }
@@ -693,16 +776,21 @@
   // ---------------------------------------------------------------------------
   // Sayfa iskeleti
   // ---------------------------------------------------------------------------
+  // 3 panel + cihaz paneli (cd-layout). Cihaz detayı açıkken yalnız PDU paneli daralıp kaybolur;
+  // kabin + sensör panelleri sola kayar, boşalan alanı cihaz paneli doldurur (css/cabinet-detail.css).
+  const mtCls = key => (state.mobileTab !== key ? ' max-lg:hidden' : '');
   function renderPage() {
     root.innerHTML =
       '<div class="flex flex-col flex-1 min-h-0 space-y-2 overflow-hidden">' +
         topBarHtml() +
-        '<div class="grid grid-cols-1 xl:grid-cols-3 flex-1 gap-2.5 min-h-0 overflow-y-auto xl:overflow-hidden">' +
-          '<div id="cm-pdu" class="w-full min-w-0 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] p-2.5 shadow-2xs flex flex-col justify-between min-h-[280px] xl:min-h-0 xl:h-full overflow-hidden"></div>' +
-          '<div id="cm-rack" class="w-full min-w-0 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] p-2 sm:p-2.5 space-y-2 shadow-2xs flex flex-col justify-between min-h-[460px] xl:min-h-0 xl:h-full overflow-hidden"></div>' +
-          '<div id="cm-sensors" class="w-full min-w-0 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] p-2 sm:p-2.5 shadow-2xs flex flex-col justify-between min-h-[300px] xl:min-h-0 xl:h-full overflow-hidden"></div>' +
+        mobileTabsHtml() +
+        '<div data-cd-layout class="cd-layout flex flex-col xl:flex-row flex-1 gap-2.5 min-h-0 overflow-y-auto xl:overflow-hidden' + (dm ? ' cd-layout--asset-open' : '') + '">' +
+          '<div id="cm-pdu" class="cd-panel cd-panel--side max-xl:flex-1 w-full min-w-0 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] p-2.5 shadow-2xs flex flex-col justify-between min-h-[280px] xl:min-h-0 xl:h-full overflow-hidden' + mtCls('pdu') + '"></div>' +
+          '<div id="cm-rack" class="cd-panel cd-panel--manager max-xl:flex-1 w-full min-w-0 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] p-2 sm:p-2.5 space-y-2 shadow-2xs flex flex-col justify-between min-h-[460px] xl:min-h-0 xl:h-full overflow-hidden' + mtCls('rack') + '"></div>' +
+          '<div id="cm-sensors" class="cd-panel cd-panel--sensors max-xl:flex-1 w-full min-w-0 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] p-2 sm:p-2.5 shadow-2xs flex flex-col justify-between min-h-[300px] xl:min-h-0 xl:h-full overflow-hidden' + mtCls('sensors') + '"></div>' +
         '</div>' +
       '</div>';
+    root.querySelector('[data-cd-layout]').appendChild(dmHost);
     renderPdu();
     renderRack();
     renderSensors();
@@ -760,6 +848,13 @@
   // Olaylar — sayfa
   // ---------------------------------------------------------------------------
   root.addEventListener('click', e => {
+    if (dmHost.contains(e.target)) return; // cihaz panelinin kendi olayları (dmHost)
+    const mtab = e.target.closest('[data-mtab]');
+    if (mtab) { state.mobileTab = mtab.getAttribute('data-mtab'); renderPage(); return; }
+    const mside = e.target.closest('[data-mside]');
+    if (mside) { state.mobileRackSide = mside.getAttribute('data-mside'); renderRack(); return; }
+    const vp = e.target.closest('[data-vpdu]');
+    if (vp) { onVpduClick(vp.getAttribute('data-vpdu')); return; }
     const actEl = e.target.closest('[data-act]');
     if (actEl && root.contains(actEl)) {
       const act = actEl.getAttribute('data-act');
@@ -895,25 +990,35 @@
   // ---------------------------------------------------------------------------
   function onSlotClick(el) {
     if (state.hasPanned) { state.hasPanned = false; return; }
+    // Panel rafı örtmediği için düzenleme/ekleme sürerken başka slota tıklamak kaydedilmemiş değişiklikleri ezmesin
+    if (dm && (dm.isEditMode || dm.isCreatMode)) return;
     const u = parseInt(el.getAttribute('data-slot'), 10);
     const assetId = el.getAttribute('data-asset');
     if (!assetId) { openCreate(u); return; }
     const asset = state.cab.assets.find(a => a.id === assetId);
     if (asset) openDevice(asset, u);
   }
+  function onVpduClick(id) {
+    if (state.hasPanned) { state.hasPanned = false; return; }
+    if (dm && (dm.isEditMode || dm.isCreatMode)) return;
+    const p = findVpdu(id);
+    if (p) openDevice(p, 0);
+  }
 
   // ==========================================================================
   // CİHAZ DETAY / EKLEME PENCERESİ
   // ==========================================================================
   let dm = null;
+  // Satır içi cihaz paneli (cabinet-manager SECTION 4, .cd-panel--asset); renderPage cd-layout'a taşır
   const dmHost = document.createElement('div');
+  dmHost.className = 'cd-panel cd-panel--asset w-full min-w-0 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs flex flex-col overflow-hidden';
+  let dmUnmountTimer = null;
   const portHost = document.createElement('div');
   const portDetailHost = document.createElement('div');
   const tipEl = document.createElement('div');
   tipEl.className = 'fixed p-2 bg-slate-900 border border-slate-700 rounded-[2px] text-xs text-slate-200 z-50 pointer-events-none shadow-lg font-mono hidden';
   const debugEl = document.createElement('div');
   debugEl.className = 'fixed p-2 bg-slate-900 text-slate-300 text-xs rounded-[2px] border border-slate-700 z-50 pointer-events-none hidden';
-  document.body.appendChild(dmHost);
   document.body.appendChild(portHost);
   document.body.appendChild(portDetailHost);
   document.body.appendChild(tipEl);
@@ -927,7 +1032,7 @@
       scale: { front: 1, back: 1 }, pan: { front: { x: 0, y: 0 }, back: { x: 0, y: 0 } },
       panning: null, hasDragged: false, menu: null, portEditMode: null, selectedPort: null,
       analyzing: { front: false, back: false }, naming: { front: 'linear', back: 'linear' },
-      classSearch: '', showClassDropdown: false, isSaving: false, scrapNew: false, lostNew: false
+      classSearch: '', showClassDropdown: false, isSaving: false, scrapNew: false, lostNew: false, barcodeMsg: null
     };
   }
 
@@ -961,22 +1066,32 @@
     const cab = M.cabinetOfAsset(asset.id) || state.cab;
     dm = newDmState();
     dm.asset = asset;
-    dm.slotU = slotU || (asset.startU + asset.uSize - 1);
+    dm.slotU = slotU || (asset.uSize ? asset.startU + asset.uSize - 1 : null);
     dm.d = detailOf(asset, cab);
     dm.snapshot = JSON.stringify(dm.d);
     dm.ports = portsOf(asset, cab);
-    const f = M.face(asset, 'front');
-    const b = M.face(asset, 'back');
+    const isPdu = asset.assetType === 'IT PDU';
+    const f = isPdu ? null : M.face(asset, 'front');
+    const b = isPdu ? null : M.face(asset, 'back');
     dm.img.front = edits[asset.id] && 'imgFront' in edits[asset.id] ? edits[asset.id].imgFront : (f ? f.img : null);
     dm.img.back = edits[asset.id] && 'imgBack' in edits[asset.id] ? edits[asset.id].imgBack : (b ? b.img : null);
     renderDm();
   }
+  function setAssetOpen(open) {
+    const layout = root.querySelector('[data-cd-layout]');
+    if (layout) layout.classList.toggle('cd-layout--asset-open', open);
+    const tabs = root.querySelector('[data-mtabs]');
+    if (tabs) tabs.classList.toggle('hidden', open);
+    dmHost.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
   function closeDm() {
     dm = null;
-    dmHost.innerHTML = '';
+    setAssetOpen(false);
     hideTip();
     debugEl.classList.add('hidden');
-    document.body.classList.remove('overflow-hidden');
+    // İçerik kapanış animasyonu bitince boşaltılır (DEVICE_PANEL_ANIM_MS)
+    clearTimeout(dmUnmountTimer);
+    dmUnmountTimer = setTimeout(() => { if (!dm) dmHost.innerHTML = ''; }, 520);
   }
 
   // Kurallar (isCabinetRequired, isLocationVisible ...)
@@ -991,6 +1106,28 @@
   const isLocationVisible = isLocationAllowed;
   const isUsableDevice = () => (assignVal() === 2 && !dm.scrapNew) || (assignVal() === 6 && !dm.lostNew);
   const isPatchPanel = () => dm.d.deviceType === 'Patch Panel';
+  // Hurdaya Ayrıldı (assignment 2): lokasyon yalnızca HURDA-DEPO olabilir
+  const isScrap = () => assignVal() === 2;
+  const locationOptions = () => (isScrap() ? M.locations.filter(CD.isScrapLocation) : M.locations.filter(l => !CD.isScrapLocation(l)));
+  const MSG_NO_SCRAP = 'HURDA-DEPO lokasyonu bulunamadı. Hurdaya ayrılan cihaz için LOC tablosunda "HURDA DEPO" içeren bir lokasyon tanımlanmalıdır.';
+  const MSG_SCRAP_REQUIRED = 'Hurdaya ayrılmış cihazlar için yalnızca HURDA-DEPO lokasyonu seçilebilir. Lütfen bir HURDA-DEPO lokasyonu seçin.';
+  // Barkod / RFID tekrar denetimi (findBarcodeRfidDuplicateMessage)
+  function barcodeDuplicateMessage(value) {
+    const v = String(value || '').trim();
+    if (!v) return null;
+    const selfId = dm && dm.asset ? dm.asset.id : null;
+    for (const c of CD.allCabinets) {
+      for (const a of c.assets) {
+        if (a.id === selfId) continue;
+        const tag = edits[a.id] && 'assetTag' in edits[a.id] ? edits[a.id].assetTag : M.details(a, c).assetTag;
+        if (String(tag || '').trim().toUpperCase() === v.toUpperCase()) {
+          const det = M.details(a, c);
+          return 'Girilen Barkod/RFID zaten kayıtlı, aynı Barkod/RFID kullanılamaz. Asset ID: ' + (Number(det.owning_directorate) === 0 ? det.frontAssetId : det.deviceId);
+        }
+      }
+    }
+    return null;
+  }
   const PROHIBITED_REASON = { 1: 'Cihaz stokta olduğu için', 2: 'Hurdaya ayrılmış cihazlar için', 3: 'Teslimat bekleyen cihazlar için', 4: 'Bakımda olan cihazlar için', 5: 'İade durumundaki cihazlar için', 6: 'Kayıp durumundaki cihazlar için' };
   const cabinetProhibitedReason = () => (PROHIBITED_REASON[assignVal()] ? PROHIBITED_REASON[assignVal()] + ' kabin seçimi yapılamaz' : 'Bu assignment durumunda kabin seçimi yapılamaz');
   const positionProhibitedReason = () => (PROHIBITED_REASON[assignVal()] ? PROHIBITED_REASON[assignVal()] + ' pozisyon seçimi yapılamaz' : 'Bu assignment durumunda pozisyon seçimi yapılamaz');
@@ -1043,7 +1180,8 @@
       h += fld(lbl('Supervisor Müdürlüğü') + inp('label', d.label, true, 'opacity-75'), true);
     }
     h += fld(lbl('Seri Numarası', creat) + inp('serialNumber', d.serialNumber, !creat, !creat ? 'opacity-75' : ''));
-    h += fld(lbl('Barkod / RFID') + inp('assetTag', d.assetTag, !edit && !creat, !edit && !creat ? 'opacity-75' : ''));
+    h += fld(lbl('Barkod / RFID') + inp('assetTag', d.assetTag, !edit && !creat, (!edit && !creat ? 'opacity-75' : '') + (dm.barcodeMsg ? ' border-rose-500' : '')) +
+      (dm.barcodeMsg && (edit || creat) ? '<div class="text-[11px] font-semibold text-rose-600 dark:text-rose-400 mt-1">' + esc(dm.barcodeMsg) + '</div>' : ''));
     h += fld(lbl('Hostname') + inp('hostname', d.hostname, !creat, !creat ? 'opacity-75' : ''));
     h += fld(lbl('IP Adresi') + inp('primaryIP', d.primaryIP, !creat, !creat ? 'opacity-75' : ''));
 
@@ -1054,7 +1192,9 @@
         loc += '<input type="text" value="' + esc(l ? l.full_name : '') + '" readonly class="scada-input opacity-75 w-full" />';
       }
       if ((edit && isLocationAllowed()) || creat) {
-        loc += sel('locationId', [{ value: '', label: 'Lokasyon Seçiniz' }].concat(M.locations.map(l => ({ value: l.location_id, label: l.full_name }))), d.locationId, 'w-full');
+        const opts = locationOptions();
+        loc += sel('locationId', [{ value: '', label: 'Lokasyon Seçiniz' }].concat(opts.map(l => ({ value: l.location_id, label: l.full_name }))), d.locationId, 'w-full');
+        if (isScrap() && !opts.length) loc += '<div class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-1">' + esc(MSG_NO_SCRAP) + '</div>';
       }
       if (isLocationProhibited()) loc += '<div class="text-xs text-amber-400 font-medium mt-1">Lokasyon değiştirilemez.</div>';
       if (!d.locationId && isCabinetRequired()) loc += '<div class="blinking-text">Lütfen önce lokasyon seçiniz.</div>';
@@ -1114,7 +1254,7 @@
       else {
         if (isCabinetProhibited()) c += '<div class="text-xs text-amber-400 font-medium">' + esc(cabinetProhibitedReason()) + '</div>';
         const loc = M.locations.find(l => l.location_id === d.locationId);
-        const cabs = loc ? D.cabinets.filter(x => x.pod === loc.pod).map(x => x.code).sort() : [];
+        const cabs = loc && loc.pod ? CD.allCabinets.filter(x => x.pod === loc.pod).map(x => x.code).sort() : [];
         if (isCabinetRequired() && d.locationId) c += '<div>' + sel('cabinetName', (d.cabinetName ? [] : [{ value: '', label: '' }]).concat(cabs.map(x => ({ value: x, label: x }))), d.cabinetName, 'w-full') + '</div>';
         if (d.locationId && !cabs.length && isCabinetRequired()) c += '<div class="blinking-text">Seçilen lokasyonda kabin bulunamadı.</div>';
         if (!d.cabinetName && cabs.length && isCabinetRequired()) c += '<div class="blinking-text">Envanter için kabin seçiniz.</div>';
@@ -1218,7 +1358,7 @@
           '<span class="font-bold text-slate-500 dark:text-slate-400 text-[11px]">Sıralama:</span>' +
           ['linear', 'zigzag'].map(v => '<label class="flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 cursor-pointer"><input type="radio" name="naming-' + side + '" value="' + v + '" data-naming="' + side + '"' + (dm.naming[side] === v ? ' checked' : '') + ' class="accent-sky-600" /><span>' + (v === 'linear' ? 'Linear' : 'Zigzag') + '</span></label>').join('') +
         '</div>' +
-        '<button type="button" data-act="img-ai" data-side="' + side + '"' + (!img || analyzing ? ' disabled' : '') + ' class="px-2.5 py-1 text-xs font-bold rounded-[2px] bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"><i class="pi pi-sparkles text-xs' + (analyzing ? ' animate-spin' : '') + '"></i><span>' + (analyzing ? 'Analiz Ediliyor...' : 'YZ ile Analiz Et') + '</span></button>' +
+        // YZ ile analiz yalnızca katalog ekranında sunulur; varlık ekranında gösterilmez
         '<button type="button" data-act="port-mode" data-side="' + side + '"' + (!img ? ' disabled' : '') + ' class="px-2.5 py-1 text-xs font-bold rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed' + (pem ? ' bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600' : '') + '"><i class="pi ' + (pem ? 'pi-check' : 'pi-plus') + '"></i><span>' + (pem ? 'Port Eklemeyi Durdur' : 'Port Ekle') + '</span></button>' +
         '<input type="file" data-file="' + side + '" accept="image/*" class="hidden" />' +
       '</div>' : '') +
@@ -1229,10 +1369,12 @@
   function dmActionsHtml() {
     const creat = dm.isCreatMode;
     const edit = dm.isEditMode;
-    let h = '<div class="flex items-center gap-2">' +
+    let h = '<div class="flex flex-wrap items-center justify-end gap-2 max-lg:w-full">' +
       '<button type="button" data-act="dm-back" class="px-3 py-1.5 bg-slate-100 dark:bg-surface-panel hover:bg-slate-200 dark:hover:bg-surface-hover border border-slate-200 dark:border-border-subtle text-slate-700 dark:text-slate-300 text-xs font-medium rounded-[2px] transition-colors flex items-center gap-1 cursor-pointer"><i class="pi pi-chevron-left text-xs"></i><span>Geri Dön</span></button>';
     if (!creat) h += '<button type="button" data-act="dm-pdf" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-[2px] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"><i class="pi pi-file-pdf text-xs text-rose-400"></i><span>PDF Rapor</span></button>';
-    if (!edit && !creat) h += '<button type="button" data-act="dm-edit" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium rounded-[2px] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"><i class="pi pi-pencil text-xs"></i><span>Düzenle</span></button>';
+    // Kayıtlı cihaz görüntülenirken (oluşturma / düzenleme modunda değil) ağ topolojisi
+    if (!edit && !creat && dm.asset) h += '<button type="button" data-act="dm-topology" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-[2px] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"><i class="pi pi-sitemap text-xs text-sky-300"></i><span>Ağ Topolojisini Aç</span></button>';
+    if (!edit && !creat) h += '<button type="button" data-act="dm-edit" class="max-lg:hidden px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium rounded-[2px] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"><i class="pi pi-pencil text-xs"></i><span>Düzenle</span></button>';
     if (edit || creat) {
       h += '<button type="button" data-act="dm-cancel" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium rounded-[2px] transition-colors cursor-pointer"><span>İptal</span></button>' +
         '<button type="button" data-act="dm-save"' + (dm.isSaving ? ' disabled' : '') + ' class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded-[2px] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs">' +
@@ -1248,10 +1390,10 @@
     const d = dm.d;
     const creat = dm.isCreatMode;
     const title = creat ? 'Cihaz Ekleme Ekranı' : 'Cihaz Detayları';
-    document.body.classList.add('overflow-hidden');
+    clearTimeout(dmUnmountTimer);
+    setAssetOpen(true);
     dmHost.innerHTML =
-      '<div data-dm-overlay class="fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 z-50 animate-fade-in select-none">' +
-        '<div data-dm-panel class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden my-auto">' +
+        '<div data-dm-panel class="h-full w-full min-w-0 flex flex-col overflow-hidden select-none">' +
           '<div class="px-3 sm:px-5 py-2.5 sm:py-3.5 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-panel shrink-0">' +
             '<div class="flex items-center gap-2.5 sm:gap-3">' +
               '<div class="w-8 h-8 rounded-[2px] bg-sky-600 text-white font-extrabold flex items-center justify-center text-xs shadow-xs shrink-0"><i class="pi pi-server text-sm"></i></div>' +
@@ -1262,7 +1404,7 @@
                 '<p class="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">' + esc((d.cabinetName || 'Kabin') + ' — ' + (d.deviceClass || 'Sunucu / Cihaz')) + '</p>' +
               '</div>' +
             '</div>' +
-            '<button type="button" data-act="dm-close" class="w-8 h-8 rounded-[2px] flex items-center justify-center text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"><i class="pi pi-times text-sm"></i></button>' +
+            '<button type="button" data-act="' + (dm.isEditMode || dm.isCreatMode ? 'dm-back' : 'dm-close') + '" class="w-8 h-8 rounded-[2px] flex items-center justify-center text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"><i class="pi pi-arrow-left text-sm"></i></button>' +
           '</div>' +
           '<div data-dm-body class="p-3 sm:p-5 overflow-y-auto space-y-4 sm:space-y-6 flex-1 select-text">' +
             kit.pageHeader({ title, breadcrumbs: [{ label: 'Varlık Takip Bilgileri' }, { label: 'Cihaz Detayları' }], actions: dmActionsHtml() }) +
@@ -1275,8 +1417,7 @@
               '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">' + imageBoxHtml('front') + (!isPatchPanel() ? imageBoxHtml('back') : '') + '</div>' +
             '</div>' +
           '</div>' +
-        '</div>' +
-      '</div>';
+        '</div>';
     const body = dmHost.querySelector('[data-dm-body]');
     if (body) body.scrollTop = scrollTop;
   }
@@ -1284,7 +1425,6 @@
   // --- pencere olayları ---
   dmHost.addEventListener('click', e => {
     if (!dm) return;
-    if (e.target.matches('[data-dm-overlay]')) { closeDm(); return; }
     const cls = e.target.closest('[data-cls]');
     if (cls) { selectDeviceClass(cls.getAttribute('data-cls')); return; }
     const portEl = e.target.closest('[data-port]');
@@ -1320,6 +1460,13 @@
       case 'dm-pdf':
         downloadPdf();
         break;
+      case 'dm-topology': {
+        // Orijinal: /dcim/assets/network-topology/<asset_id>. Sunumda cihazın kabinini besleyen yol
+        // (connectivity.html) açılır; dikey PDU'da kendi besleme hattı (A / B).
+        const cab = (dm.asset && M.cabinetOfAsset(dm.asset.id)) || state.cab;
+        window.location.href = 'connectivity.html?cabinet=' + encodeURIComponent(cab.code) + '&side=' + (dm.asset && dm.asset.feed === 'B' ? 'B' : 'A');
+        break;
+      }
       case 'dm-pos':
         openPositionPicker();
         break;
@@ -1349,9 +1496,6 @@
         dm.imgFromCat[side] = false;
         renderDm();
         break;
-      case 'img-ai':
-        analyzeImageWithAI(side);
-        break;
       case 'port-mode':
         dm.portEditMode = dm.portEditMode === side ? null : side;
         renderDm();
@@ -1374,6 +1518,7 @@
     const f = t.getAttribute('data-f');
     if (!f || t.tagName === 'SELECT') return;
     dm.d[f] = t.type === 'number' ? (t.value === '' ? 0 : Number(t.value)) : t.value;
+    if (f === 'assetTag') dm.barcodeMsg = null;
   });
   dmHost.addEventListener('change', e => {
     if (!dm) return;
@@ -1386,7 +1531,7 @@
     dm.d[f] = t.value;
     if (f === 'locationId') {
       const loc = M.locations.find(l => l.location_id === t.value);
-      const cabs = loc ? D.cabinets.filter(x => x.pod === loc.pod) : [];
+      const cabs = loc && loc.pod ? CD.allCabinets.filter(x => x.pod === loc.pod) : [];
       if (!cabs.some(x => x.code === dm.d.cabinetName)) { dm.d.cabinetName = ''; dm.d.position = 0; }
       renderDm();
     } else if (f === 'cabinetName') {
@@ -1403,6 +1548,15 @@
     }
   });
   dmHost.addEventListener('focusout', e => {
+    if (dm && (dm.isEditMode || dm.isCreatMode) && e.target.matches('[data-f="assetTag"]')) {
+      const msg = barcodeDuplicateMessage(e.target.value);
+      if (msg !== dm.barcodeMsg) {
+        dm.barcodeMsg = msg;
+        if (msg) toast(msg, 'warning', 'Barkod / RFID');
+        renderDm();
+      }
+      return;
+    }
     if (dm && e.target.matches('[data-cls-search]')) {
       setTimeout(() => {
         if (!dm) return;
@@ -1580,31 +1734,6 @@
     reader.readAsDataURL(file);
   }
 
-  // YZ port tespiti (analyzeImageWithAI) — katalog görselinde şablon portları, yüklenen görselde ızgara taraması
-  function analyzeImageWithAI(side) {
-    if (!dm.img[side]) { toast('Lütfen önce bir görsel yükleyin.', 'warning'); return; }
-    dm.analyzing[side] = true;
-    renderDm();
-    setTimeout(() => {
-      if (!dm) return;
-      const like = { assetType: dm.d.deviceType || 'Sunucu', manufacturer: dm.d.manufacturer, model: dm.d.model, uSize: dm.d.uCapacity };
-      const f = dm.imgFromCat[side] || dm.asset ? M.face(like, side) : null;
-      let found = f ? f.ports.map(p => ({ x: p.x, y: p.y, type: p.type })) : [];
-      if (!f) for (let i = 0; i < 8; i++) found.push({ x: +(0.3 + i * 0.05).toFixed(4), y: 0.5, type: 'ethernet' });
-      found = found.filter(fp => !dm.ports.some(p => p.side === side && Math.abs(p.x - fp.x) < 0.02 && Math.abs(p.y - fp.y) < 0.04));
-      const stamp = Date.now();
-      found.forEach((fp, i) => dm.ports.push({
-        id: 'ai_port_' + stamp + '_' + i, name: 'YZ-Port-' + (dm.ports.length + 1), side, x: fp.x, y: fp.y, shape: 'circle', color: '#2196F3', type: fp.type,
-        connected: false, is_included_in_sequence: true, isAutoNumbered: true, sourceCabinet: dm.d.cabinetName, sourceUPosition: String(dm.d.position || '')
-      }));
-      sortAndNamePorts(side, dm.naming[side]);
-      dm.analyzing[side] = false;
-      renderDm();
-      if (found.length) toast(found.length + ' adet port başarıyla tespit edildi.', 'success');
-      else toast('Bu görselde port tespit edilemedi.', 'info');
-    }, 1800);
-  }
-
   function sortAndNamePorts(side, logic) {
     const sidePorts = dm.ports.filter(p => p.side === side && p.is_included_in_sequence !== false && p.isAutoNumbered !== false);
     if (!sidePorts.length) return;
@@ -1671,7 +1800,7 @@
       d.stock = '';
       if (!d.locationId) { const l = M.locationOf(state.cab); d.locationId = l ? l.location_id : ''; }
     } else if (n === 1) { clearCab(); toast('Cihaz stokta olduğunda kabin ve pozisyon bilgisi temizlendi', 'info', 'Stokta Durumu'); }
-    else if (n === 2) { dm.scrapNew = true; clearCab(); toast('Cihaz hurdaya ayrıldığında kabin ve pozisyon bilgisi temizlendi', 'info', 'Hurdaya Ayrıldı Durumu'); }
+    else if (n === 2) { dm.scrapNew = true; clearCab(); if (!CD.isScrapLocationId(d.locationId)) d.locationId = ''; toast('Cihaz hurdaya ayrıldığında kabin ve pozisyon bilgisi temizlendi', 'info', 'Hurdaya Ayrıldı Durumu'); }
     else if (n === 3) { clearCab(); toast('Cihaz Teslim Bekleniyor olduğunda kabin ve pozisyon bilgisi temizlendi', 'info', 'Teslim Bekleniyor Durumu'); }
     else if (n === 4) { clearCab(); toast('Cihaz bakımda olduğunda kabin ve pozisyon bilgisi temizlendi', 'info', 'Bakımda Durumu'); }
     else if (n === 5) { clearCab(); toast('Cihaz tedarikçiye iade edildiğinde kabin ve pozisyon bilgisi temizlendi', 'info', 'Tedarikçiye İade Durumu'); }
@@ -1760,6 +1889,13 @@
       if (d.assignment === null || d.assignment === undefined || String(d.assignment).trim() === '') { toast('Assignment alanı zorunludur.', 'warning'); return; }
     }
     const a = parseInt(d.assignment, 10);
+    if (a === 2 && !CD.isScrapLocationId(d.locationId)) {
+      toast(locationOptions().length === 0 ? MSG_NO_SCRAP : MSG_SCRAP_REQUIRED, 'error', 'Hurdaya Ayrıldı Durumu');
+      return;
+    }
+    d.assetTag = String(d.assetTag || '').trim();
+    const dup = barcodeDuplicateMessage(d.assetTag);
+    if (dup) { dm.barcodeMsg = dup; renderDm(); toast(dup, 'error', 'Barkod / RFID Hatası'); return; }
     if (a === 0 && !d.cabinetName) { toast('Cihaz "Kullanımda" durumundayken Kabin seçimi zorunludur.', 'error'); return; }
     if (a === 0 && !Number(d.position)) { toast('Cihaz "Kullanımda" durumundayken Pozisyon seçimi zorunludur.', 'error'); return; }
     if (a === 1 && !d.stock) { toast('Stok lokasyonu seçmelisiniz!', 'warning', 'Eksik Bilgi'); return; }
@@ -2109,7 +2245,7 @@
   // ---------------------------------------------------------------------------
   // Başlat + URL ile demo durumları
   // ---------------------------------------------------------------------------
-  loadCabinet(params.get('cabinet') || params.get('cabin_name') || '1BJ53');
+  loadCabinet(params.get('cabinet') || params.get('cabin_name') || '1DU06');
   startPolling();
 
   (function applyUrlState() {
@@ -2117,10 +2253,14 @@
     const add = params.get('add');
     if (dev) {
       const m = /^U?(\d+)$/i.exec(dev);
-      const asset = m ? state.cab.assets.find(a => +m[1] >= a.startU && +m[1] < a.startU + a.uSize) : state.cab.assets.find(a => a.id === dev || a.hostname === dev);
+      const vp = /^VPDU-?([AB])$/i.exec(dev);
+      const asset = vp ? findVpdu(state.code + '-VPDU-' + vp[1].toUpperCase())
+        : m ? state.cab.assets.find(a => CD.inUse(a) && +m[1] >= a.startU && +m[1] < a.startU + a.uSize)
+          : state.cab.assets.find(a => a.id === dev || a.hostname === dev);
       if (asset) {
         openDevice(asset);
         if (params.get('edit') === '1') { dm.isEditMode = true; dm.classSearch = (dm.d.manufacturer || '') + ' - ' + (dm.d.model || ''); renderDm(); }
+        if (params.get('assign') && (dm.isEditMode || dm.isCreatMode)) onAssignmentChange(params.get('assign'));
         const pn = params.get('port');
         if (pn) { const p = dm.ports.find(x => x.name.toLowerCase() === pn.toLowerCase()); if (p) openPortDetail(p); }
       }
@@ -2132,8 +2272,6 @@
         const c = M.catalog.find(x => (x.brand + ' ' + x.name).toLowerCase().indexOf(q.toLowerCase()) >= 0);
         if (c) selectDeviceClass(c.model_id);
       }
-      const ai = params.get('ai');
-      if (ai === 'front' || ai === 'back') analyzeImageWithAI(ai);
     }
     const dlg = params.get('dialog');
     if (dlg === 'sensor') openSensorSettingsDialog();

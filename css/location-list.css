@@ -1,0 +1,9 @@
+/* Lokasyon Listesi — sayfa stilleri */
+/* Tam Lokasyon Adı kolonu geniş ekranda (orijinal 2xl:table-cell; derlenmiş styles.css'te yok) */
+.loc-full-col { display: none; }
+@media (min-width: 96rem) { .loc-full-col { display: table-cell; } }
+
+/* Dar ekranda rapor menüsü düğmesi solda kalır: açılır panel sağa doğru açılsın (ekran dışına taşmasın) */
+@media (max-width: 63.98rem) {
+  #loc-report [data-rk-menu] { right: auto; left: 0; }
+}

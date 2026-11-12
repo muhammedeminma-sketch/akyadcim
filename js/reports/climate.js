@@ -327,10 +327,10 @@
       const fill = (s, p) => Object.keys(p || {}).reduce((a, k) => a.replace('{' + k + '}', p[k]), s);
 
       const FLOORS = [
-        { value: 'CMR/T00', label: '1.Kat', prefix: 'IDC1', floorNo: 1 },
-        { value: 'CMR/T02', label: '2.Kat', prefix: 'IDC1', floorNo: 2 },
-        { value: 'CMR/T03', label: '3.Kat', prefix: 'IDC1', floorNo: 3 },
-        { value: 'CMR/T04', label: 'IDC4', prefix: 'IDC4' }
+        { value: 'CMR/T00', label: '1.Kat', prefix: 'DCA', floorNo: 1 },
+        { value: 'CMR/T02', label: '2.Kat', prefix: 'DCA', floorNo: 2 },
+        { value: 'CMR/T03', label: '3.Kat', prefix: 'DCA', floorNo: 3 },
+        { value: 'CMR/T04', label: 'DCB', prefix: 'DCB' }
       ];
       const DATA_TYPES = [
         { value: 'ROOM_AIR_RET_TEMP', label: 'Return Air Temperature' },
@@ -499,46 +499,45 @@
 
       function popupHtml() {
         if (!state.showDataPopup) return '';
+        const RM = DCIM.reportModal;
         const off = !hasData();
+        const dis = off ? ' disabled' : '';
+        const rowCount = state.popupData.reduce((n, g) => n + ((g.result && g.result.length) || 0), 0);
         let body;
         if (state.isLoadingData) {
-          body = '<div class="flex flex-col items-center justify-center py-12">' +
+          body = '<div class="rpt-state">' +
             '<i class="pi pi-spin pi-spinner text-sky-500 text-3xl mb-3"></i>' +
             '<p class="text-sm text-slate-600 dark:text-slate-300 font-medium">' + esc(T.loadingPreparing) + '</p>' +
             (state.chunkProgress ? progressBar('w-64 bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden mt-3') + '<p class="text-xs text-sky-500 font-mono mt-1">' + esc(state.chunkProgress) + '</p>' : '') +
           '</div>';
         } else if (!off) {
-          body = '<div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
-            '<table class="w-full text-xs text-left text-slate-700 dark:text-slate-300">' +
-              '<thead class="bg-slate-100 dark:bg-surface-panel text-slate-800 dark:text-slate-200 uppercase font-semibold text-[11px] border-b border-slate-200 dark:border-border-subtle"><tr>' +
-                [T.colRegion, T.colModule, T.colSensor, T.colValue, T.colDate].map(h => '<th class="px-3 py-2.5">' + esc(h) + '</th>').join('') +
+          body = '<table class="rpt-table">' +
+              '<thead><tr>' +
+                [T.colRegion, T.colModule, T.colSensor, T.colValue, T.colDate].map(h => '<th>' + esc(h) + '</th>').join('') +
               '</tr></thead>' +
-              '<tbody class="divide-y divide-slate-100 dark:divide-border-subtle">' +
+              '<tbody>' +
                 state.popupData.map(g => g.result.map(it =>
-                  '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover/50">' +
-                    '<td class="px-3 py-2 font-medium">' + esc(it.region) + '</td>' +
-                    '<td class="px-3 py-2">' + esc(it.unit) + '</td>' +
-                    '<td class="px-3 py-2">' + esc(DT_LABEL[it.dataTypeKey] || it.dataTypeKey) + '</td>' +
-                    '<td class="px-3 py-2 font-mono font-semibold text-sky-600 dark:text-sky-400">' + esc(it.value) + ' ' + esc(it.measureUnit) + '</td>' +
-                    '<td class="px-3 py-2 text-slate-500 dark:text-slate-400 font-mono">' + esc(R5.fmtDT(it.date)) + '</td>' +
+                  '<tr>' +
+                    '<td class="font-medium text-slate-800 dark:text-slate-200">' + esc(it.region) + '</td>' +
+                    '<td class="text-slate-700 dark:text-slate-300">' + esc(it.unit) + '</td>' +
+                    '<td class="text-slate-700 dark:text-slate-300">' + esc(DT_LABEL[it.dataTypeKey] || it.dataTypeKey) + '</td>' +
+                    '<td class="font-mono font-semibold text-sky-600 dark:text-sky-400">' + esc(it.value) + ' ' + esc(it.measureUnit) + '</td>' +
+                    '<td class="text-slate-500 dark:text-slate-400 font-mono">' + esc(R5.fmtDT(it.date)) + '</td>' +
                   '</tr>').join('')).join('') +
-              '</tbody></table></div>';
+              '</tbody></table>';
         } else {
           body = kit.emptyState({ icon: 'pi pi-inbox', message: T.noData });
         }
-        return '<div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100000] flex items-center justify-center p-4" data-popup-backdrop>' +
-          '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">' +
-            '<div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-surface-panel">' +
-              '<h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2"><i class="pi pi-table text-sky-500"></i><span>' + esc(T.popupTitle) + '</span></h3>' +
-              '<div class="flex items-center gap-2">' +
-                R5.button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: T.pdfDownload, disabled: off, attrs: 'data-act="pdf"' }) +
-                R5.button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: T.excelDownload, disabled: off, attrs: 'data-act="excel"' }) +
-                R5.button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: T.zipDownload, disabled: off, attrs: 'data-act="zip"' }) +
-                '<button type="button" data-act="close-popup" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded transition-colors"><i class="pi pi-times text-base"></i></button>' +
-              '</div>' +
-            '</div>' +
-            '<div class="p-4 overflow-y-auto flex-1 space-y-4">' + body + '</div>' +
-          '</div></div>';
+        // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur)
+        return RM.html({
+          title: T.popupTitle, subtitle: 'KLİMA VERİLERİ RAPORLAMA', icon: 'pi pi-table', tone: 'sky', size: 'lg', z: 'z-[100000]',
+          attrs: 'data-popup-backdrop',
+          actions: RM.btn('pdf', 'pi pi-file-pdf', T.pdfDownload, 'data-act="pdf"' + dis) +
+            RM.btn('excel', 'pi pi-file-excel', T.excelDownload, 'data-act="excel"' + dis) +
+            RM.btn('zip', 'pi pi-folder', T.zipDownload, 'data-act="zip"' + dis),
+          summary: !state.isLoadingData && !off ? RM.total(rowCount) : '',
+          body
+        }).replace('data-rpt-close', 'data-rpt-close data-act="close-popup"');
       }
 
       // Kök: <div class="space-y-4"> (başlık + filtre kartı); yükleme katmanı ve pencere sabit konumludur
@@ -561,6 +560,28 @@
         const d = (unit.match(/KLM[A-Z]?(\d)/i) || [])[1];
         return FLOORS.find(f => f.floorNo === Number(d)) || (d === '4' ? FLOORS[3] : null);
       };
+      // site-model.service locLabel() karşılığı (b024610d2): salonun adı (SALON-n) başka bir katta da geçiyorsa
+      // kat adıyla verilir ("KAT-2 SALON-1"); kardeş adları tekil olan salonlar olduğu gibi kalır.
+      // Salon evreni: kurgusal yerleşimin salonları (DCIM_FLOOR_LAYOUTS) + sorulan kod.
+      function hallLabel(code) {
+        const m = String(code || '').match(/^KAT(\d+)_SAL(\d+)$/);
+        if (!m) return '';
+        const halls = new Set([m[0]]);
+        (window.DCIM_FLOOR_LAYOUTS || []).forEach(f => (f.salons || []).forEach((s, i) =>
+          halls.add('KAT' + f.floor + '_SAL' + ((String(s.id).match(/\d+/) || [i + 1])[0]))));
+        const name = h => h.replace(/^KAT\d+_/, '');
+        const count = {};
+        halls.forEach(h => { count[name(h)] = (count[name(h)] || 0) + 1; });
+        const shared = Array.from(halls).some(h => h.indexOf('KAT' + m[1] + '_') === 0 && count[name(h)] > 1);
+        return (shared ? 'KAT-' + m[1] + ' ' : '') + 'SALON-' + m[2];
+      }
+      // Klimanın bölgesi: yerleşimdeki cihaz kaydının salonu (locLabel), yoksa kat adı
+      const KLM_HALL = {};
+      (window.DCIM_FLOOR_LAYOUTS || []).forEach(f => (f.items || []).forEach(it => {
+        const mm = it.type === 'climate' && String(it.devId || '').match(/^(KAT\d+_SAL\d+)_(KLM[A-Z]?\d+)/);
+        if (mm) KLM_HALL[mm[2]] = mm[1];
+      }));
+      const regionOfUnit = (klima, fl) => hallLabel(KLM_HALL[klima]) || (fl ? fl.label : floorsLabel());
       function query() {
         return MOCK.query({
           floors: state.selectedFloors.map(f => f.value), units: state.selectedKlimas, dataTypes: state.selectedDataTypes,
@@ -579,7 +600,7 @@
           const fl = floorOfUnit(klima);
           const date = item.tim || item.period;
           return {
-            region: fl ? fl.label : floorsLabel(), unit: formatUnit(klima) || 'N/A', dataTypeKey: type,
+            region: regionOfUnit(klima, fl), unit: formatUnit(klima) || 'N/A', dataTypeKey: type,
             value: Number(item.result).toFixed(2), measureUnit: measureUnit(type), date,
             k: klima, s: SORT_KEY[type] || 8, ts: new Date(date).getTime()
           };

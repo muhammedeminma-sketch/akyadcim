@@ -124,17 +124,17 @@
     const WARR_POOL = [-40, -12, 6, 11, 19, 27, 45, 63, 88, 104, 131, 166, 212, 259, 301, 344, 402, 488, 575, 690, 812, 0];
     const PLAN_POOL = [-9, -3, 2, 5, 9, 13, 17, 22, 29, 38, 47, 61, 76, 95, 120, 150, 185, 240, 0];
 
-    // Senaryo: 1BG41 yetkili periyodik kabin bakımı (İş Emirleri — tamamlandı)
-    const w1BG41 = wo('1BG41');
-    const bg41 = IT.filter(a => a.cabin_name === '1BG41');
+    // Senaryo: 1DC06 yetkili periyodik kabin bakımı (İş Emirleri — tamamlandı)
+    const w1DC06 = wo('1DC06');
+    const bg41 = IT.filter(a => a.cabin_name === '1DC06');
     bg41.slice(0, 2).forEach(a => rec(a, {
-      tim_warr: day(between(200, 500)), tim_mnt_plan: woEnd(w1BG41, -1), mnt_kind: 'Periyodik Bakim',
-      mnt_notes: '1BG41 periyodik kabin bakımı — filtre, kablo düzeni ve PDU bağlantıları kontrol edildi' + woRef(w1BG41),
-      mnt_usr: woUsr(w1BG41, 'Mehmet Kaya'), is_completed: 1
+      tim_warr: day(between(200, 500)), tim_mnt_plan: woEnd(w1DC06, -1), mnt_kind: 'Periyodik Bakim',
+      mnt_notes: '1DC06 periyodik kabin bakımı — filtre, kablo düzeni ve PDU bağlantıları kontrol edildi' + woRef(w1DC06),
+      mnt_usr: woUsr(w1DC06, 'Mehmet Kaya'), is_completed: 1
     }));
 
     // Rastgele BT alt kümesi (tohumlu): 16 tamamlanan + 34 açık kayıt
-    const pool = IT.filter(a => a.cabin_name !== '1BG41');
+    const pool = IT.filter(a => a.cabin_name !== '1DC06');
     const chosen = [];
     const used = new Set();
     while (chosen.length < 50 && chosen.length < pool.length) {
@@ -143,8 +143,8 @@
       used.add(a.asm_id);
       chosen.push(a);
     }
-    // 1BJ53 (yüksek sıcaklık alarmı) kabinindeki ilk sunucu da açık kayıtlar arasında olsun
-    const bj53 = IT.find(a => a.cabin_name === '1BJ53' && a.device_type === 'Sunucu');
+    // 1DU06 (yüksek sıcaklık alarmı) kabinindeki ilk sunucu da açık kayıtlar arasında olsun
+    const bj53 = IT.find(a => a.cabin_name === '1DU06' && a.device_type === 'Sunucu');
     if (bj53 && !used.has(bj53.asm_id)) chosen[chosen.length - 1] = bj53;
 
     function itRecord(a, completed) {
@@ -172,7 +172,7 @@
       const r = itRecord(a, false);
       if (a === bj53) {
         Object.assign(r, { mnt_kind: 'Donanim Degisimi', tim_mnt_plan: day(1), mnt_usr: VENDOR[a.manufacturer] || 'Üretici Servisi',
-          mnt_notes: a.name + ' — 1BJ53 yüksek sıcaklık sonrası fan modülü ve termal macun kontrolü' });
+          mnt_notes: a.name + ' — 1DU06 yüksek sıcaklık sonrası fan modülü ve termal macun kontrolü' });
       }
     });
 
@@ -187,9 +187,9 @@
       mnt_notes: 'KLIMA 109 — 3 aylık bakım: kondenser temizliği, gaz basıncı ve kayış kontrolü', is_completed: 1 });
     rec(INFRA['KLIMA 104'], { tim_warr: warrKlima, tim_mnt_plan: day(-92), mnt_kind: 'Periyodik Bakim', mnt_usr: 'Can Öztürk',
       mnt_notes: 'KLIMA 104 — 3 aylık bakım: G4 filtre değişimi, drenaj ve fan kontrolü', is_completed: 1 });
-    const w1BX50 = wo('1BX50');
-    rec(INFRA['KLIMA 113'], { tim_warr: warrKlima, tim_mnt_plan: woEnd(w1BX50, -2), mnt_kind: 'Kalibrasyon', mnt_usr: woUsr(w1BX50, 'Can Öztürk'),
-      mnt_notes: 'KLIMA 113 — 1BX50 düşük sıcaklık: set değeri 20 °C → 22 °C güncellendi' + woRef(w1BX50), is_completed: 1 });
+    const w1DP02 = wo('1DP02');
+    rec(INFRA['KLIMA 113'], { tim_warr: warrKlima, tim_mnt_plan: woEnd(w1DP02, -2), mnt_kind: 'Kalibrasyon', mnt_usr: woUsr(w1DP02, 'Can Öztürk'),
+      mnt_notes: 'KLIMA 113 — 1DP02 düşük sıcaklık: set değeri 20 °C → 22 °C güncellendi' + woRef(w1DP02), is_completed: 1 });
     const wGen = wo('Jeneratör G1');
     rec(INFRA['Jeneratör G1'], { tim_warr: warrGen, tim_mnt_plan: woEnd(wGen, -1), mnt_kind: 'Periyodik Bakim', mnt_usr: woUsr(wGen, 'Emre Çelik'),
       mnt_notes: 'Jeneratör G1 — aylık yük testi: %75 yükte 30 dk başarılı, yakıt seviyesi %92' + woRef(wGen), is_completed: 1 });
@@ -213,7 +213,7 @@
       tim_warr: warrKlima, tim_mnt_plan: day(KLIMA_PLAN[l]), mnt_kind: 'Periyodik Bakim', mnt_usr: 'Can Öztürk', mnt_typ: 'Toplu Kayıt',
       mnt_notes: l + ' — 3 aylık periyodik bakım: filtre, kayış, drenaj ve gaz basıncı kontrolü'
     }));
-    ['Klimalar Kontrol Panosu', 'A2 Klima Panosu', 'A3 Klima Panosu (113 114)', 'B1 Klima Panosu', 'B2 Klima Panosu', 'A1 Klima Panosu'].forEach((l, i) => rec(INFRA[l], {
+    ['Klimalar Kontrol Panosu', 'A2 Klima Panosu', 'A3 Klima Panosu', 'B1 Klima Panosu', 'B2 Klima Panosu', 'A1 KLIMA PANOSU'].forEach((l, i) => rec(INFRA[l], {
       tim_warr: warrPano, tim_mnt_plan: day(96 + i * 14), mnt_kind: 'Periyodik Bakim', mnt_usr: 'Emre Çelik', mnt_typ: 'Toplu Kayıt',
       mnt_notes: l + ' — yıllık termografi ve klemens sıkılığı kontrolü'
     }));

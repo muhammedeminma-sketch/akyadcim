@@ -41,7 +41,7 @@
         // Model Kütüphanesi (category-list) ekranının okuduğu anahtar
         power_connection_numbers: data.powerConnections || 0
       };
-      const cat = { name, brand, nature, full_name: '/Türk Telekom-TTVM/' + nature + '/' + brand + '/' + name + '/' };
+      const cat = { name, brand, nature, full_name: '/Türk Telekom-DC/' + nature + '/' + brand + '/' + name + '/' };
       return D.catList ? D.catList.create(cat, jsn) : null;
     }
   };

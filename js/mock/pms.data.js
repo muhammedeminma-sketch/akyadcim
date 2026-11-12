@@ -2,17 +2,18 @@
    DCIM Sunum — PMS (Güç Yönetim Sistemi) mock verileri (pms.html)
    XDB enerji analizörleri (dev_type='meter'), CMA_List güç alarmları ve SCH tablo şemalarının yerine geçer.
    DCIM.data.pms:
-     analyzers           → 42 analizör tanımı (IDC1 41 + IDC4 1; kimlik/ad SCH_PMS_import_2026-10-14.sql'den)
+     analyzers           → 42 analizör tanımı (DCA 41 + DCB 1; kurgusal kimlik/ad, tek hat şemalarıyla aynı)
      meters(tick)        → { [id]: { kw, kva, kvar, pf, vln, vll, freq, ia, ib, ic, curr, loaded } }
      kpi(tick)           → BT / soğutma / trafo yükü, PUE, UPS modül sayısı, A/B besleme, tesis girişi
      sources(tick)       → Kaynaklar ve dağıtım kartları (meter_of = grid / transformer / generator)
      generatorTable(side, tick) → "A/B Tarafı Jeneratör Değerleri" tablo şeması (EN0101010400000000[b])
      compensationTables(tick)   → "Kompanzasyon Sistemleri" tablo şeması (EN0101010300000000)
-     powerAlarms()       → güç alarmları: DCIM.data.activeAlarms (Enerji Grubu + 1AV42 PDU-B) +
+     powerAlarms()       → güç alarmları: DCIM.data.activeAlarms (Enerji Grubu + 1NA06 PDU-B) +
                            DCIM.data.pmsSingleLine.demoAlarms (varsa; şalter/jeneratör alarmları)
+     meteo(tick)         → çatı meteoroloji istasyonu (PMS başlık çipi; BMS'te çatıda)
      upsInfo(code)       → UPS düğüm adı ("A UPS - 5") ve sayfa başlığı (A UPS ODASI 5 Nolu Modül | Huawei UPS 5000E | IP)
      standards, dataSources → "Sektör standartları" ve "Veri kaynakları" metinleri (pms-dashboard.component'ten)
-   Kapsam: PMS IDC1 binasının tamamını (3 kat) izler; Kat-1 BT yükü UPS giriş güçleriyle (DCIM.data.energy) tutarlı,
+   Kapsam: PMS DCA binasının tamamını (3 kat) izler; Kat-1 BT yükü UPS giriş güçleriyle (DCIM.data.energy) tutarlı,
    PUE ≈ site.pue. Senaryo: UPS A5 akü modunda (A kolu Kat-1 yükü düşük), UPS B7 SNMP kaybı, A kolu jeneratörleri
    (GEN4–GEN6) haftalık yüksüz testte, B kolu (GEN1–GEN3) otomatikte hazır, kuplaj şalterleri açık.
    Tek hat demo alarmlarıyla tutarlılık: "veri yok" alarmlı analizör (ör. GEN3 Q9) değer vermez; TRIP alarmlı kat
@@ -37,53 +38,53 @@
   // ---------------------------------------------------------------------------
   // Analizörler — meter_of / feed / load öznitelikleri (analyzers-view METER_OF_LABEL anahtarları)
   // ---------------------------------------------------------------------------
-  const A = (id, title, meterOf, feed, extra) => Object.assign({ id, title, meterOf, feed, loc: 'IDC1', load: '' }, extra || {});
+  const A = (id, title, meterOf, feed, extra) => Object.assign({ id, title, meterOf, feed, loc: 'DCA', load: '' }, extra || {});
   const analyzers = [
-    // A tarafı
-    A('IDC1_A_GEN4_Q5', 'IDC1 A Jeneratör-4 Q5', 'generator', 'A', { gen: 4 }),
-    A('IDC1_A_GEN5_Q6', 'IDC1 A Jeneratör-5 Q6', 'generator', 'A', { gen: 5 }),
-    A('IDC1_A_GEN6_Q7', 'IDC1 A Jeneratör-6 Q7', 'generator', 'A', { gen: 6 }),
-    A('IDC1_A_K1GRID_KDP1_Q33', 'IDC1 A Kat-1 Şebeke Kat Dağıtım Panosu-1 Q33', 'grid', 'A', { load: 'it', floor: 1, part: 0.52 }),
-    A('IDC1_A_K1GRID_KDP2_Q30', 'IDC1 A Kat-1 Şebeke Kat Dağıtım Panosu-2 Q30', 'grid', 'A', { load: 'it', floor: 1, part: 0.48 }),
-    A('IDC1_A_K2GRID_KDP1_Q34', 'IDC1 A Kat-2 Şebeke Kat Dağıtım Panosu-1 Q34', 'grid', 'A', { load: 'it', floor: 2, part: 0.51 }),
-    A('IDC1_A_K2GRID_KDP2_Q35', 'IDC1 A Kat-2 Şebeke Kat Dağıtım Panosu-2 Q35', 'grid', 'A', { load: 'it', floor: 2, part: 0.49 }),
-    A('IDC1_A_K3GRID_KDP1_Q36', 'IDC1 A Kat-3 Şebeke Kat Dağıtım Panosu-1 Q36', 'grid', 'A', { load: 'it', floor: 3, part: 0.53 }),
-    A('IDC1_A_K3GRID_KDP2_Q37', 'IDC1 A Kat-3 Şebeke Kat Dağıtım Panosu-2 Q37', 'grid', 'A', { load: 'it', floor: 3, part: 0.47 }),
-    A('IDC1_A_KUPLAJSALTERI1_Q22', 'IDC1 A Kuplaj Şalteri-1 Q22', 'breaker', 'A', { open: true }),
-    A('IDC1_A_KUPLAJSALTERI2_Q21', 'IDC1 A Kuplaj Şalteri-2 Q21', 'breaker', 'A', { open: true }),
-    A('IDC1_A_Q44', 'IDC1 A Q44', '', 'A', { fixedKw: 24.6 }),
-    A('IDC1_A_REDRESOR_Q45', 'IDC1 A Redresör Q45', 'rectifier', 'A', { rect: true }),
-    A('IDC1_A_SYCIKISSALTER1_Q11', 'IDC1 A Senkron Yük Çıkış Şalteri-1 Q11', 'breaker', 'A', { sideShare: 0.52 }),
-    A('IDC1_A_SYCIKISSALTER2_Q12', 'IDC1 A Senkron Yük Çıkış Şalteri-2 Q12', 'breaker', 'A', { sideShare: 0.48 }),
-    A('IDC1_A_TRF1KOMP_Q15', 'IDC1 A Trafo 1 Kompanzasyon Q15', 'compensation', 'A', { comp: 'IDC1_A_TRAFO3_Q1' }),
-    A('IDC1_A_TRAFO1KOMP_Q146', 'IDC1 A Trafo-1 Kompanzasyon Q146', 'compensation', 'A', { comp: 'IDC1_A_TRAFO4_Q2' }),
-    A('IDC1_A_TRAFO3_Q1', 'IDC1 A Trafo-3 Q1', 'transformer', 'A', { trShare: 0.51 }),
-    A('IDC1_A_TRAFO4_Q2', 'IDC1 A Trafo-4 Q2', 'transformer', 'A', { trShare: 0.49 }),
-    A('IDC1_A_YGSALTER1_Q18', 'IDC1 A Yük Giriş Şalteri-1 Q18', 'breaker', 'A', { sideShare: 0.515 }),
-    A('IDC1_A_YGSALTER2_Q17', 'IDC1 A Yük Giriş Şalteri-2 Q17', 'breaker', 'A', { sideShare: 0.475 }),
-    // B tarafı
-    A('IDC1_B_GEN1_Q8', 'IDC1 B Jeneratör-1 Q8', 'generator', 'B', { gen: 1 }),
-    A('IDC1_B_GEN2_Q10', 'IDC1 B Jeneratör-2 Q10', 'generator', 'B', { gen: 2 }),
-    A('IDC1_B_GEN3_Q9', 'IDC1 B Jeneratör-3 Q9', 'generator', 'B', { gen: 3 }),
-    A('IDC1_B_TRAFO1_Q3', 'IDC1 B Trafo-1 Q3', 'transformer', 'B', { trShare: 0.505 }),
-    A('IDC1_B_TRAFO2_Q4', 'IDC1 B Trafo-2 Q4', 'transformer', 'B', { trShare: 0.495 }),
-    A('IDC1_B_TRAFO1KOMP_Q16', 'IDC1 B Trafo-1 Kompanzasyon Q16', 'compensation', 'B', { comp: 'IDC1_B_TRAFO1_Q3' }),
-    A('IDC1_B_TRAFO2KOMP_Q145', 'IDC1 B Trafo-2 Kompanzasyon Q145', 'compensation', 'B', { comp: 'IDC1_B_TRAFO2_Q4' }),
-    A('IDC1_B_ORTAKYC1_Q13', 'IDC1 B Ortak Yük Çıkış-1 Q13', 'common_load', 'B', { sideShare: 0.49 }),
-    A('IDC1_B_ORTAKYC2_Q14', 'IDC1 B Ortak Yük Çıkış-2 Q14', 'common_load', 'B', { sideShare: 0.495 }),
-    A('IDC1_B_OYGIRISI1_Q23', 'IDC1 B Ortak Yük Girişi-1 Q23', 'common_load', 'B', { sideShare: 0.5 }),
-    A('IDC1_B_OYGIRISI2_Q24', 'IDC1 B Ortak Yük Girişi-2 Q24', 'common_load', 'B', { sideShare: 0.5 }),
-    A('IDC1_B_K1GRID_KDP1_Q90', 'IDC1 B Kat-1 Şebeke Kat Dağıtım Panosu-1 Q90', 'grid', 'B', { load: 'it', floor: 1, part: 0.5 }),
-    A('IDC1_B_K1GRID_KDP2_Q91', 'IDC1 B Kat-1 Şebeke Kat Dağıtım Panosu-2 Q91', 'grid', 'B', { load: 'it', floor: 1, part: 0.5 }),
-    A('IDC1_B_K2GRID_KDP1_Q96', 'IDC1 B Kat-2 Şebeke Kat Dağıtım Panosu-1 Q96', 'grid', 'B', { load: 'it', floor: 2, part: 0.52 }),
-    A('IDC1_B_K2GRID_KDP2_Q95', 'IDC1 B Kat-2 Şebeke Kat Dağıtım Panosu-2 Q95', 'grid', 'B', { load: 'it', floor: 2, part: 0.48 }),
-    A('IDC1_B_K3GRID_KDP1_Q94', 'IDC1 B Kat-3 Şebeke Kat Dağıtım Panosu-1 Q94', 'grid', 'B', { load: 'it', floor: 3, part: 0.5 }),
-    A('IDC1_B_K3GRID_KDP2_Q88', 'IDC1 B Kat-3 Şebeke Kat Dağıtım Panosu-2 Q88', 'grid', 'B', { load: 'it', floor: 3, part: 0.5 }),
-    A('IDC1_B_CHILLER1_Q89', 'IDC1 B Chiller-1 Q89', 'chiller', 'B', { load: 'cooling', coolShare: 0.74 }),
-    A('IDC1_B_Q102', 'IDC1 B Q102', '', 'B', { load: 'cooling', coolShare: 0.26 }),
-    A('IDC1_B_Q104', 'IDC1 B Q104', '', 'B', { fixedKw: 31.2 }),
-    // IDC4 beslemesi (IDC1 A dağıtımından)
-    A('IDC1_A_IDC4_GRID_Q38', 'IDC4 Şebeke Besleme Q38', 'grid', 'A', { loc: 'IDC4', fixedKw: 212.4 })
+    // A kolu (DCA Genel A barası + DCA A Blok)
+    A('DCA_A_GEN4_Q5', 'DCA A Jeneratör-4 Q5', 'generator', 'A', { gen: 4 }),
+    A('DCA_A_GEN5_Q6', 'DCA A Jeneratör-5 Q6', 'generator', 'A', { gen: 5 }),
+    A('DCA_A_GEN6_Q7', 'DCA A Jeneratör-6 Q7', 'generator', 'A', { gen: 6 }),
+    A('DCA_A_TR1_Q1', 'DCA A Trafo TR-1 AG Çıkış Q1', 'transformer', 'A', { trShare: 0.51 }),
+    A('DCA_A_TR2_Q2', 'DCA A Trafo TR-2 AG Çıkış Q2', 'transformer', 'A', { trShare: 0.49 }),
+    A('DCA_A_TR1_KOMP_Q15', 'DCA A TR-1 Kompanzasyon Q15', 'compensation', 'A', { comp: 'DCA_A_TR1_Q1' }),
+    A('DCA_A_TR2_KOMP_Q16', 'DCA A TR-2 Kompanzasyon Q16', 'compensation', 'A', { comp: 'DCA_A_TR2_Q2' }),
+    A('DCA_A_ANA_CIKIS1_Q11', 'DCA A Ana Bara Çıkış-1 Q11', 'breaker', 'A', { sideShare: 0.52 }),
+    A('DCA_A_ANA_CIKIS2_Q12', 'DCA A Ana Bara Çıkış-2 Q12', 'breaker', 'A', { sideShare: 0.48 }),
+    A('DCA_A_BLOK_GIRIS1_Q13', 'DCA A Blok Giriş-1 Q13', 'breaker', 'A', { sideShare: 0.515 }),
+    A('DCA_A_BLOK_GIRIS2_Q14', 'DCA A Blok Giriş-2 Q14', 'breaker', 'A', { sideShare: 0.475 }),
+    A('DCA_A_KUPLAJ_Q20', 'DCA A/B Ana Bara Kuplajı Q20', 'breaker', 'A', { open: true }),
+    A('DCA_A_KAT1_KDP1_Q31', 'DCA A Kat-1 Kat Dağıtım Panosu A1 Q31', 'grid', 'A', { load: 'it', floor: 1, part: 0.52 }),
+    A('DCA_A_KAT1_KDP2_Q32', 'DCA A Kat-1 Kat Dağıtım Panosu A2 Q32', 'grid', 'A', { load: 'it', floor: 1, part: 0.48 }),
+    A('DCA_A_KAT2_KDP1_Q33', 'DCA A Kat-2 Kat Dağıtım Panosu A1 Q33', 'grid', 'A', { load: 'it', floor: 2, part: 0.51 }),
+    A('DCA_A_KAT2_KDP2_Q34', 'DCA A Kat-2 Kat Dağıtım Panosu A2 Q34', 'grid', 'A', { load: 'it', floor: 2, part: 0.49 }),
+    A('DCA_A_KAT3_KDP1_Q36', 'DCA A Kat-3 Kat Dağıtım Panosu A1 Q36', 'grid', 'A', { load: 'it', floor: 3, part: 0.53 }),
+    A('DCA_A_KAT3_KDP2_Q35', 'DCA A Kat-3 Kat Dağıtım Panosu A2 Q35', 'grid', 'A', { load: 'it', floor: 3, part: 0.47 }),
+    A('DCA_A_AYDINLATMA_Q41', 'DCA A Aydınlatma ve Priz Q41', '', 'A', { fixedKw: 24.6 }),
+    A('DCA_A_REDRESOR_Q42', 'DCA A Redresör (48 V DC) Q42', 'rectifier', 'A', { rect: true }),
+    // B kolu (DCA Genel B barası + DCA B Blok)
+    A('DCA_B_GEN1_Q8', 'DCA B Jeneratör-1 Q8', 'generator', 'B', { gen: 1 }),
+    A('DCA_B_GEN2_Q10', 'DCA B Jeneratör-2 Q10', 'generator', 'B', { gen: 2 }),
+    A('DCA_B_GEN3_Q9', 'DCA B Jeneratör-3 Q9', 'generator', 'B', { gen: 3 }),
+    A('DCA_B_TR3_Q3', 'DCA B Trafo TR-3 AG Çıkış Q3', 'transformer', 'B', { trShare: 0.505 }),
+    A('DCA_B_TR4_Q4', 'DCA B Trafo TR-4 AG Çıkış Q4', 'transformer', 'B', { trShare: 0.495 }),
+    A('DCA_B_TR3_KOMP_Q17', 'DCA B TR-3 Kompanzasyon Q17', 'compensation', 'B', { comp: 'DCA_B_TR3_Q3' }),
+    A('DCA_B_TR4_KOMP_Q18', 'DCA B TR-4 Kompanzasyon Q18', 'compensation', 'B', { comp: 'DCA_B_TR4_Q4' }),
+    A('DCA_B_ANA_CIKIS1_Q61', 'DCA B Ana Bara Çıkış-1 Q61', 'common_load', 'B', { sideShare: 0.49 }),
+    A('DCA_B_ANA_CIKIS2_Q62', 'DCA B Ana Bara Çıkış-2 Q62', 'common_load', 'B', { sideShare: 0.495 }),
+    A('DCA_B_BLOK_GIRIS1_Q63', 'DCA B Blok Giriş-1 Q63', 'common_load', 'B', { sideShare: 0.5 }),
+    A('DCA_B_BLOK_GIRIS2_Q64', 'DCA B Blok Giriş-2 Q64', 'common_load', 'B', { sideShare: 0.5 }),
+    A('DCA_B_KUPLAJ_Q70', 'DCA B Blok Yarım Bara Kuplajı Q70', 'breaker', 'B', { open: true }),
+    A('DCA_B_KAT1_KDP1_Q81', 'DCA B Kat-1 Kat Dağıtım Panosu B1 Q81', 'grid', 'B', { load: 'it', floor: 1, part: 0.5 }),
+    A('DCA_B_KAT1_KDP2_Q82', 'DCA B Kat-1 Kat Dağıtım Panosu B2 Q82', 'grid', 'B', { load: 'it', floor: 1, part: 0.5 }),
+    A('DCA_B_KAT2_KDP1_Q83', 'DCA B Kat-2 Kat Dağıtım Panosu B1 Q83', 'grid', 'B', { load: 'it', floor: 2, part: 0.52 }),
+    A('DCA_B_KAT2_KDP2_Q84', 'DCA B Kat-2 Kat Dağıtım Panosu B2 Q84', 'grid', 'B', { load: 'it', floor: 2, part: 0.48 }),
+    A('DCA_B_KAT3_KDP1_Q85', 'DCA B Kat-3 Kat Dağıtım Panosu B1 Q85', 'grid', 'B', { load: 'it', floor: 3, part: 0.5 }),
+    A('DCA_B_KAT3_KDP2_Q86', 'DCA B Kat-3 Kat Dağıtım Panosu B2 Q86', 'grid', 'B', { load: 'it', floor: 3, part: 0.5 }),
+    A('DCA_B_CHILLER1_Q89', 'DCA B Chiller-1 Q89', 'chiller', 'B', { load: 'cooling', coolShare: 0.74 }),
+    A('DCA_B_KLIMA_PANO_Q90', 'DCA B Klima Panosu Q90', '', 'B', { load: 'cooling', coolShare: 0.26 }),
+    A('DCA_B_YANGIN_POMPA_Q91', 'DCA B Yangın Pompası Q91', '', 'B', { fixedKw: 31.2 }),
+    // DCB beslemesi (DCA A ana barasından)
+    A('DCA_A_DCB_BESLEME_Q39', 'DCB Besleme Fideri Q39', 'grid', 'A', { loc: 'DCB', fixedKw: 212.4 })
   ];
   const BY_ID = new Map(analyzers.map(a => [a.id, a]));
 
@@ -122,10 +123,10 @@
     return ids;
   }
   const pairOf = m => {
-    const k = /K(\d)GRID_KDP(\d)/.exec(m.id);
+    const k = /KAT(\d)_KDP(\d)/.exec(m.id);
     if (!k) return null;
     const other = m.feed === 'A' ? 'B' : 'A';
-    return analyzers.find(x => x.load === 'it' && x.feed === other && x.floor === m.floor && new RegExp('K' + k[1] + 'GRID_KDP' + k[2]).test(x.id)) || null;
+    return analyzers.find(x => x.load === 'it' && x.feed === other && x.floor === m.floor && new RegExp('KAT' + k[1] + '_KDP' + k[2]).test(x.id)) || null;
   };
 
   // Bir analizörün elektriksel değerleri (kW, PF ve gerilimden faz akımları türetilir)
@@ -297,8 +298,8 @@
     : { value: d === 2 ? r2(val) : r1(val), unit, sta: STA.NORMAL });
 
   const GEN_COLS = {
-    A: [['GEN4', 'IDC1_A_GEN4_Q5'], ['GEN5', 'IDC1_A_GEN5_Q6'], ['GEN6', 'IDC1_A_GEN6_Q7']],
-    B: [['GEN1', 'IDC1_B_GEN1_Q8'], ['GEN2', 'IDC1_B_GEN2_Q10'], ['GEN3', 'IDC1_B_GEN3_Q9']]
+    A: [['GEN4', 'DCA_A_GEN4_Q5'], ['GEN5', 'DCA_A_GEN5_Q6'], ['GEN6', 'DCA_A_GEN6_Q7']],
+    B: [['GEN1', 'DCA_B_GEN1_Q8'], ['GEN2', 'DCA_B_GEN2_Q10'], ['GEN3', 'DCA_B_GEN3_Q9']]
   };
   const GEN_PAGE = {
     A: { sch: 'EN0101010400000000', title: 'A Tarafı Jeneratör Değerleri', table: 'A TARAFI GEN. DEĞERLERİ', note: 'GEN4–GEN6 · Haftalık yüksüz test çalışması · ATS şebekede (tesise güç verilmiyor)', running: true },
@@ -321,7 +322,7 @@
     };
   }
 
-  const COMP_TABLES = [['A - Q15', 'IDC1_A_TRF1KOMP_Q15'], ['A - Q146', 'IDC1_A_TRAFO1KOMP_Q146'], ['B - Q16', 'IDC1_B_TRAFO1KOMP_Q16'], ['B - Q145', 'IDC1_B_TRAFO2KOMP_Q145']];
+  const COMP_TABLES = [['A - Q15', 'DCA_A_TR1_KOMP_Q15'], ['A - Q16', 'DCA_A_TR2_KOMP_Q16'], ['B - Q17', 'DCA_B_TR3_KOMP_Q17'], ['B - Q18', 'DCA_B_TR4_KOMP_Q18']];
   const COMP_ROWS = [
     { label: 'Toplam Aktif Güç', role: 'kw', unit: 'kW', d: 1, get: v => v.kw },
     { label: 'Faz A Akımı', role: 'ia', unit: 'A', d: 1, get: v => v.ia },
@@ -376,13 +377,23 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Çatı meteoroloji istasyonu (tesis dokümanında dev_type='weather'); BMS ile aynı kimlik (js/mock/bms.data.js)
+  // Sıcaklık D.site.outdoor tabanı + 3 sn tik başına tohumlu ±0,15 °C.
+  // ---------------------------------------------------------------------------
+  function meteo(tick) {
+    const base = ((D.site && D.site.outdoor) || []).find(o => o.id === 'temp');
+    const t = base && Number.isFinite(base.val) ? base.val + jit('pms-meteo-t', Math.floor((tick || 0) / 10), 0.15) : null;
+    return { devId: 'DCA_CATI_METEO_DV', label: 'Meteoroloji İstasyonu', doc: 'CMR/T00', ioIds: ['DCA_CATI_METEO_TEMP', 'DCA_CATI_METEO_WSPD', 'DCA_CATI_METEO_WDIR'], temp: t == null ? null : Math.round(t * 10) / 10 };
+  }
+
+  // ---------------------------------------------------------------------------
   // UPS düğüm/sayfa adları (ENERGY_List_static + SCH page_title kalıbı)
   // ---------------------------------------------------------------------------
   function upsInfo(code) {
     const side = code.charAt(0);
     const n = parseInt(code.slice(1), 10) || 1;
     const room = side === 'A' ? 'A UPS ODASI' : 'B UPS Odası';
-    const ip = '10.6.126.' + ((side === 'A' ? 229 : 239) + n);
+    const ip = '10.20.' + (side === 'A' ? 41 : 42) + '.' + (10 + n);
     return { node: side + ' UPS - ' + n, title: room + ' ' + n + ' Nolu Modül | Huawei UPS 5000E | ' + ip, sch: 'EN01010106' + (side === 'A' ? n : n + 7).toString(16).toUpperCase().padStart(2, '0') + '000000' };
   }
 
@@ -420,6 +431,7 @@
 
   D.pms = {
     TICK_SEC,
+    meteo,
     analyzers,
     byId: id => BY_ID.get(id) || null,
     meters,

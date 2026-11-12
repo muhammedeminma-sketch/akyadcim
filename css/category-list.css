@@ -66,3 +66,8 @@
 
 /* Kart görünümünde SVG ön görsel */
 .cl-card-thumb img { image-rendering: auto; }
+
+/* Dar ekranda rapor menüsü düğmesi solda kalır: açılır panel sağa doğru açılsın */
+@media (max-width: 63.98rem) {
+  [data-cl-report] [data-rk-menu] { right: auto; left: 0; }
+}

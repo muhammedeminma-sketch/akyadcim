@@ -73,8 +73,8 @@
   };
 
   const FLOOR_OPTIONS = [
-    { value: 'CMR/T00', label: 'IDC1' },
-    { value: 'CMR/T04', label: 'IDC4' }
+    { value: 'CMR/T00', label: 'DCA' },
+    { value: 'CMR/T04', label: 'DCB' }
   ];
   const SECTION_OPTIONS = [
     { value: 'BYP', label: 'Bypass' },
@@ -349,10 +349,13 @@
       }
       if (state.showDataPopup) {
         const has = hasData();
+        const RM = DCIM.reportModal;
+        const dis = has ? '' : ' disabled';
         let body = '';
+        let rowCount = 0;
         if (state.isLoadingData) {
           const pct = parseFloat(String(state.chunkProgress).replace('%', '').split(' ')[0]) || 0;
-          body = '<div class="py-16 flex flex-col items-center justify-center text-center">' +
+          body = '<div class="rpt-state">' +
             '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl mb-3"></i>' +
             '<p class="text-slate-700 dark:text-slate-200 text-sm font-medium mb-4">' + esc(T.loadingData) + '</p>' +
             (state.chunkProgress ? '<div class="w-full max-w-md space-y-2">' +
@@ -364,54 +367,43 @@
           '</div>';
         } else if (has) {
           const rows = state.popupData[0].result;
+          rowCount = rows.length;
           const shown = rows.length > MAX_RENDER_ROWS ? rows.slice(0, MAX_RENDER_ROWS) : rows;
-          body = '<div><div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
-            '<table class="w-full text-xs text-left border-collapse"><thead>' +
-              '<tr class="bg-slate-100 dark:bg-surface-panel text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-border-subtle">' +
-                '<th class="p-2.5 border-r border-slate-200 dark:border-border-subtle">' + esc(T.colUps) + '</th>' +
-                '<th class="p-2.5 border-r border-slate-200 dark:border-border-subtle">' + esc(T.colSection) + '</th>' +
-                '<th class="p-2.5 border-r border-slate-200 dark:border-border-subtle">' + esc(T.colDataType) + '</th>' +
-                '<th class="p-2.5 text-right border-r border-slate-200 dark:border-border-subtle">' + esc(T.colValue) + '</th>' +
-                '<th class="p-2.5 text-center">' + esc(T.colDate) + '</th>' +
+          body = '<table class="rpt-table"><thead><tr>' +
+                '<th>' + esc(T.colUps) + '</th>' +
+                '<th>' + esc(T.colSection) + '</th>' +
+                '<th>' + esc(T.colDataType) + '</th>' +
+                '<th class="text-right">' + esc(T.colValue) + '</th>' +
+                '<th class="text-center">' + esc(T.colDate) + '</th>' +
               '</tr></thead>' +
-              '<tbody class="divide-y divide-slate-200 dark:divide-border-subtle font-mono text-[11px]">' +
+              '<tbody>' +
                 shown.map(item =>
-                  '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover/50 transition-colors">' +
-                    '<td class="p-2.5 font-sans font-medium text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-border-subtle">' + esc(item.unit) + '</td>' +
-                    '<td class="p-2.5 font-sans text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-border-subtle">' + esc(item.section) + '</td>' +
-                    '<td class="p-2.5 font-sans text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-border-subtle">' + esc(item.dataType) + '</td>' +
-                    '<td class="p-2.5 text-right font-bold text-sky-600 dark:text-sky-400 border-r border-slate-200 dark:border-border-subtle">' + esc(item.value) + '</td>' +
-                    '<td class="p-2.5 text-center text-slate-500 dark:text-slate-400 font-mono text-[10px]">' + esc(fmtPipeDate(item.date)) + '</td>' +
+                  '<tr>' +
+                    '<td class="font-medium text-slate-800 dark:text-slate-200">' + esc(item.unit) + '</td>' +
+                    '<td class="text-slate-700 dark:text-slate-300">' + esc(item.section) + '</td>' +
+                    '<td class="text-slate-700 dark:text-slate-300">' + esc(item.dataType) + '</td>' +
+                    '<td class="text-right font-mono font-bold text-sky-600 dark:text-sky-400">' + esc(item.value) + '</td>' +
+                    '<td class="text-center font-mono text-slate-500 dark:text-slate-400">' + esc(fmtPipeDate(item.date)) + '</td>' +
                   '</tr>').join('') +
-              '</tbody></table></div>' +
+              '</tbody></table>' +
             (rows.length > shown.length
-              ? '<p class="text-[10px] text-slate-500 dark:text-slate-400 mt-2 text-right font-mono">' + shown.length + ' / ' + rows.length + ' satır gösteriliyor — tamamı Excel dosyasında.</p>'
-              : '') +
-          '</div>';
+              ? '<p class="text-[10px] text-slate-500 dark:text-slate-400 m-3 text-right font-mono">' + shown.length + ' / ' + rows.length + ' satır gösteriliyor — tamamı Excel dosyasında.</p>'
+              : '');
         } else {
           body = kit.emptyState({ message: T.noDataMessage });
         }
 
-        html += '<div data-modal-backdrop class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 overflow-y-auto">' +
-          '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden my-auto">' +
-            '<div class="p-4 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-surface-panel/50">' +
-              '<div class="flex items-center gap-3">' +
-                '<h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">' +
-                  '<i class="pi pi-database text-sky-500 dark:text-sky-400"></i><span>' + esc(T.popupTitle) + '</span>' +
-                '</h3>' +
-                statusBadge('info', getSelectedCalcTypeLabel()) +
-              '</div>' +
-              '<div class="flex items-center gap-2">' +
-                btn({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: T.pdfDownload, act: 'pdf', disabled: !has }) +
-                btn({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: T.excelDownload, act: 'excel', disabled: !has }) +
-                btn({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: T.zipDownload, act: 'zip', disabled: !has }) +
-                '<button type="button" data-act="close-modal" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-hover rounded-[2px] transition-colors">' +
-                  '<i class="pi pi-times"></i></button>' +
-              '</div>' +
-            '</div>' +
-            '<div class="p-4 overflow-y-auto flex-1 space-y-6">' + body + '</div>' +
-          '</div>' +
-        '</div>';
+        // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur)
+        html += RM.html({
+          title: T.popupTitle, subtitle: T.title, icon: 'pi pi-database', tone: 'sky', size: 'xl', z: 'z-[100000]',
+          attrs: 'data-modal-backdrop',
+          badge: statusBadge('info', getSelectedCalcTypeLabel()),
+          actions: !state.isLoadingData && has ? RM.btn('pdf', 'pi pi-file-pdf', T.pdfDownload, 'data-act="pdf"' + dis) +
+            RM.btn('excel', 'pi pi-file-excel', T.excelDownload, 'data-act="excel"' + dis) +
+            RM.btn('zip', 'pi pi-folder', T.zipDownload, 'data-act="zip"' + dis) : '',
+          summary: !state.isLoadingData && has ? RM.total(rowCount) : '',
+          body
+        }).replace('data-rpt-close', 'data-rpt-close data-act="close-modal"');
       }
       hosts.modal.innerHTML = html;
     }

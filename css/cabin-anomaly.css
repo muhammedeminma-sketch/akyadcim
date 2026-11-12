@@ -1,0 +1,18 @@
+/* ==========================================================================
+   Kabin Anomali (cabin-anomaly.html) — cabin-anomaly.component.ts `styles` karşılığı
+   ========================================================================== */
+
+/* kat planı (3D) zemini */
+.ca-plan { background-color: #f8fafc; background-image: radial-gradient(rgba(100, 116, 139, 0.18) 1px, transparent 1px); background-size: 16px 16px; }
+.dark .ca-plan { background-color: #0b1220; background-image: radial-gradient(rgba(148, 163, 184, 0.10) 1px, transparent 1px); }
+
+/* lejant: kabin simgesi (açık gövde, renkli üst şerit) */
+.ca-lg { display: inline-block; width: 12px; height: 14px; border-radius: 2px; border: 1px solid var(--c); background: linear-gradient(var(--c) 0 3px, var(--t) 3px); }
+
+.ca-slide { animation: ca-slide .28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes ca-slide { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ca-slide { animation: none; } }
+
+/* panel görünürlüğü (hidden ↔ flex; Tailwind hidden sınıfı xl:absolute ile çakışmasın) */
+#ca-detail.is-open, #ca-ups.is-open { display: flex; }
+#ca-events.is-open { display: block; }

@@ -18,7 +18,7 @@
      ?brand=<marka>      Marka alanını doldur (listede varsa seçili, yoksa yazılmış gibi)
      ?type=<tür>         Cihaz Türü alanını doldur
      ?u=<n>              U Kapasitesi
-   ör. engineering.html#asset-device-add?cabinet=1BJ53&model=PowerEdge%20R760&brand=Dell&type=Sunucu&u=2
+   ör. engineering.html#asset-device-add?cabinet=1DU06&model=PowerEdge%20R760&brand=Dell&type=Sunucu&u=2
    Bilinçli sapma: showBackButton orijinalde history.length > 1 ile belirlenir; sunumda ?cabinet= varsa da gösterilir.
    ========================================================================== */
 (function () {

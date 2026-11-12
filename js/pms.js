@@ -1,7 +1,9 @@
 /* ==========================================================================
    DCIM Sunum — PMS · Güç Yönetim Sistemi (EnergyGeneralViewComponent, PMS sürümü)
    Kompozisyon (energy-general-view.component.html ile aynı):
-     ["BMS'ten geldiniz · Geri"] + app-page-header (Enerji ve Çevre › Enerji Genel Görünüm) + PDF Raporu
+     ["BMS'ten geldiniz · Geri"] + app-page-header (Enerji ve Çevre › Enerji Genel Görünüm) + Meteoroloji istasyonu çipi
+     (sıcaklık; meteoroloji alarmında önem renginde yanıp söner; tıklanınca bms.html?dev=<meteoroloji>&from=pms → çatıdaki
+     istasyon). Orijinaldeki gibi sayfa içi PDF düğmesi yok. Dar ekranda (< 900 px) kenar çubuğu kapalı açılır.
      Sol: "Güç Yönetim Sistemi" kenar çubuğu — bölümler GENEL · TEK HAT · EKİPMAN, düğüm başına en yüksek
           aktif güç alarmı önem noktası; daraltılınca yalnız simgeler
      Sağ: PMS görünümlerinde (Genel Bakış, Analizörler) araç çubuğu yok; diğerlerinde app-schematic-toolbar
@@ -18,7 +20,7 @@
      rectifier    → RectifierDashboardComponent (yenilenmiş panel)
      ups          → UpsDashboardComponent (önceki sürüm; energy.js UPS görünümünün taşınmış hali)
    Veri: DCIM.data.pms (js/mock/pms.data.js) + DCIM.data.energy (UPS, redresör); 3 sn'de bir tohumlu gürültüyle canlı.
-   Güç alarmları: DCIM.data.activeAlarms (Enerji Grubu + 1AV42 PDU-B) + DCIM.data.pmsSingleLine.demoAlarms (varsa).
+   Güç alarmları: DCIM.data.activeAlarms (Enerji Grubu + 1NA06 PDU-B) + DCIM.data.pmsSingleLine.demoAlarms (varsa).
    "Gördüm" onayları oturum boyunca sessionStorage 'dcim_pms_ack_v1'de tutulur (komut yok; salt izleme).
    Derin bağlantılar:
      ?view=overview|analyzers|single-line|generator|rectifier|ups|compensation
@@ -102,16 +104,16 @@
 
   // Tek hat şemaları (modül yoksa ENERGY_List_static düğüm adları)
   const FALLBACK_SCHEMAS = [
-    { id: 'IDC4', label: 'IDC4' },
-    { id: 'IDC1-GENEL', label: 'IDC1 Genel' },
-    { id: 'IDC1-A', label: 'IDC1 A Blok' },
-    { id: 'IDC1-B', label: 'IDC1 B Blok' }
+    { id: 'DCB', label: 'DCB' },
+    { id: 'DCA-GENEL', label: 'DCA Genel' },
+    { id: 'DCA-A', label: 'DCA A Blok' },
+    { id: 'DCA-B', label: 'DCA B Blok' }
   ];
   const SCHEMA_TITLE = {
-    'IDC4': 'VERİ MERKEZİ IDC4 TEK HAT ŞEMASI',
-    'IDC1 Genel': 'VERİ MERKEZİ IDC1 TEK HAT ŞEMASI',
-    'IDC1 A Blok': 'VERİ MERKEZİ IDC1 A BLOK HAT ŞEMASI',
-    'IDC1 B Blok': 'VERİ MERKEZİ IDC1 B BLOK HAT ŞEMASI'
+    'DCB': 'VERİ MERKEZİ DCB TEK HAT ŞEMASI',
+    'DCA Genel': 'VERİ MERKEZİ DCA TEK HAT ŞEMASI',
+    'DCA A Blok': 'VERİ MERKEZİ DCA A BLOK HAT ŞEMASI',
+    'DCA B Blok': 'VERİ MERKEZİ DCA B BLOK HAT ŞEMASI'
   };
   const schemas = () => (SL() && Array.isArray(SL().schemas) && SL().schemas.length ? SL().schemas : FALLBACK_SCHEMAS);
   const schemaById = id => schemas().find(s => s.id === id) || null;
@@ -129,7 +131,7 @@
   // ---------------------------------------------------------------------------
   // Kenar çubuğu modeli (buildPmsSections: Genel / Tek Hat / Ekipman)
   // ---------------------------------------------------------------------------
-  const GEN_IDS = { A: ['IDC1_A_GEN4_Q5', 'IDC1_A_GEN5_Q6', 'IDC1_A_GEN6_Q7'], B: ['IDC1_B_GEN1_Q8', 'IDC1_B_GEN2_Q10', 'IDC1_B_GEN3_Q9'] };
+  const GEN_IDS = { A: ['DCA_A_GEN4_Q5', 'DCA_A_GEN5_Q6', 'DCA_A_GEN6_Q7'], B: ['DCA_B_GEN1_Q8', 'DCA_B_GEN2_Q10', 'DCA_B_GEN3_Q9'] };
   const COMP_IDS = P.analyzers.filter(a => a.meterOf === 'compensation').map(a => a.id);
   const METER_IDS = P.analyzers.map(a => a.id);
   const upsDevId = code => 'KAT1_SAL1_' + code + '_UPS';
@@ -196,12 +198,13 @@
   // ---------------------------------------------------------------------------
   const root = document.getElementById('pms-root');
   root.innerHTML =
-    '<div class="px-3 pt-1.5 pb-1 shrink-0 flex items-center justify-between">' +
+    '<div class="page-header-row px-3 pt-1.5 pb-1 shrink-0 flex items-center justify-between">' +
       (state.fromBms ? '<button type="button" data-back-bms title="BMS görünümüne aynı alarm/cihazla dön" class="mr-3 shrink-0 px-2 py-1 text-[11px] font-semibold rounded-[2px] border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50 flex items-center gap-1.5 cursor-pointer" data-report-hide>' +
         '<i class="pi pi-arrow-left text-[10px]"></i><span>BMS\'ten geldiniz · Geri</span></button>' : '') +
       '<div class="flex-grow">' + kit.pageHeader({ title: 'Enerji Genel Görünüm', compact: true, breadcrumbs: [{ label: 'Enerji ve Çevre' }, { label: 'Enerji Genel Görünüm' }] }) + '</div>' +
-      '<button type="button" data-pdf class="ml-3 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs rounded-[2px] flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer" title="Aktif Görünümün PDF Raporunu İndir" data-report-hide>' +
-        '<i class="pi pi-file-pdf text-sm"></i><span>PDF Raporu</span></button>' +
+      // Meteoroloji istasyonu: alarmında yanıp söner; tıklanınca BMS'te çatıdaki istasyon
+      (P.meteo ? '<button type="button" data-meteo class="meteo-chip ml-3 shrink-0 px-2 py-1 text-[11px] font-semibold rounded-[2px] border border-slate-300 dark:border-border-subtle bg-white dark:bg-surface-card text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-surface-hover flex items-center gap-1.5 cursor-pointer" data-report-hide></button>' : '') +
+      // PDF raporu: orijinalde sayfa düğmesi kaldırıldı (üst çubuktaki standart rapor menüsüne taşınacak)
     '</div>' +
     '<div class="flex-grow flex overflow-hidden min-h-0">' +
       '<div id="pms-sidebar"></div>' +
@@ -210,7 +213,24 @@
         '<div id="pms-view" class="flex-1 min-h-0 relative overflow-hidden"></div>' +
       '</div>' +
     '</div>';
-  root.querySelector('[data-pdf]').addEventListener('click', () => kit.exportPdf());
+  // Meteoroloji çipi (loadMeteo / applyMeteoSev / refreshMeteoTemp karşılığı)
+  const meteoEl = root.querySelector('[data-meteo]');
+  function renderMeteo() {
+    if (!meteoEl || !P.meteo) return;
+    const m = P.meteo(state.tick);
+    const ids = new Set([m.devId].concat(m.ioIds || []));
+    const sev = maxSev(alarms().filter(a => ids.has(a.rid) || ids.has(a.devId) || alarmOn(a, m.devId)));
+    meteoEl.classList.toggle('meteo-alarm', !!sev);
+    if (sev) meteoEl.style.setProperty('--c', SEVERITY_COLOR[sev]); else meteoEl.style.removeProperty('--c');
+    meteoEl.title = m.label + (sev ? ' · aktif alarm' : '') + " — BMS'te çatıda göster";
+    meteoEl.setAttribute('aria-label', m.label + " — BMS'te göster");
+    meteoEl.innerHTML = '<i class="pi pi-cloud text-[11px]"></i><span class="hidden md:inline">' + esc(m.label) + '</span>' +
+      (m.temp != null ? '<span>' + esc(m.temp.toFixed(1)) + ' °C</span>' : '');
+  }
+  if (meteoEl) meteoEl.addEventListener('click', () => openBms({ dev: P.meteo(state.tick).devId }));
+  renderMeteo();
+  // Dar ekranda (telefon/dikey tablet) kenar çubuğu kapalı açılır: içerik tam genişlik
+  if (window.innerWidth < 900) state.sidebarCollapsed = true;
   const back = root.querySelector('[data-back-bms]');
   if (back) back.addEventListener('click', () => {
     const q = new URLSearchParams();
@@ -1268,6 +1288,7 @@
   function liveTick() {
     state.tick++;
     state.lastUpdate = new Date();
+    renderMeteo();
     if (views[current] && views[current].update) views[current].update();
     const pue = document.getElementById('pms-tb-pue');
     if (pue) pue.textContent = fmt(P.kpi(state.tick).pue, 2);

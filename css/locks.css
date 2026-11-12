@@ -1,0 +1,34 @@
+/* DCIM Sunum — Kapak Kilitleri sayfa stilleri
+   (sensplorer-lock-monitor.component + cabinet-topology-view.component stilleri; ortak olanlar css/components.css'te) */
+
+/* Başlık: kabin detayı açılınca yukarı kayarak kapanır */
+.lock-header { max-height: 7rem; opacity: 1; transform: translateY(0); transition: max-height 300ms ease, opacity 300ms ease, transform 300ms ease, margin 300ms ease; }
+.lock-header.lock-header-collapsed { max-height: 0; opacity: 0; transform: translateY(-0.75rem); margin-top: -0.5rem; }
+
+/* Kabin detay paneli: üst bölümün kapanışıyla eşzamanlı, sağdan kayarak açılır */
+.detail-slide-in { animation: lock-detail-in 300ms ease-out both; }
+@keyframes lock-detail-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.alert-pulse {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5rem; height: 1.5rem; border-radius: 999px;
+  background: rgba(244, 63, 94, 0.16);
+  animation: lock-alert-pulse 1.5s ease-in-out infinite;
+}
+@keyframes lock-alert-pulse { 50% { box-shadow: 0 0 0 6px rgba(244, 63, 94, 0.08); } }
+
+/* Kat planı zemini (SCH kapı/duvar katmanı / DXF arka plan yolu) */
+.bk-wall { stroke: #94a3b8; }
+.bk-dxf { stroke: #94a3b8; }
+.dark .bk-wall { stroke: #334155; }
+.dark .bk-dxf { stroke: #334155; }
+
+/* Kabin başına filtre yok (orijinal: yüzlerce drop-shadow her karede yeniden çiziliyordu) */
+.dark .lock-topo .cabinet-svg-item .cabinet-rect { filter: none; }
+.dark .lock-topo .cabinet-svg-item.is-selected .cabinet-rect { filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.4)); }
+
+.pod-active-badge-rect { fill: #2563eb; stroke: #1d4ed8; stroke-width: 0.5; }
+.dark .pod-active-badge-rect { fill: #0284c7; stroke: #38bdf8; }

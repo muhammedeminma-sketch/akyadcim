@@ -138,7 +138,6 @@
         { label: 'Asset Cihaz Yönetimi', value: 'ASMD', permission: 'CRUD' },
         { label: 'Cihaz Tanımlama Formu', value: 'ASMDE', permission: 'CRUD' },
         { label: 'Network Topolojisi', value: 'ASMN', permission: 'CRUD' },
-        { label: 'Bakım Modülü', value: 'MNT', permission: 'CRU' },
         { label: 'Kapak Kilidi Açma', value: 'LCK', permission: 'RU', extra: true } // [+] sunum
       ]
     },
@@ -296,7 +295,7 @@
     const user = DCIM.session.user();
     let list = [];
     try { list = JSON.parse(storage.sessionGet('dcim_audit_session') || '[]'); } catch (e) { list = []; }
-    list.push({ tim: new Date().toISOString(), cat: 'YETKİ', txt, sta: 0x0105, user: user.usr || 'operator', ip: '10.130.1.45', url: url || 'http://10.130.1.111/k/dcim/permission-settings', asset, res: 'success' });
+    list.push({ tim: new Date().toISOString(), cat: 'YETKİ', txt, sta: 0x0105, user: user.usr || 'operator', ip: '10.24.1.45', url: url || 'https://dcim.dca.local/k/dcim/permission-settings', asset, res: 'success' });
     storage.sessionSet('dcim_audit_session', JSON.stringify(list.slice(-50)));
   }
 

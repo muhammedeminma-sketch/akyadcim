@@ -1,11 +1,14 @@
 /* ==========================================================================
    DCIM Sunum — PDU Detay Sayfası (NewUICMPPduDetailComponent)
    pdu-detail.component.html/.ts karşılığı:
-   - Sol: Lokasyon & Kabinler ağacı (app-location-tree, pduTreeNodes hiyerarşisi)
+   - Sol: Lokasyon & Kabinler ağacı (app-location-tree): şirket → şehir → DCA → kat → POD → kabin (3 kat)
    - Sağ: seçili kabinin PDU-A / PDU-B üniteleri — kimlik kartı, Inlet / Outlet / Devre Kesici sekmeleri
-   - 5 sn polling (canlı telemetri), PDF raporu (jsPDF yerine yazdırılabilir rapor)
-   URL: ?cabinet=1AV42 (&pdu=B) (&tab=inlet|outlet|breaker)
+   - Satır durumları: noktalarda UYARI/ALARM/ACİL varsa ON/OFF yerine o (Acil mor); susturulmuş (0x00C0) → DEVREDIŞI
+   - 5 sn polling (canlı telemetri), rapor menüsü (app-report-export-menu: İnlet / Outlet / Devre kesici / Tümü, satır sınırı)
+   URL: ?cabinet=1NA06 (&pdu=B) (&tab=inlet|outlet|breaker)
         Kaynak parametreleri de desteklenir: cabinetId, cabinetDevId, devId, pin, targetPduId
+   Veri: DCIM.data.pduPage (js/mock/pdu-detail.data.js) — senaryo: 1NA06 PDU-B L2 faz kaybı, 1DL03 PDU-B C1 uyarı,
+         2. katta bir kabinin PDU-A C2 kesicisi ACİL, 3. katta bir kabin susturulmuş (DEVREDIŞI)
    ========================================================================== */
 (function () {
   'use strict';
@@ -31,9 +34,6 @@
     cabinet: 'Kabin',
     unit: 'Ünite',
     selectPdu: 'PDU Seçiniz',
-    downloadPdf: 'PDF Raporu',
-    downloadPdfTitle: 'PDU Detay PDF Raporunu İndir',
-    goToCabinet: 'Kabine Git',
     identityCardTitle: 'PDU Kimlik ve Anma Özellikleri',
     pduName: 'PDU Adı',
     pduBrand: 'PDU Markası',
@@ -89,8 +89,11 @@
     if ((sta & STA_MSK_ENG) !== STA_ENG_RUNNING) return sta & 0x0003;
     return 4 + ((sta >> 2) & 0x0003);
   }
+  const STA_MUTED = 0x00C0; // kabin takibi kapalı / alarm susturulmuş
   function getCommStatus(sta) {
     const staNum = parseStaNumber(sta);
+    // Susturulmuş (örn. 0x03C3): ortak kuralda DEVREDIŞI (resolveAyxdbDisplayStatus)
+    if ((staNum & STA_MUTED) === STA_MUTED) return { badgeStatus: 'inactive', label: 'DEVREDIŞI' };
     const val = getClassNo(staNum);
     if (val === 0) return { badgeStatus: 'inactive', label: 'DEVREDIŞI' };
     if (val === 1) return { badgeStatus: 'stopped', label: 'DURDURULDU' };
@@ -98,14 +101,49 @@
       const valMask = staNum & STA_MSK_VAL;
       if (valMask === STA_VAL_WARNING) return { badgeStatus: 'warning', label: 'KOPTU-UYARI' };
       if (valMask === STA_VAL_ALARM) return { badgeStatus: 'alarm', label: 'KOPTU-ALARM' };
-      if (valMask === STA_VAL_EMERGENCY) return { badgeStatus: 'critical', label: 'KOPTU-ACİL' };
+      if (valMask === STA_VAL_EMERGENCY) return { badgeStatus: 'lvl-acil', label: 'KOPTU-ACİL' };
       return { badgeStatus: 'koptu', label: 'KOPTU' };
     }
     if (val === 3 || val === 4) return { badgeStatus: 'normal', label: 'BAĞLI-NORMAL' };
     if (val === 5) return { badgeStatus: 'warning', label: 'BAĞLI-UYARI' };
     if (val === 6) return { badgeStatus: 'alarm', label: 'BAĞLI-ALARM' };
-    if (val === 7) return { badgeStatus: 'critical', label: 'BAĞLI-ACİL' };
+    if (val === 7) return { badgeStatus: 'lvl-acil', label: 'BAĞLI-ACİL' };
     return { badgeStatus: 'koptu', label: 'KOPTU' };
+  }
+
+  // Satırın noktalarındaki en kötü değer durumu (susturulmuş noktalar sayılmaz); yoksa null (rowAlarm)
+  function rowAlarm(ios) {
+    let worst = 0;
+    (ios || []).forEach(io => {
+      if (!io || io.sta === undefined || io.sta === null || io.sta === '') return;
+      const s = parseStaNumber(io.sta);
+      if ((s & STA_MUTED) === STA_MUTED) return;
+      const v = s & STA_MSK_VAL;
+      if (v > worst) worst = v;
+    });
+    if (worst === STA_VAL_EMERGENCY) return { badgeStatus: 'lvl-acil', label: 'ACİL' };
+    if (worst === STA_VAL_ALARM) return { badgeStatus: 'alarm', label: 'ALARM' };
+    if (worst === STA_VAL_WARNING) return { badgeStatus: 'warning', label: 'UYARI' };
+    return null;
+  }
+  // Sekmelerin noktaları, tabloları kuran parse*Rows filtreleriyle aynı (tabAlarms)
+  function tabAlarms(deviceIos) {
+    const ios = (deviceIos || []).filter(io => io && io.id && !io.id.includes('_NFO_'));
+    const lvl = list => { const a = rowAlarm(list); return a ? a.badgeStatus : null; };
+    return {
+      inlet: lvl(ios.filter(io => io.id.includes('_IN_') || /_IN\d*_/.test(io.id))),
+      outlet: lvl(ios.filter(io => io.id.includes('_OUT'))),
+      breaker: lvl(ios.filter(io => io.id.includes('_OCP') && !io.id.includes('_ONLVL')))
+    };
+  }
+  // Sekme sayı rozeti: alarm yoksa nötr; varsa durum rozetleriyle aynı renk (Acil mor)
+  function tabCountClass(level) {
+    switch (level) {
+      case 'lvl-acil': return 'bg-purple-600/15 text-purple-700 ring-1 ring-purple-400 dark:bg-purple-500/25 dark:text-purple-200 dark:ring-purple-400/70 font-bold';
+      case 'alarm': return 'bg-rose-500/15 text-rose-600 ring-1 ring-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/50 font-bold';
+      case 'warning': return 'bg-amber-500/15 text-amber-700 ring-1 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/50 font-bold';
+      default: return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300';
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -113,6 +151,8 @@
   // ---------------------------------------------------------------------------
   function badgeClass(s) {
     switch (s) {
+      case 'lvl-acil':
+        return 'bg-purple-600/15 text-purple-700 border-purple-400 dark:bg-purple-500/25 dark:text-purple-200 dark:border-purple-400/70';
       case 'alarm': case 'critical': case 'kritik': case 'acil': case 'emergency': case 'danger':
         return 'bg-rose-500/10 text-rose-600 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/50';
       case 'warning': case 'uyarı': case 'major': case 'minor':
@@ -133,6 +173,7 @@
   }
   function badgeDot(s) {
     switch (s) {
+      case 'lvl-acil': return 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]';
       case 'alarm': case 'critical': case 'kritik': case 'acil': case 'emergency': case 'danger': return 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]';
       case 'warning': case 'uyarı': case 'major': case 'minor': return 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]';
       case 'koptu': case 'kayıp': case 'lost': return 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]';
@@ -193,109 +234,60 @@
   // ---------------------------------------------------------------------------
   // Ağaç (loadSidebarCabinets)
   // ---------------------------------------------------------------------------
-  function parseDevLoc(devLoc) {
-    const fallbackFloor = 'KAT-1';
-    if (!devLoc) return { floor: fallbackFloor, room: '1.SALON', group: 'Diğer Kabinler' };
-    const segs = devLoc.split('/').map(s => s.trim()).filter(s => s && s !== '_');
-    if (!segs.length) return { floor: fallbackFloor, room: '1.SALON', group: 'Diğer Kabinler' };
-    const rawFloor = segs[0] || fallbackFloor;
-    let floorName = fallbackFloor;
-    const m1 = rawFloor.match(/^(\d+)\.\s*KAT$/i);
-    if (m1) floorName = 'KAT-' + m1[1];
-    else if (/^KAT[-\s]?\d+/i.test(rawFloor)) floorName = rawFloor.toUpperCase().replace(/\s+/, '-');
-    else floorName = rawFloor;
-    let roomName = '1.SALON';
-    if (segs.length > 1 && segs[1].toUpperCase().includes('SALON')) roomName = segs[1];
-    else { const r = segs.find(s => s.toUpperCase().includes('SALON')); if (r) roomName = r; }
-    let groupName = 'Diğer Kabinler';
-    if (segs.length > 2) groupName = segs[2];
-    else { const g = segs.find(s => s.toUpperCase().includes('POD') || s.toUpperCase().includes('NON')); if (g) groupName = g; }
-    return { floor: floorName, room: roomName, group: groupName };
-  }
-  function extractCabinetInfo(pduDeviceId) {
-    const clean = cleanCabinetRaw(pduDeviceId);
-    return { cabinetId: clean, cabinetName: clean.startsWith('K') && clean.length > 2 ? clean.substring(1) : clean };
-  }
   const naturalCompare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   const slug = s => s.toLowerCase().replace(/\s+/g, '-');
+  const P = DCIM.data.pduPage;
 
-  // Sunum eki: senaryodaki PDU olayları ağaçta durum göstergesiyle işaretlenir (LocationTreeNode.status)
-  const TREE_STATUS = {};
-  Object.keys(DCIM.data.pdu.scenario).forEach(k => {
-    const sc = DCIM.data.pdu.scenario[k];
-    const code = k.split('_')[0];
-    TREE_STATUS[code] = sc.sta === 'alarm' ? { status: 'ALARM', color: '#f43f5e' } : { status: 'UYARI', color: '#f59e0b' };
-  });
+  // Ağaçta kabinin grubu: POD; POD yoksa sıra; o da yoksa kabin kodunun sıra harfleri (treeGroup)
+  function treeGroup(c) {
+    const pod = String(c.pod || '').trim();
+    if (pod) return pod;
+    const row = (String(c.code || '').toUpperCase().match(/^\d*([A-Z]+)\d+$/) || [])[1] || '';
+    return row ? row + ' Sırası' : 'Diğer Kabinler';
+  }
 
+  // Kat (DCIM.data.floors sırasıyla) → POD / sıra → kabin. Salon katmanı yoktur (orijinalde CMR'de salon özniteliği yok).
   function loadSidebarCabinets() {
     state.isLoadingTree = true;
     renderTree();
     setTimeout(() => {
-      const parsedLoc = DCIM.data.pdu.devLocs();
-      const hierarchy = {};
+      const floorList = P.floors();
       const unique = new Set();
-      parsedLoc.forEach(item => {
-        if (!item || !item.id) return;
-        const loc = parseDevLoc(item.dev_loc);
-        const info = extractCabinetInfo(item.id);
-        const f = (hierarchy[loc.floor] = hierarchy[loc.floor] || {});
-        const r = (f[loc.room] = f[loc.room] || {});
-        const g = (r[loc.group] = r[loc.group] || {});
-        if (!g[info.cabinetId]) { g[info.cabinetId] = { cabinetId: info.cabinetId, cabinetName: info.cabinetName, pduDeviceIds: [] }; unique.add(info.cabinetId); }
-        g[info.cabinetId].pduDeviceIds.push(item.id.replace(/_DV$/, ''));
-      });
-      state.totalCabinetsCount = unique.size;
-
-      // Başlangıç kabini
       let activeCabId = resolveCabinetId();
       let activeCabName = '';
       if (activeCabId) {
-        const norm = id => id.replace(/^K/i, '').toUpperCase();
-        let found = false;
-        Object.keys(hierarchy).forEach(f => Object.keys(hierarchy[f]).forEach(r => Object.keys(hierarchy[f][r]).forEach(g => Object.keys(hierarchy[f][r][g]).forEach(c => {
-          if (!found && (c === activeCabId || norm(c) === norm(activeCabId))) { activeCabId = c; activeCabName = hierarchy[f][r][g][c].cabinetName; found = true; }
-        }))));
-        if (!found) { toast(activeCabId + ' için PDU kaydı bulunamadı; ilk kabin seçildi.', 'warning', T.title); activeCabId = ''; }
+        const c = P.findCab(activeCabId);
+        if (c) { activeCabId = c.code; activeCabName = c.code; }
+        else { toast(activeCabId + ' için PDU kaydı bulunamadı; ilk kabin seçildi.', 'warning', T.title); activeCabId = ''; }
       }
-
       let firstId = '';
-      let firstName = '';
-      const floorNodes = Object.keys(hierarchy).sort(naturalCompare).map(floorName => {
-        const roomsMap = hierarchy[floorName];
-        const roomNodes = Object.keys(roomsMap).sort(naturalCompare).map(roomName => {
-          const groupsMap = roomsMap[roomName];
-          const groupNodes = Object.keys(groupsMap).sort(naturalCompare).map(groupName => {
-            const cabinetsMap = groupsMap[groupName];
-            const leaves = Object.keys(cabinetsMap).sort((a, b) => naturalCompare(cabinetsMap[a].cabinetName, cabinetsMap[b].cabinetName)).map(cabId => {
-              const info = cabinetsMap[cabId];
-              if (!firstId) { firstId = info.cabinetId; firstName = info.cabinetName; }
-              const st = TREE_STATUS[info.cabinetName];
-              return {
-                id: info.cabinetId, name: info.cabinetName, type: 'cabinet',
-                selected: Boolean(activeCabId && (cabId === activeCabId || info.cabinetName === activeCabId)),
-                status: st ? st.status : '', statusColor: st ? st.color : ''
-              };
-            });
-            return { id: slug('group-' + floorName + '-' + roomName + '-' + groupName), name: groupName, type: 'pod', expanded: leaves.some(c => c.selected), children: leaves };
+      const floorNodes = floorList.filter(f => f.cabinets.length).map(f => {
+        const groups = {};
+        f.cabinets.forEach(c => { (groups[treeGroup(c)] = groups[treeGroup(c)] || []).push(c); unique.add(c.code); });
+        const groupNodes = Object.keys(groups).sort(naturalCompare).map(g => {
+          const leaves = groups[g].slice().sort((a, b) => naturalCompare(a.code, b.code)).map(c => {
+            if (!firstId) firstId = c.code;
+            return { id: c.code, name: c.code, type: 'cabinet', selected: c.code === activeCabId };
           });
-          return { id: slug('room-' + floorName + '-' + roomName), name: roomName, type: 'salon', expanded: groupNodes.some(g => g.expanded), children: groupNodes };
+          return { id: slug('group-' + f.id + '-' + g), name: g, type: 'pod', expanded: leaves.some(l => l.selected), children: leaves };
         });
-        return { id: slug('floor-' + floorName), name: floorName, type: 'floor', expanded: roomNodes.some(r => r.expanded), children: roomNodes };
+        return { id: slug('floor-' + f.id), name: f.label, type: 'floor', expanded: groupNodes.some(g => g.expanded), children: groupNodes };
       });
+      state.totalCabinetsCount = unique.size;
+      // Üst düğümler konum kaydından (içten dışa: veri merkezi, şehir, şirket)
       const root = {
-        id: 'company-turktelekom', name: 'TÜRKTELEKOM', type: 'company', expanded: true,
-        children: [{ id: 'city-ankara', name: 'ANKARA', type: 'city', expanded: true, children: [{ id: 'dc-main', name: 'VERİ MERKEZİ', type: 'dc', expanded: true, children: floorNodes }] }]
+        id: 'company-tt', name: 'Türk Telekom', type: 'company', expanded: true,
+        children: [{ id: 'city-ankara', name: 'Ankara', type: 'city', expanded: true, children: [{ id: 'dc-dca', name: 'DCA', type: 'dc', expanded: true, children: floorNodes }] }]
       };
       if (!activeCabId && firstId) {
         activeCabId = firstId;
-        activeCabName = firstName;
+        activeCabName = firstId;
         if (floorNodes[0]) {
           floorNodes[0].expanded = true;
-          const r0 = floorNodes[0].children && floorNodes[0].children[0];
-          if (r0) { r0.expanded = true; if (r0.children && r0.children[0]) r0.children[0].expanded = true; }
+          if (floorNodes[0].children && floorNodes[0].children[0]) floorNodes[0].children[0].expanded = true;
         }
       }
-      state.pduTreeNodes = [root];
+      state.pduTreeNodes = floorNodes.length ? [root] : [];
       state.isLoadingTree = false;
       if (activeCabId) selectCabinet(activeCabId, activeCabName, true);
       renderTree(true);
@@ -419,7 +411,7 @@
 
   function loadSelectedCabinetDetails(cabinetId, isPolling) {
     if (!cabinetId) { state.isLoadingDetails = false; renderMain(); return; }
-    const parsedDevs = DCIM.data.pdu.query(cabinetId, isPolling);
+    const parsedDevs = P.query(cabinetId, isPolling);
     if (!parsedDevs.length) {
       state.pdus = [];
       state.selectedPdu = null;
@@ -444,7 +436,19 @@
       const snmpVersion = hasVal(dev.pro_ver) ? String(dev.pro_ver) : '-';
       const conHost = dev.con_host || '-';
       const ios = extractIosFromDev(dev);
-      const comm = getCommStatus(dev.sta);
+      // Motor alarm bitlerini io @sta üzerinde yükseltir; susturulmamış io'ların en kötü değer biti cihaza taşınır
+      const devStaNum = parseStaNumber(dev.sta);
+      let effSta = devStaNum;
+      if ((devStaNum & STA_MUTED) !== STA_MUTED) {
+        let worstVal = devStaNum & STA_MSK_VAL;
+        ios.forEach(io => {
+          const s = parseStaNumber(io.sta);
+          if ((s & STA_MUTED) === STA_MUTED) return;
+          if ((s & STA_MSK_VAL) > worstVal) worstVal = s & STA_MSK_VAL;
+        });
+        effSta = (devStaNum & ~STA_MSK_VAL) | worstVal;
+      }
+      const comm = getCommStatus(effSta);
       const nfo = key => { const v = findVal(ios, io => io.id.includes(key)); return hasVal(v) ? v : ''; };
       const manuf = nfo('_NFO_PDUMANUF') || '-';
       const model = nfo('_NFO_PDUMODEL') || '-';
@@ -470,6 +474,7 @@
         rtdCurr: formatRtd('_RTD_CURR', 'A'),
         rtdVA: formatRtd('_RTD_VA', 'VA'),
         inletCount, outletCount, inletRows, outletRows, breakerRows,
+        tabAlarm: tabAlarms(ios),
         ios
       };
     });
@@ -561,6 +566,9 @@
       if (statusVal === '1') { status = 'ON'; badgeStatus = 'active'; }
       else if (statusVal === '0') { status = 'OFF'; badgeStatus = 'stopped'; }
       else if (hasVal(statusVal)) { status = String(statusVal); badgeStatus = 'info'; }
+      // Çıkışın noktalarında UYARI/ALARM/ACİL varsa ON/OFF yerine o gösterilir (2D kabin rengiyle aynı kaynak: io @sta)
+      const outletAlarm = rowAlarm(g);
+      if (outletAlarm) { status = outletAlarm.label; badgeStatus = outletAlarm.badgeStatus; }
       const pf = f('_PF');
       return {
         no: parseInt(num, 10),
@@ -594,7 +602,8 @@
       const current = currIo ? currIo.val : undefined;
       const statusIo = g.find(io => io.id.includes('_OCP_C' + n + '_STATUS') || (io.id.includes('_C' + n + '_') && io.id.includes('_STATUS'))) || g.find(io => io.id.includes('_STATUS'));
       const statusVal = statusIo ? statusIo.val : undefined;
-      const ratedIo = rated.find(io => io.id.includes('_RTD_OCP' + n + '_CURR') || io.id.includes('_RTD_OCP_C' + n + '_CURR') || io.id.includes('_OCP_C' + n + '_CURR')) ||
+      // Anma akımı RTD noktasıdır; kesicinin kendi akım noktası (_OCP_Cn_CURR) anma sayılmaz
+      const ratedIo = rated.find(io => io !== currIo && (io.id.includes('_RTD_OCP' + n + '_CURR') || io.id.includes('_RTD_OCP_C' + n + '_CURR'))) ||
         ios.find(io => io.id.includes('_RTD_CURR'));
       const ratedCurrent = ratedIo ? ratedIo.val : undefined;
       const cNum = parseFloat(String(current).replace(',', '.'));
@@ -605,6 +614,9 @@
       if (statusVal === '1') { status = 'ON'; badgeStatus = 'active'; }
       else if (statusVal === '0') { status = 'OFF'; badgeStatus = 'stopped'; }
       else if (currIo && currIo.sta) { const c = getCommStatus(currIo.sta); status = c.label; badgeStatus = c.badgeStatus; }
+      // OCP akımı 2D'de kabini renklendiren noktadır: alarmı ON/OFF'u ezer
+      const breakerAlarm = rowAlarm(currIo ? [currIo].concat(g) : g);
+      if (breakerAlarm) { status = breakerAlarm.label; badgeStatus = breakerAlarm.badgeStatus; }
       return {
         no: parseInt(n, 10),
         breaker: 'C' + n.padStart(2, '0'),
@@ -680,39 +692,31 @@
     '</div>';
   }
 
-  const NAV_BTN = 'px-2.5 py-1 text-xs font-semibold rounded-[2px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer';
-
   function headerSection(p) {
     const code = state.selectedCabinetName;
     const pills = state.pdus.length > 1
       ? '<div class="flex items-center gap-1.5 mt-2"><span class="text-[10px] font-bold text-slate-400">' + esc(T.unit) + ':</span>' +
           state.pdus.map(x => '<button type="button" data-pdu="' + esc(x.id) + '" class="px-2 py-0.5 text-[10px] rounded transition-colors cursor-pointer flex items-center gap-1 ' +
-            (p.id === x.id ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700') + '">' +
-            '<i class="pi pi-bolt text-[9px]"></i><span>' + esc(x.name || x.nfoName || x.id) + '</span>' +
-            (x.badgeStatus === 'alarm' || x.badgeStatus === 'critical' ? '<span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>' : x.badgeStatus === 'warning' ? '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>' : '') +
+            (p.id === x.id ? 'bg-brand-500 text-white font-bold shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700') + '">' +
+            '<i class="pi pi-bolt text-[9px] shrink-0"></i><span class="min-w-0">' + esc(x.name || x.nfoName || x.id) + '</span>' +
           '</button>').join('') +
         '</div>'
       : '';
     return '<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2px] p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">' +
       '<div class="flex items-center gap-2.5">' +
-        '<div class="w-9 h-9 rounded bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-xs"><i class="pi pi-bolt"></i></div>' +
+        '<div class="w-9 h-9 rounded bg-brand-500 text-white font-black flex items-center justify-center text-sm shadow-xs"><i class="pi pi-bolt"></i></div>' +
         '<div>' +
           '<div class="flex items-center gap-2">' +
             '<h1 class="text-sm font-extrabold text-slate-900 dark:text-slate-100">' + esc(p.name || p.nfoName || T.selectPdu) + '</h1>' +
-            '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">' + esc(T.cabinet) + ': ' + esc(code) + '</span>' +
+            '<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-500/30">' + esc(T.cabinet) + ': ' + esc(code) + '</span>' +
             badge(p.badgeStatus, p.status) +
           '</div>' +
           '<p class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">IP: ' + esc(p.ipAddr || '-') + ' | Cihaz: ' + esc(p.id) + '</p>' +
           pills +
         '</div>' +
       '</div>' +
-      '<div class="flex items-center gap-2 shrink-0">' +
-        // Sunum eki: kabin yönetimi ve dijital ikiz derin bağlantıları
-        '<a href="cabinet-detail.html?cabinet=' + encodeURIComponent(code) + '" class="' + NAV_BTN + '" title="' + esc(T.cabinetManager) + '"><i class="pi pi-th-large text-xs"></i><span>' + esc(T.goToCabinet) + '</span></a>' +
-        '<a href="2d.html?cabinet=' + encodeURIComponent(code) + '" class="' + NAV_BTN + '" title="Dijital İkiz (2D)"><i class="pi pi-map text-xs"></i><span>Dijital İkiz</span></a>' +
-        '<button type="button" data-pdf class="px-2.5 py-1 text-xs font-semibold rounded-[2px] bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 disabled:pointer-events-none" title="' + esc(T.downloadPdfTitle) + '">' +
-          '<i class="pi pi-file-pdf text-xs"></i><span>' + esc(T.downloadPdf) + '</span></button>' +
-      '</div>' +
+      // Rapor: seçili PDU tabloları (sekme başına kapsam); menü kalıcı düğümdür, her çizimde bu yuvaya taşınır
+      '<div class="flex items-center gap-2 shrink-0" data-report-slot></div>' +
     '</div>';
   }
 
@@ -751,10 +755,10 @@
   const TD_EMERALD = 'py-2.5 px-3 font-mono text-emerald-600 dark:text-emerald-400';
   const ROW_HOVER = 'hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors';
 
-  function tabButton(key, icon, label, count) {
+  function tabButton(key, icon, label, count, level) {
     return '<button type="button" data-tab="' + key + '" class="px-3.5 py-1.5 text-xs rounded transition-all cursor-pointer flex items-center gap-2 ' + (state.activeTab === key ? TAB_ON : TAB_OFF) + '">' +
       '<i class="' + icon + ' text-xs"></i><span>' + esc(label) + '</span>' +
-      (count > 0 ? '<span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">' + count + '</span>' : '') +
+      (count > 0 ? '<span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono ' + tabCountClass(level) + '">' + count + '</span>' : '') +
     '</button>';
   }
   const table = (head, body) => '<table class="w-full text-left text-xs border-collapse"><thead><tr class="' + THEAD_TR + '">' +
@@ -773,7 +777,7 @@
             '<td class="' + TD_MONO + '">' + esc(r.activeEnergy) + '</td><td class="' + TD_MONO + '">' + esc(r.frequency) + '</td></tr>').join(''))
         : noData(T.noInletData)) + '</div>';
     } else if (state.activeTab === 'outlet') {
-      const hosts = DCIM.data.pdu.outletAssets(state.selectedCabinetId, /_PDU_B$/.test(p.id) ? 'B' : 'A');
+      const hosts = P.outletAssets(state.selectedCabinetId, /_PDU_B$/.test(p.id) ? 'B' : 'A');
       content = '<div class="overflow-x-auto">' + (p.outletRows.length
         ? table([T.outlet, T.tCurrent, T.tVoltage, T.tPower, T.tApparentPower, T.tPowerFactor, T.tActiveEnergy, T.tStatus],
           p.outletRows.map(r => {
@@ -794,9 +798,9 @@
     }
     return '<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2px] shadow-xs overflow-hidden">' +
       '<div class="flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 p-2.5">' +
-        tabButton('inlet', 'pi pi-sign-in', T.inlet, p.inletRows.length) +
-        tabButton('outlet', 'pi pi-sign-out', T.outlet, p.outletRows.length) +
-        tabButton('breaker', 'pi pi-shield', T.circuitBreaker, p.breakerRows.length) +
+        tabButton('inlet', 'pi pi-sign-in', T.inlet, p.inletRows.length, p.tabAlarm && p.tabAlarm.inlet) +
+        tabButton('outlet', 'pi pi-sign-out', T.outlet, p.outletRows.length, p.tabAlarm && p.tabAlarm.outlet) +
+        tabButton('breaker', 'pi pi-shield', T.circuitBreaker, p.breakerRows.length, p.tabAlarm && p.tabAlarm.breaker) +
         '<span class="ml-auto hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-slate-500 dark:text-slate-400">' +
           '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Canlı · 5 sn · ' + esc(state.lastUpdate ? fmtTime(state.lastUpdate) : '--:--:--') +
         '</span>' +
@@ -862,8 +866,9 @@
     const alarms = DCIM.data.activeAlarms.filter(a => a.target === state.selectedCabinetName && (/_PDU_/.test(a.rid) ? a.rid.indexOf('_PDU_' + side) >= 0 : /_OCP_/.test(a.rid)));
     const alarmHtml = alarms.map(a => {
       const crit = a.level === 'alarm';
+      const acil = crit && a.severity === 'critical'; // Acil her yerde mor
       return '<a href="alarms.html" class="flex items-center gap-2 px-2.5 py-1.5 rounded-[2px] border text-[11px] font-semibold transition-colors ' +
-        (crit ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300 ' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 ') + '">' +
+        (acil ? 'bg-purple-500/10 border-purple-500/30 text-purple-700 dark:text-purple-300 ' : crit ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300 ' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 ') + '">' +
         '<i class="pi ' + (crit ? 'pi-exclamation-circle' : 'pi-exclamation-triangle') + ' text-xs"></i>' +
         '<span class="truncate">' + esc(a.txt) + '</span>' +
         '<span class="ml-auto shrink-0 font-mono text-[10px] opacity-80">' + esc(DCIM.ui.fmtDateTime(a.tim).slice(11, 16)) + '</span>' +
@@ -898,6 +903,8 @@
     if (!p) { mainEl.innerHTML = state.isLoadingTree ? '' : emptyPdu(); return; }
     const scroll = mainEl.scrollTop;
     mainEl.innerHTML = headerSection(p) + '<div class="space-y-3">' + identityCard(p) + tabsSection(p) + '</div>';
+    const slot = mainEl.querySelector('[data-report-slot]');
+    if (slot) slot.appendChild(reportHost);
     mainEl.scrollTop = scroll;
   }
 
@@ -910,7 +917,6 @@
     }
     const tab = e.target.closest('[data-tab]');
     if (tab) { state.activeTab = tab.getAttribute('data-tab'); renderMain(); syncUrl(); return; }
-    if (e.target.closest('[data-pdf]')) downloadPDF();
   });
 
   // Polling (interval(5000)) — canlı değerler
@@ -919,54 +925,77 @@
   }, 5000);
 
   // ---------------------------------------------------------------------------
-  // PDF raporu (jsPDF + autoTable düzeninin yazdırılabilir HTML karşılığı)
+  // Rapor (app-report-export-menu, options="limit" unit="satır") — seçili PDU'nun sekme tabloları
   // ---------------------------------------------------------------------------
-  function downloadPDF() {
+  const REPORT_SCOPES = [
+    { id: 'inlet', label: 'İnlet tablosu', hint: 'Giriş faz ve güç değerleri' },
+    { id: 'outlet', label: 'Outlet tablosu', hint: 'Çıkış soketleri' },
+    { id: 'breaker', label: 'Devre kesici tablosu' },
+    { id: 'all', label: 'Tüm tablolar', hint: 'İnlet, outlet ve devre kesici' }
+  ];
+  // Rapor satır tonu (statusTone): Acil mor, Alarm/KOPTU kırmızı, Uyarı sarı
+  const statusTone = b => (b === 'lvl-acil' ? 'acil' : b === 'alarm' || b === 'koptu' ? 'alarm' : b === 'warning' ? 'warning' : '');
+
+  function exportReport(req) {
     const p = state.selectedPdu;
     if (!p) { toast('Lütfen önce bir PDU seçiniz.', 'warning'); return; }
-    const user = DCIM.session.user();
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR');
-    const tbl = (title, head, rows, headColor) => '<h2>' + esc(title) + '</h2><table><thead><tr>' + head.map(h => '<th style="background:' + headColor + '">' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
-      rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
-    let sections = '';
-    if (p.inletRows.length) sections += tbl('1. Giriş (Inlet) Faz & Güç Değerleri', ['Faz / Hat', 'Akım (A)', 'Gerilim (V)', 'Güç (W)', 'Görünür Güç (VA)', 'Güç Faktörü', 'Enerji (Wh)', 'Frekans (Hz)'],
-      p.inletRows.map(r => [r.field, r.current, r.voltage, r.power, r.apparentPower, r.powerFactor, r.activeEnergy, r.frequency]), '#1f385f');
-    if (p.breakerRows.length) sections += tbl('2. Kesici (Breaker) Durumları', ['Kesici Adı', 'Anlık Akım (A)', 'Nominal Akım (A)', 'Kalan Akım (A)', 'Durum'],
-      p.breakerRows.map(b => [b.breaker, b.current, b.ratedCurrent, b.remainingCurrent, b.status]), '#334155');
-    if (p.outletRows.length) sections += tbl('3. Çıkış Soketleri (Outlets)', ['Soket', 'Akım (A)', 'Gerilim (V)', 'Güç (W)', 'Görünür Güç (VA)', 'Güç Faktörü', 'Enerji (Wh)', 'Durum'],
-      p.outletRows.map(o => [o.outlet, o.current, o.voltage, o.power, o.apparentPower, o.powerFactor, o.activeEnergy, o.status]), '#475569');
-    const logo = new URL('assets/img/akya.png', window.location.href).href;
-    const html = '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>PDU_' + esc(p.name) + '_Raporu</title><style>' +
-      '@page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Helvetica,Arial,sans-serif;color:#0f172a;margin:0;font-size:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-      '.bar{background:#1f385f;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:14px}.bar img{height:34px;background:#fff;border-radius:2px;padding:2px}' +
-      '.bar h1{font-size:15px;margin:0}.bar p{margin:3px 0 0;font-size:9px}' +
-      '.meta{margin:8px 0;border:1px solid #e2e8f0;background:#f8fafc;border-radius:2mm;padding:8px 10px;display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:3px 12px}' +
-      '.meta b{font-size:10.5px}.meta span{color:#475569}h2{font-size:11px;margin:14px 0 4px}table{width:100%;border-collapse:collapse;font-size:9px}' +
-      'th{color:#fff;text-align:left;padding:4px 6px;border:1px solid #cbd5e1}td{padding:3.5px 6px;border:1px solid #cbd5e1}tbody tr:nth-child(even) td{background:#f8fafc}' +
-      '.foot{margin-top:14px;text-align:center;color:#94a3b8;font-size:8px}</style></head><body>' +
-      '<div class="bar"><img src="' + esc(logo) + '" onerror="this.remove()"><div><h1>AKYA DCIM - PDU DETAY RAPORU</h1><p>Rapor Tarihi: ' + esc(dateStr) + ' | Oluşturan: ' + esc(user.fullname || 'Sistem Yöneticisi') + '</p></div></div>' +
-      '<div class="meta">' +
-        '<b>PDU: ' + esc(p.name) + '</b><span>Marka / Model: ' + esc(p.manuf) + ' / ' + esc(p.model) + '</span><span>Anma Gücü: ' + esc(p.rtdVA) + '</span>' +
-        '<b>Kabin: ' + esc(state.selectedCabinetName || '-') + '</b><span>Seri No: ' + esc(p.serNo) + '</span><span>Anma Gerilimi: ' + esc(p.rtdVolt) + '</span>' +
-        '<b>IP Adresi: ' + esc(p.ipAddr || '-') + '</b><span>Durum: ' + esc(p.status || 'Normal') + '</span><span>Anma Akımı: ' + esc(p.rtdCurr) + '</span>' +
-      '</div>' + sections +
-      '<div class="foot">AKYA DCIM Corporate Report Engine • ' + esc(dateStr) + '</div></body></html>';
-
-    const frame = document.createElement('iframe');
-    frame.setAttribute('aria-hidden', 'true');
-    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-    document.body.appendChild(frame);
-    const doc = frame.contentWindow.document;
-    doc.open();
-    doc.write(html);
-    doc.close();
-    toast('Yazdırma penceresinde "PDF olarak kaydet" seçin.', 'info', T.downloadPdf);
-    setTimeout(() => {
-      try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (err) { toast('Yazdırma başlatılamadı.', 'error', T.downloadPdf); }
-      setTimeout(() => frame.remove(), 1500);
-    }, 300);
+    const pduName = p.name || p.nfoName || p.id || 'PDU';
+    const want = scope => req.scope === 'all' || req.scope === scope;
+    const lim = rows => DCIM.report.applyLimit(rows, req);
+    const sections = [];
+    let total = 0;
+    if (want('inlet')) {
+      total += p.inletRows.length;
+      sections.push({
+        title: 'İnlet', toneKey: '_tone',
+        columns: [{ key: 'field', label: 'Alan' }, { key: 'current', label: 'Akım', align: 'right' }, { key: 'voltage', label: 'Voltaj', align: 'right' },
+          { key: 'power', label: 'Güç', align: 'right' }, { key: 'apparentPower', label: 'Görünen Güç', align: 'right' }, { key: 'powerFactor', label: 'Güç Faktörü', align: 'right' },
+          { key: 'activeEnergy', label: 'Aktif Enerji', align: 'right' }, { key: 'frequency', label: 'Frekans', align: 'right' }],
+        rows: lim(p.inletRows).map(r => Object.assign({ _tone: r.isTotal ? 'info' : '' }, r))
+      });
+    }
+    if (want('outlet')) {
+      total += p.outletRows.length;
+      sections.push({
+        title: 'Outlet', toneKey: '_tone',
+        columns: [{ key: 'outlet', label: 'Outlet' }, { key: 'current', label: 'Akım', align: 'right' }, { key: 'voltage', label: 'Voltaj', align: 'right' },
+          { key: 'power', label: 'Güç', align: 'right' }, { key: 'apparentPower', label: 'Görünen Güç', align: 'right' }, { key: 'powerFactor', label: 'Güç Faktörü', align: 'right' },
+          { key: 'activeEnergy', label: 'Aktif Enerji', align: 'right' }, { key: 'status', label: 'Durum' }],
+        rows: lim(p.outletRows).map(r => Object.assign({ _tone: statusTone(r.badgeStatus) }, r))
+      });
+    }
+    if (want('breaker')) {
+      total += p.breakerRows.length;
+      sections.push({
+        title: 'Devre Kesici', toneKey: '_tone',
+        columns: [{ key: 'breaker', label: 'Devre Kesici' }, { key: 'current', label: 'Akım', align: 'right' }, { key: 'ratedCurrent', label: 'Anma Akımı', align: 'right' },
+          { key: 'remainingCurrent', label: 'Kalan Akım', align: 'right' }, { key: 'status', label: 'Durum' }],
+        rows: lim(p.breakerRows).map(r => Object.assign({ _tone: statusTone(r.badgeStatus) }, r))
+      });
+    }
+    const scopeLabel = (REPORT_SCOPES.find(x => x.id === req.scope) || {}).label || '';
+    const shown = sections.reduce((n, sct) => n + sct.rows.length, 0);
+    DCIM.report.generate({
+      title: 'PDU Detay Raporu',
+      subtitle: pduName + ' · ' + scopeLabel + ' · ' + (shown < total ? 'ilk ' + shown + ' / ' + total : total) + ' satır · Kabin ' + (state.selectedCabinetName || '-'),
+      filename: ('PDU_' + pduName).replace(/[^\p{L}\p{N}_-]+/gu, '_'),
+      kpis: [
+        { label: 'Durum', value: p.status, tone: statusTone(p.badgeStatus) || 'normal' },
+        { label: 'Marka / model', value: [p.manuf, p.model].filter(v => v && v !== '-').join(' / ') || '-' },
+        { label: 'Seri no', value: p.serNo || '-' },
+        { label: 'SNMP', value: p.snmpVersion || '-' },
+        { label: 'Anma gerilimi', value: p.rtdVolt || '-' },
+        { label: 'Anma akımı', value: p.rtdCurr || '-' },
+        { label: 'Anma görünür gücü', value: p.rtdVA || '-' },
+        { label: 'İnlet / outlet', value: p.inletCount + ' / ' + p.outletCount }
+      ],
+      sections,
+      notes: ['Cihaz ' + p.id + ' · IP ' + (p.ipAddr || '-') + ' · anlık değerler, rapor anındaki okuma.']
+    }, req.format);
   }
+
+  const reportHost = document.createElement('div');
+  DCIM.report.menu(reportHost, { scopes: REPORT_SCOPES, options: 'limit', unit: 'satır', onExport: exportReport });
 
   // ---------------------------------------------------------------------------
   // Başlat

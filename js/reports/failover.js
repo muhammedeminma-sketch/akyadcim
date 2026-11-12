@@ -84,7 +84,7 @@
     { id: 'T01', label: '1. Kat' },
     { id: 'T02', label: '2. Kat' },
     { id: 'T03', label: '3. Kat' },
-    { id: 'T04', label: 'IDC4' }
+    { id: 'T04', label: 'DCB' }
   ];
   const PRESETS = [
     { value: 'custom', label: 'Özel Aralık Seç' },
@@ -99,8 +99,8 @@
   ];
   const INTERNAL = 'İç Müşteriler';
   const EXTERNAL = 'Dış Müşteriler';
-  // Sunum için hazır seçim: senaryo kabinleri (1AV42 PDU-B faz kaybı, 1CB52 yüksek akım) ve komşuları
-  const DEMO_CABINETS = ['1AV40', '1AV41', '1AV42', '1AV43', '1CB51', '1CB52', '1CB53'];
+  // Sunum için hazır seçim: senaryo kabinleri (1NA06 PDU-B faz kaybı, 1DL03 yüksek akım) ve komşuları
+  const DEMO_CABINETS = ['1NA09', '2EA07', '1NA06', '1NA07', '1DL04', '1DL03', '1DL05'];
 
   // ---------------------------------------------------------------------------
   // Şablon sınıfları (failover-report.component.html'den birebir)
@@ -569,7 +569,7 @@
         const dis = noData ? ' disabled' : '';
         let body = '';
         if (st.isPopupLoading) {
-          body = '<div class="py-16 flex flex-col items-center justify-center text-center">' +
+          body = '<div class="rpt-state">' +
             '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl mb-3"></i>' +
             '<p class="text-slate-700 dark:text-slate-200 text-sm font-medium mb-4">' + esc(T.loadingPreparing) + '</p>' +
             (st.chunkProgress ? '<div class="w-full max-w-md space-y-2">' +
@@ -589,27 +589,20 @@
         } else {
           body = kit.emptyState({ message: T.noData });
         }
-        const scroll = popupEl.querySelector('[data-popup-body]');
+        const scroll = popupEl.querySelector('[data-rpt-body]');
         const keepTop = scroll ? scroll.scrollTop : 0;
-        popupEl.innerHTML =
-          '<div class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 overflow-y-auto" data-popup-backdrop>' +
-            '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden my-auto">' +
-              '<div class="p-4 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-surface-panel/50">' +
-                '<div class="flex items-center gap-3">' +
-                  '<h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"><i class="pi pi-sliders-h text-sky-500 dark:text-sky-400"></i><span>' + esc(T.popupTitle) + '</span></h3>' +
-                  statusBadge('info', valueTypeLabel()) +
-                '</div>' +
-                '<div class="flex items-center gap-2">' +
-                  button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: T.pdfDownload, attrs: 'data-act="pdf"' + dis }) +
-                  button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: T.excelDownload, attrs: 'data-act="excel"' + dis }) +
-                  button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: T.zipDownload, attrs: 'data-act="zip"' + dis }) +
-                  '<button type="button" data-act="close" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-hover rounded-[2px] transition-colors"><i class="pi pi-times"></i></button>' +
-                '</div>' +
-              '</div>' +
-              '<div class="p-4 overflow-y-auto flex-1 space-y-6" data-popup-body>' + body + '</div>' +
-            '</div>' +
-          '</div>';
-        const nb = popupEl.querySelector('[data-popup-body]');
+        // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur); kayıt = kabin
+        const RM = DCIM.reportModal;
+        popupEl.innerHTML = RM.html({
+          title: T.popupTitle, subtitle: T.title, icon: 'pi pi-sliders-h', tone: 'sky', size: 'xl', z: 'z-[100000]',
+          attrs: 'data-popup-backdrop', bodyClass: 'min-h-[300px] p-4',
+          badge: statusBadge('info', valueTypeLabel()),
+          actions: !st.isPopupLoading && !noData ? RM.btn('pdf', 'pi pi-file-pdf', T.pdfDownload, 'data-act="pdf"' + dis) +
+            RM.btn('excel', 'pi pi-file-excel', T.excelDownload, 'data-act="excel"' + dis) +
+            RM.btn('zip', 'pi pi-folder', T.zipDownload, 'data-act="zip"' + dis) : '',
+          body
+        }).replace('data-rpt-close', 'data-rpt-close data-act="close"');
+        const nb = popupEl.querySelector('[data-rpt-body]');
         if (nb && st.isPopupLoading === false && keepTop) nb.scrollTop = keepTop;
       }
 

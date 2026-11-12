@@ -1,0 +1,6 @@
+/* Toplu yapılandırma ortak akışı (js/engineering/bulk-config.js): Tailwind sınıfları yeterli; önizleme penceresi tablosunda sabit başlık */
+body > .fixed.inset-0.z-50 thead.sticky { z-index: 1; }
+/* build-extra-css.js ondalıklı keyfi boyutları üretmiyor (text-[10.5px] / text-[9.5px]); mühendislik sayfaları için burada */
+.text-\[10\.5px\] { font-size: 10.5px; }
+.text-\[9\.5px\] { font-size: 9.5px; }
+.text-\[11\.5px\] { font-size: 11.5px; }

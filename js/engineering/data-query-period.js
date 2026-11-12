@@ -1,361 +1,280 @@
 /* ==========================================================================
-   DCIM Sunum — Veri Sorgulama Periyodu (NewUICMPDataQueryPeriodComponent)
+   DCIM Sunum — Veri Sorgulama Periyodu (NewUICMPDataQueryPeriodComponent, 4 Kas sonrası bulk-config akışı)
    Kaynak: new-ui/pages/engineering/data-query-period/data-query-period.component.{html,ts}
-   "2D ve Enerji Cihazlarının sorgu sıklığını ayarlama."
-   İki kart (2D Cihaz Ayarları / Enerji Cihazları Ayarları); her satır: etiket + mevcut sorgu aralığı,
-   özel açılır liste (8 aralık seçeneği) + "Güncelle". Güncelle → XDB_SetValue(bi/@evt_per) + #save,
-   1,5 sn aralıkla XDB_GetValue ile doğrulama → toast "{label} başarıyla güncellendi." → seçim sıfırlanır.
-   Veri: DCIM.data.dataQueryPeriod (js/mock/eng-data-query-period.data.js)
-
-   Sunum eki (kaynakta yok): satır başlığındaki "N cihaz" çipi, XPath filtresine giren cihazların
-   listesini (kimlik, açıklama, durum, periyot + arama) açar. Senaryo durumları DCIM.data ile aynıdır
-   (UPS B7 SNMP kaybı, UPS A5 akü modu, KLIMA 109, 1AV42 PDU-B, 1CE51 kilit haberleşme kaybı...).
+           + bulk-config/ (app-bulk-scope, app-bulk-plan, app-period-sampler)
+   Akış: 1 Kapsam (kat · cihaz grubu · bütün cihazlar / listeden seç) → 2 Yeni sorgu periyodu (grup tablosu, bugünkü
+   periyot dağılımı, yük ≈ blok ÷ periyot) → alttaki çubuk "Önizle ve uygula" → 3 önizleme penceresi (yazma planı,
+   düzey: Grubun tamamı / Cihaz bazında) → Uygula → canlı yazma, dosyaya yazma, geri okuyarak doğrulama.
+   3 · Doğrulama: örnek nokta — kapsamdan sağlıklı bir cihaz/nokta seçilir, okumalar ve aralıkları listelenir.
+   Veri: DCIM.data.bulkConfig (js/mock/eng-bulk-config.data.js) — kurgusal; yazmalar bellekte.
 
    Derin bağlantılar (engineering.html#data-query-period?...):
-     ?open=upsEnergy            → kapsam listesini açık getirir (virgülle birden çok: open=pdu,sensor)
-     ?q=B7                      → açık kapsam listelerinde arama
-     ?sel=upsEnergy:60          → satırda aralık önseçimi (anahtar:saniye)
-     ?sel=pdu:300&save=1        → önseçimi hemen kaydeder (yükleniyor durumu + toast)
-     ?menu=climate              → satırın açılır listesini açık getirir
-   Satır anahtarları (kaynaktaki dropdownStates): pdu, climate, climatePanel, sdp, sensor,
-   analyzer, rectifier, compensation, generator, upsEnergy
+     ?floor=T00,T02|DCB   ?group=pdu,sensor   ?mode=pick&pick=K1NA06_PDU_B_DV,K1DL03_PDU_B_DV
+     ?value=pdu:60,sensor:10   (yeni periyot önseçimi, saniye)   ?all=300 (kapsamdaki bütün gruplara)
+     ?step=preview             önizleme penceresini açar (değer yoksa sensör → 10 sn önseçilir)
+     ?step=apply               önizlemeyi açıp onaylar ve uygular (ilerleme + doğrulama)
+     ?sample=1                 doğrulama bölümünde rastgele örnek noktayı seçili açar
    ========================================================================== */
 (function () {
   'use strict';
 
   const DCIM = window.DCIM;
   DCIM.engRegistry = DCIM.engRegistry || {};
+  const esc = DCIM.ui.esc;
 
-  // messages.tr.json → dataQueryPeriod.*
-  const T = {
-    title: 'VERİ SORGULAMA PERİYODU',
-    engineering: 'Mühendislik',
-    back: 'Geri',
-    deviceSettings2D: '2D Cihaz Ayarları',
-    energyDeviceSettings: 'Enerji Cihazları Ayarları',
-    current: 'Mevcut sorgu aralığı',
-    secondsAbbrev: 'sn',
-    loadingNewValue: 'Yeni değer yükleniyor...',
-    selectFromList: 'Listeden seçiniz...',
-    update: 'Güncelle',
-    updatedSuccessfully: '{label} başarıyla güncellendi.'
+  const POINT = {
+    sensor: { name: 'Orta Sıcaklık', unit: '°C', base: 24 },
+    ups: { name: 'Çıkış Gerilimi (L1)', unit: 'V', base: 230 },
+    crac: { name: 'Dönüş Sıcaklığı', unit: '°C', base: 25 },
+    crac_panel: { name: 'L1 Akım', unit: 'A', base: 48 },
+    panel: { name: 'L1 Akım', unit: 'A', base: 112 },
+    meter: { name: 'Toplam Aktif Güç', unit: 'kW', base: 36 },
+    pdu: { name: 'Faz 1 Akım', unit: 'A', base: 9 },
+    pmm: { name: 'Devre Gücü', unit: 'kW', base: 4 }
   };
 
-  const INTERVALS = [
-    { value: 0, label: 'Anlık' },
-    { value: 5, label: '5 Saniye' },
-    { value: 10, label: '10 Saniye' },
-    { value: 30, label: '30 Saniye' },
-    { value: 60, label: '1 Dakika' },
-    { value: 300, label: '5 Dakika' },
-    { value: 3600, label: '1 Saat' },
-    { value: 86400, label: '1 Gün' }
-  ];
+  function mount(el, params) {
+    const B = DCIM.engBulk;
+    const M = DCIM.data.bulkConfig;
+    const grouped = B.groupDevices(M.devices(), B.QUERY_GROUPS);
+    let scope = B.scopeFromParams(params, grouped);
+    let values = {};
+    let rows = [];
+    let reportMenu = null;
+    let sampleTimer = null;
+    let sample = null;
 
-  // key: dropdownStates anahtarı · dev: loadingStates / deviceNames etiketi · title: satır başlığı
-  const ROWS_2D = [
-    { key: 'pdu', dev: 'PDU', title: 'PDU Sorgu Aralığı' },
-    { key: 'climate', dev: 'Klima', title: 'Klima Sorgu Aralığı' },
-    { key: 'climatePanel', dev: 'Klima Panosu', title: 'Klima Panosu Sorgu Aralığı' },
-    { key: 'sdp', dev: 'SDP', title: 'SDP Sorgu Aralığı' },
-    { key: 'sensor', dev: 'Sensör', title: 'Sensör Sorgu Aralığı' }
-  ];
-  const ROWS_ENERGY = [
-    { key: 'analyzer', dev: 'Enerji Analizörü', title: 'Enerji Analizörleri' },
-    { key: 'rectifier', dev: 'Redresör', title: 'Redresör Sorgu Aralığı' },
-    { key: 'compensation', dev: 'Kompanzasyon', title: 'Kompanzasyon Sorgu Aralığı' },
-    { key: 'generator', dev: 'Jeneratör', title: 'Jeneratör Sorgu Aralığı' },
-    { key: 'upsEnergy', dev: 'UPS', title: 'UPS Modülü Sorgu Aralığı' }
-  ];
-  const ROWS = ROWS_2D.concat(ROWS_ENERGY);
-  const ROW_BY_KEY = {};
-  ROWS.forEach(r => { ROW_BY_KEY[r.key] = r; });
+    (params.get('value') || '').split(',').forEach(p => { const [k, v] = p.split(':'); if (k && Number(v) > 0) values[k] = Number(v); });
 
-  // Kaynak şablondaki sınıflar
-  const SELECT_BTN_CLS = 'scada-input w-full flex items-center justify-between py-1 px-2.5 bg-slate-50 dark:bg-surface-panel border border-slate-200 dark:border-border-subtle rounded-[2px] text-[11px] text-slate-800 dark:text-slate-200 hover:border-slate-300 dark:hover:border-border-muted transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left font-medium';
-  const MENU_CLS = 'absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-lg py-0.5';
-  const OPT_CLS = 'px-2.5 py-1 text-[11px] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-surface-hover hover:text-slate-900 dark:hover:text-white cursor-pointer transition-colors';
+    el.innerHTML =
+      '<div class="p-4 pb-20 space-y-3 eng-dqp">' +
+        B.header('VERİ SORGULAMA PERİYODU', DCIM.ui.button({ variant: 'secondary', size: 'sm', icon: 'pi pi-refresh', label: 'Yenile', attrs: 'data-refresh' })) +
+        B.infoBox('Sorgu periyodu, cihazın sahadan ne sıklıkla okunacağıdır (<span class="font-mono">bi/@evt_per</span>). ' +
+          '<strong>1</strong> kapsamı seçin (kat, grup, istenirse tek tek cihaz), <strong>2</strong> yeni periyodu girin, ' +
+          '<strong>3</strong> önizlemeyi kontrol edip uygulayın: değer canlıda yazılır, XML dosyasına kaydedilir ve geri okunarak doğrulanır. ' +
+          'Kısa periyot bağlantının worker\'larına daha çok yük demektir (yük ≈ blok ÷ periyot).') +
+        '<div data-scope></div>' +
+        '<section data-values class="' + B.SEC_CLS + '"></section>' +
+        '<section data-sampler class="' + B.SEC_CLS + '"></section>' +
+        '<div data-bar></div>' +
+      '</div>';
 
-  const STATUS_LABEL = { normal: 'Normal', warning: 'Uyarı', alarm: 'Alarm', lost: 'Haberleşme Kaybı', info: 'Bilgi' };
-  const STATUS_RANK = { lost: 1, alarm: 2, warning: 3, info: 4, normal: 5 };
-  const POLL_MS = 1500;   // kaynaktaki checkUpdate aralığı
-  const LOAD_MS = 250;    // XDB_GetValue yanıt gecikmesi (ilk açılışta '...' görünür)
+    const deviceValue = d => B.distText(B.distribution(M.evt(d.key)), B.formatPeriod);
+    const scopeCmp = B.scope(el.querySelector('[data-scope]'), {
+      groups: B.QUERY_GROUPS, grouped, scope, valueTitle: 'Sorgu periyodu', valueFn: deviceValue,
+      onChange: s => { scope = s; recompute(); }
+    });
 
-  DCIM.engRegistry['data-query-period'] = {
-    mount(el, params) {
-      const { esc, button, buttonClasses, toast, statusBadge, fmtNum } = DCIM.ui;
-      const kit = DCIM.kit;
-      const Q = DCIM.data.dataQueryPeriod;
-
-      const state = {
-        current: {},     // *QueryInterval
-        selection: {},   // *Selection
-        loading: {},     // loadingStates (anahtar: satır key)
-        dropdown: null,  // dropdownStates — aynı anda tek açık
-        scope: {},       // sunum eki: açık kapsam listeleri
-        scopeQ: {}
-      };
-      const timers = [];
-      const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; };
-
-      // --- deep link ---
-      (params.get('open') || '').split(',').filter(k => ROW_BY_KEY[k]).forEach(k => { state.scope[k] = true; });
-      const q0 = params.get('q') || '';
-      Object.keys(state.scope).forEach(k => { state.scopeQ[k] = q0; });
-      const selParam = (params.get('sel') || '').split(':');
-      if (ROW_BY_KEY[selParam[0]] && INTERVALS.some(o => String(o.value) === selParam[1])) state.selection[selParam[0]] = Number(selParam[1]);
-      if (ROW_BY_KEY[params.get('menu')]) state.dropdown = params.get('menu');
-
-      const t = key => T[key];
-      function getIntervalLabel(value) {
-        if (value == null) return t('selectFromList');
-        const found = INTERVALS.find(x => x.value === value);
-        return found ? found.label : t('selectFromList');
-      }
-
-      // ------------------------------------------------------------------
-      // Sunum eki — kapsam çipi + cihaz listesi
-      // ------------------------------------------------------------------
-      function scopeChip(row) {
-        const devs = Q.devices(row.key);
-        const lost = devs.filter(d => d.status === 'lost').length;
-        const open = !!state.scope[row.key];
-        return '<button type="button" data-scope="' + row.key + '" title="Filtreye giren cihazlar" class="inline-flex items-center gap-1 px-1.5 py-px rounded-[2px] border text-[9px] font-bold transition-colors ' +
-          (open ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400' : 'border-slate-200 dark:border-border-subtle text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:border-sky-500/40') + '">' +
-          '<i class="pi pi-server text-[9px]"></i><span>' + fmtNum(devs.length, 0) + ' cihaz</span>' +
-          (lost ? '<span class="text-orange-600 dark:text-orange-400">· ' + lost + ' bağlantısız</span>' : '') +
-          '<i class="pi ' + (open ? 'pi-chevron-up' : 'pi-chevron-down') + ' text-[8px]"></i>' +
-        '</button>';
-      }
-
-      function scopeRows(row) {
-        const q = (state.scopeQ[row.key] || '').trim().toLocaleLowerCase('tr');
-        // Sorunlu cihazlar (bağlantısız → alarm → uyarı → bilgi) üstte, sonra kaynak sırası
-        const devs = Q.devices(row.key)
-          .map((d, i) => ({ d, i }))
-          .filter(x => !q || (x.d.id + ' ' + x.d.desc + ' ' + x.d.note).toLocaleLowerCase('tr').indexOf(q) >= 0)
-          .sort((a, b) => (STATUS_RANK[a.d.status] || 9) - (STATUS_RANK[b.d.status] || 9) || a.i - b.i)
-          .map(x => x.d);
-        if (!devs.length) return '<tr><td colspan="4" class="px-2 py-3 text-center text-slate-400">Eşleşen cihaz yok</td></tr>';
-        const loading = state.loading[row.key];
-        const cur = state.current[row.key];
-        return devs.map(d =>
-          '<tr class="border-t border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/70 dark:hover:bg-surface-hover">' +
-            '<td class="px-2 py-1 font-mono text-[10px] text-slate-600 dark:text-slate-400 whitespace-nowrap">' + esc(d.id) + '</td>' +
-            '<td class="px-2 py-1 text-slate-800 dark:text-slate-200"><span class="font-semibold">' + esc(d.desc) + '</span>' +
-              (d.note ? '<span class="block text-[10px] text-slate-500 dark:text-slate-400">' + esc(d.note) + '</span>' : '') + '</td>' +
-            '<td class="px-2 py-1 whitespace-nowrap">' + statusBadge(d.status, STATUS_LABEL[d.status]) + '</td>' +
-            '<td class="px-2 py-1 text-right whitespace-nowrap font-bold ' + (loading ? 'text-sky-500 animate-pulse' : 'text-slate-800 dark:text-slate-200') + '">' +
-              (loading ? '…' : (cur != null ? esc(cur) + ' ' + t('secondsAbbrev') : '...')) + '</td>' +
-          '</tr>'
-        ).join('');
-      }
-
-      function scopePanel(row) {
-        const g = Q.groups[row.key];
-        const devs = Q.devices(row.key);
-        const cnt = st => devs.filter(d => d.status === st).length;
-        const pill = (n, cls, label) => n ? '<span class="px-1.5 py-px rounded-[2px] text-[9px] font-bold border ' + cls + '">' + n + ' ' + label + '</span>' : '';
-        return '<div class="mt-2 border border-slate-200 dark:border-border-subtle rounded-[2px] bg-slate-50/60 dark:bg-surface-panel/60 animate-fade-in" data-scope-panel="' + row.key + '">' +
-          '<div class="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 border-b border-slate-200 dark:border-border-subtle">' +
-            '<div class="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">' +
-              '<i class="pi pi-sitemap text-[10px] text-sky-500"></i>' +
-              '<span>Doküman <strong class="text-slate-700 dark:text-slate-300">' + esc(g.doc) + '</strong></span>' +
-              '<span>·</span><span class="font-mono">dev/bi/@evt_per</span>' +
-              '<span>·</span><span>' + fmtNum(devs.length, 0) + ' cihaz</span>' +
-              pill(cnt('alarm'), 'border-rose-500/40 text-rose-600 dark:text-rose-400', 'alarm') +
-              pill(cnt('warning'), 'border-amber-500/40 text-amber-600 dark:text-amber-400', 'uyarı') +
-              pill(cnt('lost'), 'border-orange-500/40 text-orange-600 dark:text-orange-400', 'bağlantısız') +
-            '</div>' +
-            '<div class="relative">' +
-              '<i class="pi pi-search absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 pointer-events-none"></i>' +
-              '<input type="text" data-scope-q="' + row.key + '" value="' + esc(state.scopeQ[row.key] || '') + '" placeholder="Cihaz ara..." class="w-44 pl-5 pr-1.5 py-0.5 text-[10px] bg-white dark:bg-surface-base border border-slate-200 dark:border-border-subtle rounded-[2px] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-sky-500">' +
-            '</div>' +
-          '</div>' +
-          '<div class="max-h-56 overflow-y-auto">' +
-            '<table class="w-full text-[11px]">' +
-              '<thead class="sticky top-0 bg-slate-100 dark:bg-surface-panel text-[9px] uppercase tracking-wider text-slate-500 dark:text-slate-400">' +
-                '<tr><th class="px-2 py-1 text-left font-bold">Cihaz ID</th><th class="px-2 py-1 text-left font-bold">Açıklama</th>' +
-                '<th class="px-2 py-1 text-left font-bold">Durum</th><th class="px-2 py-1 text-right font-bold">Sorgu Periyodu</th></tr>' +
-              '</thead>' +
-              '<tbody data-scope-body="' + row.key + '">' + scopeRows(row) + '</tbody>' +
-            '</table>' +
-          '</div>' +
-        '</div>';
-      }
-
-      // ------------------------------------------------------------------
-      // Satır (kaynak şablondaki her "… Row" bloğu)
-      // ------------------------------------------------------------------
-      function updateButton(row) {
-        const loading = !!state.loading[row.key];
-        const disabled = state.selection[row.key] == null || loading;
-        return '<button type="button" data-save="' + row.key + '" class="' + buttonClasses('primary', 'sm', false) + '"' +
-          (disabled ? ' disabled aria-disabled="true"' : '') + (loading ? ' aria-busy="true"' : '') + '>' +
-          (loading ? '<i class="pi pi-spin pi-spinner text-current"></i>' : '') +
-          '<span class="truncate">' + esc(t('update')) + '</span></button>';
-      }
-
-      function rowInner(row) {
-        const k = row.key;
-        const loading = !!state.loading[k];
-        const cur = state.current[k];
-        return '<div class="flex flex-col md:flex-row md:items-center justify-between gap-1 mb-1.5 select-none">' +
-            '<div class="flex items-center gap-2 min-w-0">' +
-              '<span class="text-xs font-semibold text-slate-700 dark:text-slate-300">' + esc(row.title) + '</span>' +
-              scopeChip(row) +
-            '</div>' +
-            '<div class="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">' +
-              '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + (loading ? 'bg-sky-500 animate-pulse' : 'bg-emerald-500') + '"></span>' +
-              '<span>' + esc(t('current')) + ':</span>' +
-              (loading
-                ? '<strong class="text-sky-500 animate-pulse font-semibold">' + esc(t('loadingNewValue')) + '</strong>'
-                : '<strong class="text-slate-800 dark:text-slate-200">' + (cur != null ? esc(cur) : '...') + ' ' + esc(t('secondsAbbrev')) + '</strong>') +
-            '</div>' +
-          '</div>' +
-          '<div class="flex items-center gap-2">' +
-            '<div class="relative flex-1" data-stop>' +
-              '<button type="button" data-toggle="' + k + '" class="' + SELECT_BTN_CLS + '"' + (loading ? ' disabled' : '') + '>' +
-                '<span class="truncate">' + esc(getIntervalLabel(state.selection[k])) + '</span>' +
-                '<i class="pi pi-chevron-down text-[9px] text-slate-400 shrink-0 ml-1"></i>' +
-              '</button>' +
-              (state.dropdown === k
-                ? '<div class="' + MENU_CLS + '">' + INTERVALS.map(o => '<div class="' + OPT_CLS + '" data-opt="' + k + '" data-val="' + o.value + '">' + esc(o.label) + '</div>').join('') + '</div>'
-                : '') +
-            '</div>' +
-            updateButton(row) +
-          '</div>' +
-          (state.scope[k] ? scopePanel(row) : '');
-      }
-
-      function rowsHtml(rows) {
-        return rows.map((r, i) => {
-          const cls = i === 0 ? 'py-3 first:pt-0 last:pb-0' : i === rows.length - 1 ? 'py-3 last:pb-0' : 'py-3';
-          return '<div class="' + cls + '" data-row="' + r.key + '">' + rowInner(r) + '</div>';
-        }).join('');
-      }
-
-      el.innerHTML =
-        '<div class="p-4 eng-dqp" data-root>' +
-          kit.pageHeader({
-            title: T.title,
-            breadcrumbs: [{ label: T.engineering, href: 'engineering.html' }, { label: T.title }],
-            actions: button({ variant: 'secondary', icon: 'pi pi-chevron-left', label: T.back, attrs: 'data-act="back"' })
-          }) +
-          '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">' +
-            kit.card({ title: T.deviceSettings2D, icon: 'pi pi-th-large', body: '<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-800/60">' + rowsHtml(ROWS_2D) + '</div>' }) +
-            kit.card({ title: T.energyDeviceSettings, icon: 'pi pi-bolt', body: '<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-800/60">' + rowsHtml(ROWS_ENERGY) + '</div>' }) +
-          '</div>' +
-        '</div>';
-      const root = el.querySelector('[data-root]');
-
-      function paint(key) {
-        const rowEl = root.querySelector('[data-row="' + key + '"]');
-        if (rowEl) rowEl.innerHTML = rowInner(ROW_BY_KEY[key]);
-      }
-      function paintBody(key) {
-        const body = root.querySelector('[data-scope-body="' + key + '"]');
-        if (body) body.innerHTML = scopeRows(ROW_BY_KEY[key]);
-      }
-
-      // ------------------------------------------------------------------
-      // Kaynak TS mantığı
-      // ------------------------------------------------------------------
-      function toggleDropdown(key) {
-        const prev = state.dropdown;
-        state.dropdown = prev === key ? null : key;
-        if (prev && prev !== key) paint(prev);
-        paint(key);
-      }
-      function closeAllDropdowns() {
-        const prev = state.dropdown;
-        state.dropdown = null;
-        if (prev) paint(prev);
-      }
-      function selectInterval(key, value) {
-        state.selection[key] = value;
-        state.dropdown = null;
-        paint(key);
-      }
-
-      // loadDeviceCommon — XDB_GetValue(...[1]/bi[1]/@evt_per)
-      function loadCurrent(key) {
-        later(() => {
-          const val = parseInt(String(Q.get(key)).trim(), 10);
-          if (!isNaN(val)) { state.current[key] = val; paint(key); }
-        }, LOAD_MS);
-      }
-
-      // save*Intervals + saveDeviceCommon
-      function save(key) {
-        const row = ROW_BY_KEY[key];
-        const newValue = state.selection[key];
-        if (!newValue) return;   // kaynakla aynı: `if (!this.xSelection) return;` (0 = Anlık kaydedilmez)
-        state.loading[key] = true;
-        paint(key);
-        Q.set(key, newValue);    // XDB_SetValue(bi/@evt_per) + XDB_SetValue(#save, 1)
-        const checkUpdate = () => {
-          const currentXdbValue = Q.get(key);
-          if (currentXdbValue === newValue) {
-            state.loading[key] = false;
-            toast(T.updatedSuccessfully.replace('{label}', row.dev), 'success');
-            // afterSave: load*CurrentValue + selection = undefined
-            state.selection[key] = undefined;
-            paint(key);
-            loadCurrent(key);
-          } else {
-            later(checkUpdate, POLL_MS);
-          }
-        };
-        later(checkUpdate, POLL_MS);
-      }
-
-      // ------------------------------------------------------------------
-      // Olaylar
-      // ------------------------------------------------------------------
-      root.addEventListener('click', e => {
-        // (click)="closeAllDropdowns()" kökte; açılır liste kabı $event.stopPropagation()
-        if (!e.target.closest('[data-stop]')) closeAllDropdowns();
-
-        const opt = e.target.closest('[data-opt]');
-        if (opt) { selectInterval(opt.getAttribute('data-opt'), Number(opt.getAttribute('data-val'))); return; }
-        const tg = e.target.closest('[data-toggle]');
-        if (tg) { if (!tg.disabled) toggleDropdown(tg.getAttribute('data-toggle')); return; }
-        const sv = e.target.closest('[data-save]');
-        if (sv) { if (!sv.disabled) save(sv.getAttribute('data-save')); return; }
-        const sc = e.target.closest('[data-scope]');
-        if (sc) {
-          const k = sc.getAttribute('data-scope');
-          state.scope[k] = !state.scope[k];
-          paint(k);
-          return;
-        }
-        if (e.target.closest('[data-act="back"]')) {
-          // Kaynakta back EventEmitter'ı rota üzerinden dinlenmez; sunumda tarayıcı geçmişine döner
-          if (window.history.length > 1) window.history.back();
-        }
+    function recompute() {
+      const sel = B.selected(grouped, scope);
+      rows = [];
+      B.QUERY_GROUPS.forEach(g => {
+        const devs = sel.filter(x => x.group.key === g.key).map(x => x.device);
+        if (!devs.length) return;
+        const vals = devs.flatMap(d => M.evt(d.key));
+        rows.push({ group: g, devices: devs.length, blocks: vals.length, unknown: 0, dist: B.distribution(vals),
+          reqPerSec: vals.reduce((a, v) => a + (v > 0 ? 1 / v : 0), 0) });
       });
-      root.addEventListener('input', e => {
-        const inp = e.target.closest('[data-scope-q]');
-        if (!inp) return;
-        const k = inp.getAttribute('data-scope-q');
-        state.scopeQ[k] = inp.value;
-        paintBody(k);
-      });
-      // @HostListener('document:keydown.escape')
-      const onKey = e => { if (e.key === 'Escape') closeAllDropdowns(); };
-      document.addEventListener('keydown', onKey);
-
-      // ngOnInit
-      ROWS.forEach(r => loadCurrent(r.key));
-      if (params.get('save') === '1' && selParam[0] && ROW_BY_KEY[selParam[0]]) later(() => save(selParam[0]), LOAD_MS + 50);
-
-      return {
-        destroy() {
-          timers.forEach(clearTimeout);
-          document.removeEventListener('keydown', onKey);
-        }
-      };
+      if (params.get('all')) { const v = Number(params.get('all')); rows.forEach(r => { values[r.group.key] = v; }); params.delete('all'); }
+      renderValues();
+      renderBar();
     }
-  };
+
+    const total = () => rows.reduce((a, r) => a + r.reqPerSec, 0);
+    const newTotal = () => rows.reduce((a, r) => a + (values[r.group.key] ? r.blocks / values[r.group.key] : r.reqPerSec), 0);
+    const pending = () => rows.filter(r => values[r.group.key]);
+
+    function renderValues() {
+      const host = el.querySelector('[data-values]');
+      if (reportMenu) { reportMenu.destroy(); reportMenu = null; }
+      const opt = (v, cur) => '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + esc(B.formatPeriod(v)) + '</option>';
+      host.innerHTML =
+        '<div class="px-3 py-2 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2">' +
+          B.stepTitle(2, 'Yeni sorgu periyodu') +
+          '<div class="flex items-center gap-2 text-[11px]">' +
+            '<span class="text-slate-500 dark:text-slate-400">Hepsine aynı:</span>' +
+            '<select data-all class="py-1 px-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-[2px] text-[11px]"><option value="">seçin…</option>' + B.PERIOD_OPTIONS.map(v => opt(v, null)).join('') + '</select>' +
+            '<span class="text-slate-500 dark:text-slate-400 tabular-nums" title="Kapsamdaki grupların toplam sorgu yükü">Yük: <strong class="text-slate-800 dark:text-slate-100">' + B.fmt(total(), 1) + '</strong>' +
+              (pending().length ? ' → <strong class="' + (newTotal() > total() ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400') + '">' + B.fmt(newTotal(), 1) + '</strong>' : '') + ' istek/sn</span>' +
+            '<span data-report></span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="overflow-x-auto"><table class="w-full text-[11px] tabular-nums">' +
+          '<thead class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50"><tr>' +
+            '<th class="text-left font-semibold px-3 py-1.5 min-w-[160px]">Cihaz grubu</th><th class="text-right font-semibold px-2">Cihaz</th><th class="text-right font-semibold px-2">Blok</th>' +
+            '<th class="text-left font-semibold px-2 min-w-[200px]">Bugünkü periyot</th><th class="text-right font-semibold px-2">Yük (ist/sn)</th>' +
+            '<th class="text-left font-semibold px-2 min-w-[150px]">Yeni periyot</th><th class="text-right font-semibold px-3">Yeni yük</th>' +
+          '</tr></thead><tbody>' +
+          rows.map(r => {
+            const v = values[r.group.key];
+            const multi = r.dist.length > 1;
+            return '<tr class="border-t border-slate-100 dark:border-slate-800/70' + (v ? ' bg-sky-50/70 dark:bg-sky-950/20' : '') + '">' +
+              '<td class="px-3 py-2"><div class="flex items-center gap-2"><span class="w-6 h-6 shrink-0 rounded-[2px] bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center"><i class="' + r.group.icon + ' text-[11px]"></i></span>' +
+                '<span class="font-semibold text-slate-800 dark:text-slate-100 text-xs">' + esc(r.group.label) + '</span></div></td>' +
+              '<td class="px-2 text-right font-semibold">' + B.fmt(r.devices) + '</td>' +
+              '<td class="px-2 text-right">' + B.fmt(r.blocks) + '</td>' +
+              '<td class="px-2 py-2"><div class="flex flex-wrap gap-1">' + r.dist.map(d =>
+                '<span class="px-1.5 py-px rounded-[2px] border text-[10px] font-semibold whitespace-nowrap ' + (multi ? 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200') + '">' +
+                (d.value === null ? 'tanımsız' : B.formatPeriod(d.value)) + ' × ' + B.fmt(d.count) + '</span>').join('') + '</div></td>' +
+              '<td class="px-2 text-right">' + B.fmt(r.reqPerSec, 2) + '</td>' +
+              '<td class="px-2 py-2"><select data-val="' + r.group.key + '" class="w-full py-1 px-2 bg-white dark:bg-slate-900 border rounded-[2px] text-[11px] font-semibold ' + (v ? 'border-sky-500 text-sky-700 dark:text-sky-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300') + '">' +
+                '<option value="">değiştirme</option>' + B.PERIOD_OPTIONS.map(x => opt(x, v)).join('') + '</select></td>' +
+              '<td class="px-3 text-right whitespace-nowrap">' + (v ? '<span class="font-semibold ' + (r.blocks / v > r.reqPerSec ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400') + '">' + B.fmt(r.blocks / v, 2) + '</span>' : '<span class="text-slate-400">—</span>') + '</td>' +
+            '</tr>';
+          }).join('') +
+          (!rows.length ? '<tr><td colspan="7" class="px-3 py-4 text-center text-slate-400">Kapsamda cihaz yok.</td></tr>' : '') +
+          '</tbody></table></div>';
+      reportMenu = DCIM.report.menu(host.querySelector('[data-report]'), {
+        label: 'Rapor al', scopes: [{ id: 'list', label: 'Filtrelenmiş liste', hint: 'Ekrandaki kapsam seçimiyle' }],
+        options: 'limit', unit: 'grup', total: rows.length, defaultLimit: 50, disabled: !rows.length, onExport: exportReport
+      });
+    }
+
+    function exportReport(req) {
+      const list = DCIM.report.applyLimit(rows, req);
+      const devices = rows.reduce((a, r) => a + r.devices, 0);
+      DCIM.report.generate({
+        title: 'Veri Sorgulama Periyodu Raporu',
+        subtitle: 'Cihaz grupları · Mühendislik · ' + B.fmt(devices) + ' cihaz · sorgu periyodu (bi/@evt_per)',
+        filename: 'Veri_Sorgulama_Periyodu',
+        kpis: [{ label: 'Grup', value: rows.length }, { label: 'Cihaz', value: devices }, { label: 'Yük (istek/sn)', value: B.fmt(total(), 1) }]
+          .concat(pending().length ? [{ label: 'Yeni yük (istek/sn)', value: B.fmt(newTotal(), 1), tone: 'info' }] : []),
+        sections: [{
+          title: 'Cihaz grupları',
+          columns: [{ key: 'g', label: 'Cihaz grubu' }, { key: 'd', label: 'Cihaz', align: 'right' }, { key: 'b', label: 'Blok', align: 'right' },
+            { key: 'p', label: 'Bugünkü periyot' }, { key: 'y', label: 'Yük (ist/sn)', align: 'right' }, { key: 'n', label: 'Yeni periyot' }, { key: 'ny', label: 'Yeni yük', align: 'right' }, { key: 'tone', label: '' }],
+          toneKey: 'tone',
+          rows: list.map(r => ({ g: r.group.label, d: r.devices, b: r.blocks, p: r.dist.map(d => B.formatPeriod(d.value) + ' × ' + B.fmt(d.count)).join(', '),
+            y: B.fmt(r.reqPerSec, 2), n: values[r.group.key] ? B.formatPeriod(values[r.group.key]) : '', ny: values[r.group.key] ? B.fmt(r.blocks / values[r.group.key], 2) : '',
+            tone: r.dist.length > 1 ? 'warning' : '' }))
+        }],
+        notes: ['Yük ≈ blok ÷ periyot (istek/sn). "Yeni periyot" henüz uygulanmamış seçimi gösterir.']
+      }, req.format);
+    }
+
+    function renderBar() {
+      const p = pending();
+      B.pendingBar(el.querySelector('[data-bar]'), {
+        count: p.length, devices: p.reduce((a, r) => a + r.devices, 0), unit: 'grupta',
+        onClear: () => { values = {}; recompute(); },
+        onPreview: () => preview(false)
+      });
+    }
+
+    function preview(autoRun) {
+      const targets = B.resolveTargets(grouped, scope);
+      const before = t => B.distText(B.distribution(t.devices.flatMap(x => M.evt(x.key))), B.formatPeriod);
+      const ops = B.buildQueryOps(targets, values, before);
+      const warnings = [];
+      targets.forEach(t => {
+        if (!values[t.group.key]) return;
+        const d = B.distribution(t.devices.flatMap(x => M.evt(x.key)));
+        if (d.length > 1) warnings.push(t.doc + ' · ' + t.group.key + ': bloklar bugün farklı periyotlarda (' + B.distText(d, B.formatPeriod) + '); hepsi aynı değere çekilecek.');
+      });
+      B.plan({
+        title: 'Sorgu periyodu — önizleme', ops, warnings, autoRun,
+        onClosed: applied => { if (applied) values = {}; recompute(); scopeCmp.update({}); }
+      });
+    }
+
+    // ---- 3 · Doğrulama: örnek nokta (app-period-sampler)
+    const median = arr => { if (!arr.length) return null; const s = arr.slice().sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+    const timeText = iso => new Date(iso).toLocaleTimeString('tr-TR', { hour12: false });
+    const secText = s => s === null || s === undefined ? '—' : (Math.round(s * 10) / 10).toLocaleString('tr-TR') + ' sn';
+
+    function pickSample() {
+      const sel = B.selected(grouped, scope).filter(x => x.device.state === 'online')
+        .filter(x => B.distribution(M.evt(x.device.key)).length === 1);
+      if (!sel.length) { sample = null; renderSampler('Kapsamda haberleşmesi sağlıklı ve blokları tek periyotta olan cihaz yok.'); return; }
+      const x = sel[Math.floor(Math.random() * sel.length)];
+      const pt = POINT[x.device.deviceType] || POINT.sensor;
+      const period = M.evt(x.device.key)[0];
+      const prev = M.sampleSeries(x.device.id, period, 8).map(r => Object.assign(r, { val: (pt.base + (Number(r.val) - 24)).toFixed(1).replace('.', ',') }));
+      sample = { dev: x.device.id, devDesc: x.device.description, point: x.device.id + '_' + pt.name.toUpperCase().replace(/\W+/g, '_'), pointDesc: pt.name,
+        unit: pt.unit, periodSec: period, rows: prev.reverse(), base: pt.base, last: Date.now() };
+      startSampler();
+      renderSampler();
+    }
+
+    function startSampler() {
+      clearInterval(sampleTimer);
+      if (!sample || sample.periodSec > 60) return;
+      sampleTimer = setInterval(() => {
+        if (!sample) return;
+        const now = Date.now();
+        const gap = (now - sample.last) / 1000;
+        if (gap + 0.05 < sample.periodSec) return;
+        sample.last = now;
+        const prevVal = sample.rows.length ? Number(String(sample.rows[0].val).replace(',', '.')) : sample.base;
+        const val = (prevVal + (Math.random() - 0.5) * 0.4).toFixed(1).replace('.', ',');
+        sample.rows.unshift({ t: new Date(now).toISOString(), val, gapSec: gap });
+        if (sample.rows.length > 120) sample.rows.pop();
+        renderSampler();
+      }, 250);
+    }
+
+    function renderSampler(note) {
+      const host = el.querySelector('[data-sampler]');
+      const gaps = sample ? sample.rows.map(r => r.gapSec).filter(g => g !== null && g !== undefined) : [];
+      const med = median(gaps);
+      host.innerHTML =
+        '<div class="px-3 py-2 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2">' +
+          B.stepTitle(3, 'Doğrulama: örnek nokta' + (sample && sample.periodSec <= 60 ? ' <span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>canlı</span>' : ''), 'emerald') +
+          '<div class="flex items-center gap-2 text-[11px]">' +
+            '<button type="button" data-pick class="px-2.5 py-1 rounded-[2px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold cursor-pointer inline-flex items-center gap-1.5"><i class="pi pi-replay text-[10px]"></i>' + (sample ? 'Başka nokta seç' : 'Rastgele nokta seç') + '</button>' +
+            (sample ? '<button type="button" data-clear-rows class="px-2 py-1 rounded-[2px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer">Listeyi temizle</button>' : '') +
+          '</div>' +
+        '</div>' +
+        (note ? '<div class="px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">' + esc(note) + '</div>' : '') +
+        (!sample && !note ? '<div class="px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300 leading-snug">Kapsamdan haberleşmesi sağlıklı bir cihaz ve onun bir noktası rastgele seçilir. Cihaz her okunduğunda saat, değer ve bir önceki okumadan geçen süre aşağıya yazılır.</div>' : '') +
+        (sample ?
+          '<div class="px-3 py-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px] border-b border-slate-100 dark:border-slate-800/70">' +
+            '<div><div class="text-[10px] uppercase tracking-wide text-slate-400">Cihaz</div><div class="font-semibold text-slate-800 dark:text-slate-100 truncate" title="' + esc(sample.dev) + '">' + esc(sample.devDesc) + '</div></div>' +
+            '<div><div class="text-[10px] uppercase tracking-wide text-slate-400">Nokta</div><div class="font-semibold text-slate-800 dark:text-slate-100 truncate" title="' + esc(sample.point) + '">' + esc(sample.pointDesc) + '</div></div>' +
+            '<div><div class="text-[10px] uppercase tracking-wide text-slate-400">Sorgu periyodu</div><div class="font-semibold text-slate-800 dark:text-slate-100">' + B.formatPeriod(sample.periodSec) + '</div></div>' +
+            '<div><div class="text-[10px] uppercase tracking-wide text-slate-400">Ölçülen aralık (medyan)</div><div class="font-semibold tabular-nums ' + (med === null ? 'text-slate-400' : 'text-emerald-600 dark:text-emerald-400') + '">' + secText(med) + '<span class="text-slate-400 font-normal"> · ' + gaps.length + ' aralık</span></div></div>' +
+          '</div>' +
+          '<div class="max-h-72 overflow-y-auto"><table class="w-full text-[11px] tabular-nums">' +
+            '<thead class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 sticky top-0"><tr><th class="text-left font-semibold px-3 py-1.5">Okuma saati</th><th class="text-right font-semibold px-2">Değer</th><th class="text-right font-semibold px-3">Önceki ile arası</th></tr></thead><tbody>' +
+            sample.rows.map(r => '<tr class="border-t border-slate-100 dark:border-slate-800/70"><td class="px-3 py-1 font-mono">' + timeText(r.t) + '</td><td class="px-2 text-right font-mono">' + esc(r.val) + ' <span class="text-slate-400">' + esc(sample.unit) + '</span></td><td class="px-3 text-right font-mono">' + secText(r.gapSec) + '</td></tr>').join('') +
+            (!sample.rows.length ? '<tr><td colspan="3" class="px-3 py-3 text-center text-slate-400">İlk okuma bekleniyor…</td></tr>' : '') +
+          '</tbody></table></div>' : '');
+    }
+
+    el.addEventListener('change', e => {
+      const t = e.target;
+      if (t.hasAttribute('data-val')) { const v = Number(t.value); values[t.getAttribute('data-val')] = v > 0 ? v : undefined; recompute(); }
+      else if (t.hasAttribute('data-all')) { const v = Number(t.value); rows.forEach(r => { values[r.group.key] = v > 0 ? v : undefined; }); recompute(); }
+    });
+    el.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.hasAttribute('data-refresh')) { recompute(); scopeCmp.update({}); DCIM.ui.toast('Bugünkü değerler yeniden okundu.', 'info'); }
+      else if (b.hasAttribute('data-pick')) pickSample();
+      else if (b.hasAttribute('data-clear-rows') && sample) { sample.rows = []; sample.last = Date.now(); renderSampler(); }
+    });
+
+    recompute();
+    renderSampler();
+    if (params.get('sample') === '1') pickSample();
+    const step = params.get('step');
+    if (step === 'preview' || step === 'apply') {
+      if (!pending().length) {
+        const r = rows.find(x => x.group.key === 'sensor') || rows[0];
+        if (r) values[r.group.key] = 10;
+        recompute();
+      }
+      setTimeout(() => preview(step === 'apply'), 50);
+    }
+
+    return {
+      destroy() {
+        clearInterval(sampleTimer);
+        if (reportMenu) reportMenu.destroy();
+        document.querySelectorAll('body > .fixed.inset-0.z-50').forEach(n => n.remove());
+      }
+    };
+  }
+
+  DCIM.engRegistry['data-query-period'] = { mount };
 })();

@@ -2,28 +2,32 @@
    DCIM Sunum — Otonom Olaylar (NewUICMPEventsComponent)
    Kaynak: new-ui/pages/events/events.component.{html,ts}
            + components/event-sta-modal (EventStaModalComponent)
-           + common/pop-ups/report-pop-up/events-report-popup (EventsReportPopupComponent)
+           + app-report-export-menu (Kasım 2026: eski "Rapor" düğmesi + events-report-popup yerine;
+             kapsam "Filtrelenmiş liste", tarih aralığı seçimi; rapor ekrandaki süzgeçlerle tüm eşleşen olayları içerir)
    app-data-table davranışı alarms.js ile aynı kalıpta: arama, hızlı filtre (durum), kolon içi
-   filtreler (zaman aralığı, kayıt kodu, kaynak, kategori, detay, durum), sıralama, sayfalama,
-   seçim, kolon görünürlüğü. doc('CME/S00')/id('CME_List')/item sorgusu → DCIM.data.events.
+   filtreler (zaman aralığı, kayıt kodu, kaynak, kategori, detay, durum), sıralama, sayfalama
+   (varsayılan 50), seçim, kolon görünürlüğü. doc('CME/S00')/id('CME_List')/item sorgusu → DCIM.data.events.
+   Alttaki "Toplam N kayıt" süzülmüş sayıdır (orijinalde sayım sorgusu da aynı filtreyle yapılır).
+   Mobil (lg altı): satırlar kart olur (zaman başlık, kaynak alt başlık, detay, durum rozeti; durum değiştirme yok),
+   Filtre düğmesi tablo başlığına geçer ve süzgeçler kartların üstünde açılır.
    Sunum ekleri (kaynakta yok): Şiddet kolonu (Bilgi/Uyarı/Kritik), kaynak grubu seçici,
-   CSV indirme düğmesi, canlı olay akışı (4-8 sn'de bir yeni olay) + duraklat/sürdür.
+   canlı olay akışı (4-8 sn'de bir yeni olay) + duraklat/sürdür.
 
    Derin bağlantılar:
-     ?q=1AZ39            genel log araması
+     ?q=1DA03            genel log araması
      ?src=ups            kaynak grubu (locks | ups | climate | pdu | sensor | user | system)
      ?sev=critical       şiddet filtresi (info | warning | critical)
      ?sta=yeni           hızlı durum filtresi (yeni | bekliyor | isliyor | tamamlandi)
      ?filters=1          kolon içi filtre satırını (tarih aralığı vb.) açık başlat
      ?open=CME_018205    ilgili olayın durum güncelleme penceresini aç (?open=first → ilk satır)
-     ?report=1           olay raporu penceresini aç
+     ?report=1           rapor menüsünü (Rapor al) açık başlat
      ?live=0             canlı akışı kapalı başlat (ekran görüntüsü için)
    ========================================================================== */
 (function () {
   'use strict';
 
   const DCIM = window.DCIM;
-  const { esc, fmtDateTime, fmtDateKey, statusBadge, button, toast } = DCIM.ui;
+  const { esc, fmtDateTime, statusBadge, button, toast } = DCIM.ui;
   const kit = DCIM.kit;
   DCIM.shell.init({ active: 'events' });
 
@@ -94,7 +98,7 @@
     sortField: 'createdTime',
     sortOrder: -1,
     page: 1,
-    pageSize: 15,
+    pageSize: 50,
     showFilters: params.get('filters') === '1',
     selected: new Set(),
     hiddenCols: {},
@@ -161,19 +165,50 @@
   // ---------------------------------------------------------------------------
   // Sayfa başlığı (app-page-header)
   // ---------------------------------------------------------------------------
+  // Filtre düğmesi masaüstünde başlıkta; mobilde tablo başlığında (Ara / Filtre / Yenile)
+  let reportMenu = null;
   function renderHeader() {
     const host = document.getElementById('ev-header');
     host.innerHTML = kit.pageHeader({
       title: 'OTONOM OLAYLAR',
       breadcrumbs: [{ label: 'Alarmlar-Noktalar' }, { label: 'Otonom Olaylar' }],
-      actions: '<div class="flex items-center gap-2">' +
-        button({ variant: state.showFilters ? 'primary' : 'secondary', icon: 'pi pi-filter', label: 'Filtre', attrs: 'data-act="filter" title="Filtreyi Aç/Kapat"' }) +
-        button({ variant: 'secondary', icon: 'pi pi-file', label: 'Rapor', attrs: 'data-act="report"' }) +
+      actions: '<div class="flex items-center gap-2 max-lg:w-full">' +
+        '<span data-filter-slot class="max-lg:hidden"></span>' +
+        '<div data-report-menu></div>' +
         '</div>'
     });
-    host.querySelector('[data-act="filter"]').onclick = () => { state.showFilters = !state.showFilters; renderHeader(); renderHead(); };
-    host.querySelector('[data-act="report"]').onclick = openReportPopup;
+    renderFilterButton();
+    // app-report-export-menu [scopes]="reportScopes" options="dateRange"
+    reportMenu = DCIM.report.menu(host.querySelector('[data-report-menu]'), {
+      scopes: [{ id: 'list', label: 'Filtrelenmiş liste', hint: 'Ekrandaki arama ve filtrelerle' }],
+      options: 'dateRange',
+      unit: 'olay',
+      onExport: exportReport
+    });
   }
+  function renderFilterButton() {
+    const slot = document.querySelector('#ev-header [data-filter-slot]');
+    slot.innerHTML = button({ variant: state.showFilters ? 'primary' : 'secondary', icon: 'pi pi-filter', label: 'Filtre', attrs: 'data-act="filter" title="Filtreyi Aç/Kapat"' });
+    slot.querySelector('[data-act="filter"]').onclick = toggleFilters;
+  }
+  function toggleFilters() {
+    state.showFilters = !state.showFilters;
+    renderFilterButton();
+    renderMobileFilterBtn();
+    renderHead();
+  }
+
+  // Mobil kart sütunları (eventColumns → mobile: hide | primary | meta | sub | secondary | badge)
+  const CARD_COLS = [
+    { field: 'createdTime', header: 'Olay Zamanı', mobile: 'primary', card: e => '<span class="font-mono">' + fmtDateTime(e.tim) + '</span>' },
+    { field: 'status', header: 'Durum', mobile: 'badge', card: e => badge(badgeLevel(getClassNo(e.sta)), getStaText(e.sta)) },
+    { field: 'source', header: 'Kaynak', mobile: 'sub', mobileIcon: 'pi-bolt', card: e => esc(e.src) },
+    { field: 'detail', header: 'Detay', mobile: 'secondary', card: e => esc(e.txt) },
+    { field: 'rid', header: 'Kayıt Kodu', mobile: 'meta', card: e => '<span class="font-mono">' + esc(e.id) + '</span>' },
+    { field: 'cat', header: 'Kategori', mobile: 'meta', card: e => esc(e.cat) },
+    { field: 'severity', header: 'Şiddet', mobile: 'meta', card: e => esc((SEV[e.sev] || SEV.info).label) },
+    { field: 'path', header: 'Kaynak Yolu', mobile: 'extra', mobileBlock: true, card: e => '<span class="font-mono text-[10.5px] break-all">' + esc(e.doc + (e.ref ? '/' + e.ref : '')) + '</span>' }
+  ];
 
   // ---------------------------------------------------------------------------
   // Tablo (app-data-table)
@@ -240,36 +275,38 @@
     const srcOpts = '<option value="">Tüm Kaynaklar</option>' + Object.keys(EV.SOURCES).map(k =>
       '<option value="' + k + '"' + (state.src === k ? ' selected' : '') + '>' + esc(EV.SOURCES[k].label) + '</option>').join('');
     host.innerHTML =
-      '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0">' +
-        '<div class="flex flex-wrap items-center gap-2">' +
-          '<div class="relative w-60 sm:w-72">' +
+      '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0 max-lg:flex-col max-lg:items-stretch max-lg:gap-2">' +
+        '<div class="flex flex-wrap items-center gap-2 max-lg:w-full max-lg:flex-col max-lg:items-stretch">' +
+          '<div class="relative w-60 sm:w-72 max-lg:w-full">' +
             '<i class="pi pi-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>' +
-            '<input type="text" data-search placeholder="Ara" value="' + esc(state.search) + '" class="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
+            '<input type="text" data-search placeholder="Ara" value="' + esc(state.search) + '" class="w-full pl-8 pr-3 py-1 max-lg:py-2.5 text-xs max-lg:text-sm bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
           '</div>' +
-          '<div class="flex items-center gap-1" data-quick>' +
+          '<div class="flex items-center gap-1 max-lg:max-w-full max-lg:overflow-x-auto max-lg:pb-0.5" data-quick>' +
             QUICK.map(q => '<button type="button" data-q="' + q.value + '" class="px-2 py-1 text-[11px] rounded-[2px] border transition-all cursor-pointer">' + esc(q.label) + '</button>').join('') +
           '</div>' +
         '</div>' +
-        '<div class="flex items-center gap-1.5 shrink-0">' +
-          '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0" title="Online"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Online</span></span>' +
+        '<div class="flex items-center gap-1.5 shrink-0 max-lg:w-full max-lg:flex-wrap">' +
+          '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0 max-lg:hidden" title="Online"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Online</span></span>' +
           '<div data-bulk class="hidden px-2 py-1 bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 rounded-[2px] text-[11px] font-bold flex items-center gap-1.5"></div>' +
-          // [table-actions] yuvası — sunum ekleri: kaynak seçici, canlı akış, CSV
-          '<select data-src title="Kaynak filtresi" class="px-2 py-1 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer">' + srcOpts + '</select>' +
+          // [table-actions] yuvası — sunum ekleri: kaynak seçici, canlı akış
+          '<select data-src title="Kaynak filtresi" class="px-2 py-1 max-lg:py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer max-lg:flex-1">' + srcOpts + '</select>' +
           '<button type="button" data-live class="px-2.5 py-1 text-xs font-semibold border rounded-[2px] flex items-center gap-1.5 transition-all cursor-pointer"></button>' +
-          '<button type="button" data-csv title="Filtrelenmiş olayları CSV olarak indir" class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 cursor-pointer"><i class="pi pi-download text-xs"></i><span>CSV</span></button>' +
-          '<div class="relative">' +
+          '<button type="button" data-mfilter title="Filtre" class="lg:hidden px-2.5 py-1.5 text-xs rounded-[2px] border flex items-center gap-1 transition-all cursor-pointer"></button>' +
+          '<div class="relative max-lg:hidden">' +
             '<button type="button" data-colmenu class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 cursor-pointer"><i class="pi pi-sliders-h text-xs"></i><span>Kolonlar</span></button>' +
             '<div data-colmenu-panel class="hidden absolute right-0 mt-1 w-44 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-xl z-50 p-2 text-xs space-y-1"></div>' +
           '</div>' +
           '<button type="button" data-refresh class="p-1.5 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] transition-colors cursor-pointer" title="Yenile"><i class="pi pi-refresh text-xs"></i></button>' +
         '</div>' +
       '</div>' +
-      '<div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto w-full custom-scrollbar" data-scroll>' +
+      '<div data-mfilters class="hidden lg:hidden shrink-0 max-h-[42vh] overflow-y-auto p-2 grid grid-cols-1 gap-1.5 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-[#0b121e]"></div>' +
+      '<div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto w-full custom-scrollbar max-lg:hidden" data-scroll>' +
         '<table class="scada-table w-full text-left border-collapse text-xs">' +
           '<thead class="sticky top-0 z-10 shadow-2xs" data-thead></thead>' +
           '<tbody class="divide-y divide-slate-100 dark:divide-border-subtle text-xs text-slate-800 dark:text-slate-200" data-tbody></tbody>' +
         '</table>' +
       '</div>' +
+      '<div data-cards class="' + kit.CARDS_WRAP_CLS + '"></div>' +
       '<div class="py-2 px-3 border-t border-slate-200 dark:border-[#1b263b] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-slate-50 dark:bg-[#0b121e] shrink-0" data-footer></div>';
 
     let searchTimer = null;
@@ -280,7 +317,7 @@
     host.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { state.quick = b.getAttribute('data-q'); state.page = 1; renderQuick(); renderBody(); }));
     $('[data-src]').addEventListener('change', e => { state.src = e.target.value; state.page = 1; renderBody(); });
     $('[data-live]').addEventListener('click', () => { state.live = !state.live; renderLive(); scheduleLive(); });
-    $('[data-csv]').addEventListener('click', () => exportCsv(lastFiltered, 'otonom_olaylar_' + fmtDateKey(new Date())));
+    $('[data-mfilter]').addEventListener('click', toggleFilters);
     const colBtn = $('[data-colmenu]');
     const colPanel = $('[data-colmenu-panel]');
     colBtn.addEventListener('click', e => { e.stopPropagation(); colPanel.classList.toggle('hidden'); renderColMenu(); });
@@ -309,9 +346,16 @@
   function renderQuick() {
     document.querySelectorAll('#ev-table [data-q]').forEach(b => {
       const on = b.getAttribute('data-q') === state.quick;
-      b.className = 'px-2 py-1 text-[11px] rounded-[2px] border transition-all cursor-pointer ' +
+      b.className = 'px-2 py-1 max-lg:px-3 max-lg:py-1.5 max-lg:whitespace-nowrap max-lg:shrink-0 text-[11px] rounded-[2px] border transition-all cursor-pointer ' +
         (on ? 'bg-sky-600 text-white font-bold border-sky-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700');
     });
+  }
+
+  function renderMobileFilterBtn() {
+    const b = $('[data-mfilter]');
+    b.className = 'lg:hidden px-2.5 py-1.5 text-xs rounded-[2px] border flex items-center gap-1 transition-all cursor-pointer ' +
+      (state.showFilters ? 'bg-sky-600 text-white font-bold border-sky-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700');
+    b.innerHTML = '<i class="pi pi-filter text-xs"></i><span>Filtre</span>';
   }
 
   function renderLive() {
@@ -360,6 +404,22 @@
         '</tr>';
     }
     thead.innerHTML = html;
+
+    // Mobil süzgeç paneli (kartların üstünde; aynı kolon filtreleri, etiketli)
+    const mf = $('[data-mfilters]');
+    mf.classList.toggle('hidden', !state.showFilters);
+    mf.innerHTML = state.showFilters
+      ? COLUMNS.filter(c => c.filterable !== false).map(c =>
+          '<label class="flex flex-col gap-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">' + esc(c.header) + filterCell(c) + '</label>').join('') +
+        '<button type="button" data-clear-filters class="h-9 rounded-[3px] border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5 cursor-pointer"><i class="pi pi-filter-slash text-xs"></i>Temizle</button>'
+      : '';
+    mf.querySelectorAll('[data-f]').forEach(inp => {
+      inp.classList.add('max-lg:h-10', 'max-lg:px-2.5', 'max-lg:text-base', 'max-lg:font-medium', 'max-lg:rounded-[3px]');
+      const ev = inp.tagName === 'SELECT' || inp.type === 'datetime-local' ? 'change' : 'input';
+      inp.addEventListener(ev, () => { state.filters[inp.getAttribute('data-f')] = inp.value; state.page = 1; renderBody(); });
+    });
+    const mclr = mf.querySelector('[data-clear-filters]');
+    if (mclr) mclr.addEventListener('click', clearFilters);
 
     thead.querySelectorAll('[data-sort]').forEach(th => th.addEventListener('click', () => {
       const f = th.getAttribute('data-sort');
@@ -424,16 +484,24 @@
           '</tr>';
       }).join('');
     }
+    // Mobil kartlar (lg altı); durum yalnız rozet — mobilde durum değiştirme yok
+    $('[data-cards]').innerHTML = kit.dataCards(rows, CARD_COLS, {
+      start: (state.page - 1) * state.pageSize,
+      empty: 'Gösterilecek olay bulunamadı.',
+      rowAttrs: e => 'data-card="' + esc(e.id) + '"',
+      cardCls: e => (fresh.has(e.id) ? 'ev-new-row' + (e.sev === 'critical' ? ' ev-critical' : '') : '')
+    });
+
     const checkAll = $('[data-check-all]');
     if (checkAll) checkAll.checked = rows.length > 0 && rows.every(x => state.selected.has(x.id));
 
     const bulk = $('[data-bulk]');
     if (state.selected.size > 0) {
       bulk.classList.remove('hidden');
-      bulk.innerHTML = '<span>' + state.selected.size + ' seçili</span><button type="button" data-bulk-act class="underline hover:text-sky-800 dark:hover:text-sky-300">İşlemler</button>';
+      bulk.innerHTML = '<span>' + state.selected.size + ' seçili</span><button type="button" data-bulk-act class="underline hover:text-sky-800 dark:hover:text-sky-300" title="Seçili olayları Excel\'e aktar">İşlemler</button>';
       bulk.querySelector('[data-bulk-act]').onclick = () => {
-        const sel = LIST.filter(x => state.selected.has(x.id));
-        exportCsv(sel, 'otonom_olaylar_secili_' + fmtDateKey(new Date()));
+        const sel = lastFiltered.filter(x => state.selected.has(x.id));
+        DCIM.report.generate(buildReport(sel, null, 'Seçili olaylar (' + sel.length + ')'), 'xlsx');
       };
     } else {
       bulk.classList.add('hidden');
@@ -442,7 +510,7 @@
     const footer = $('[data-footer]');
     footer.innerHTML =
       '<div class="text-slate-500 dark:text-slate-400 font-medium">Toplam <span class="font-bold text-slate-900 dark:text-slate-100">' + lastFiltered.length + '</span> kayıt listeleniyor.</div>' +
-      '<div class="flex items-center gap-3 self-end sm:self-auto">' +
+      '<div class="flex items-center gap-3 self-end sm:self-auto max-lg:w-full max-lg:justify-between">' +
         '<div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"><span>Sayfa Başına:</span>' +
           '<select data-pagesize class="bg-white dark:bg-[#080c14] border border-slate-200 dark:border-slate-700 rounded-[2px] px-2 py-0.5 text-slate-800 dark:text-slate-200 text-xs font-bold">' +
           [5, 10, 15, 20, 50, 100].map(n => '<option value="' + n + '"' + (n === state.pageSize ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>' +
@@ -457,25 +525,8 @@
       state.page += parseInt(b.getAttribute('data-page'), 10);
       renderBody();
       $('[data-scroll]').scrollTop = 0;
+      $('[data-cards]').scrollTop = 0;
     }));
-  }
-
-  // ---------------------------------------------------------------------------
-  // CSV (DCIM.kit.exportExcel — ';' ayraçlı, Türkçe Excel uyumlu)
-  // ---------------------------------------------------------------------------
-  function exportCsv(rows, name) {
-    if (!rows.length) { toast('Excel oluşturmak için veri bulunmamaktadır.', 'warning', 'Excel'); return; }
-    kit.exportExcel(name, [
-      { header: 'Sıra No', value: r => rows.indexOf(r) + 1 },
-      { header: 'Olay Zamanı', value: r => fmtDateTime(r.tim) },
-      { header: 'Şiddet', value: r => SEV[r.sev].label },
-      { header: 'Kayıt Kodu', value: r => r.id },
-      { header: 'Kaynak', value: r => r.src },
-      { header: 'Kaynak Yolu', value: r => r.doc + (r.ref ? '/' + r.ref : '') },
-      { header: 'Kategori', value: r => r.cat },
-      { header: 'Detay', value: r => r.txt },
-      { header: 'Durum', value: r => getStaText(r.sta) }
-    ], rows);
   }
 
   // ---------------------------------------------------------------------------
@@ -623,115 +674,78 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Olay Raporu Oluştur (EventsReportPopupComponent)
+  // Rapor (app-report-export-menu → exportReport / buildReport)
+  // Ekrandaki süzgeçler (arama, kolon süzgeçleri, hızlı durum, kaynak, şiddet) + seçilen olay zamanı aralığı;
+  // tüm eşleşen olaylar rapora girer, ekrandaki sayfa değişmez.
   // ---------------------------------------------------------------------------
   const pad = n => String(n).padStart(2, '0');
-  const toLocalInput = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   const fmtMs = d => fmtDateTime(d) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  const fmtShort = d => (d ? pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : '…');
+  // reportRequestLabel(): "01.11.2026 00:00 – 08.11.2026 23:59"
+  const requestLabel = req => (req && (req.from || req.to) ? fmtShort(req.from) + ' – ' + fmtShort(req.to) : '');
+  // eventReportTone(): durum sınıfından (sta & 0x0F) satır rengi — ekrandaki rozetle aynı gruplama
+  function eventTone(cls) {
+    if (cls === 0) return '';
+    if (cls === 4) return 'normal';
+    if (cls >= 8) return 'alarm';
+    if (cls === 2 || cls >= 5) return 'warning';
+    return 'info';
+  }
 
-  function openReportPopup() {
-    const rs = { start: toLocalInput(new Date(Date.now() - 86400000)), end: toLocalInput(new Date()), loading: false, searched: false, data: [] };
-    const host = document.createElement('div');
-    host.className = 'fixed inset-0 z-[9999] bg-slate-900/60 flex items-center justify-center p-4 sm:p-6 animate-fade-in';
-    const dtCls = 'w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-surface-base border border-slate-300 dark:border-slate-700 rounded text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 transition-all cursor-pointer';
-    const th = t => '<th class="px-3 py-3 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">' + t + '</th>';
+  function activeFilterText() {
+    const f = state.filters;
+    const quick = QUICK.find(q => q.value === state.quick);
+    return [
+      state.search.trim() ? 'arama "' + state.search.trim() + '"' : '',
+      state.quick !== 'all' ? 'durum: ' + (quick ? quick.label : state.quick) : '',
+      state.src ? 'kaynak grubu: ' + EV.SOURCES[state.src].label : '',
+      (f.rid || '').trim() ? 'kimlik "' + f.rid.trim() + '"' : '',
+      (f.src || '').trim() ? 'kaynak "' + f.src.trim() + '"' : '',
+      (f.cat || '').trim() ? 'kategori "' + f.cat.trim() + '"' : '',
+      (f.txt || '').trim() ? 'detay "' + f.txt.trim() + '"' : '',
+      f.sta ? 'durum sütunu: ' + f.sta : '',
+      f.sev ? 'şiddet: ' + SEV[f.sev].label : '',
+      f.bgn || f.end ? 'zaman sütunu: ' + (f.bgn || '…') + ' – ' + (f.end || '…') : ''
+    ].filter(Boolean);
+  }
 
-    function body() {
-      if (rs.loading) {
-        return '<div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10">' +
-          '<div class="w-10 h-10 border-4 border-slate-200 dark:border-slate-700 border-t-sky-500 dark:border-t-sky-400 rounded-full animate-spin mb-4"></div>' +
-          '<span class="text-sm font-medium text-slate-600 dark:text-slate-300">Veriler yükleniyor...</span></div>';
-      }
-      if (!rs.searched) {
-        return '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center">' +
-          '<div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4"><i class="pi pi-calendar-times text-2xl text-slate-400 dark:text-slate-500"></i></div>' +
-          '<p class="text-sm font-medium">Lütfen bir tarih ve saat aralığı seçip arama yapın.</p></div>';
-      }
-      if (!rs.data.length) {
-        return '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center">' +
-          '<i class="pi pi-inbox text-5xl mb-4 text-slate-300 dark:text-slate-600"></i><p class="text-sm font-medium">Seçilen kriterlerde veri bulunamadı.</p></div>';
-      }
-      return '<table class="w-full text-left border-collapse text-xs whitespace-nowrap">' +
-        '<thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800/80 backdrop-blur-md shadow-sm"><tr>' +
-          th('Sıra No') + th('Tarih') + th('Kod') + th('Kategori') + th('Kaynak') + th('Açıklama') + th('Durum') + '</tr></thead><tbody>' +
-        rs.data.map((e, i) =>
-          '<tr class="border-b border-slate-100 dark:border-slate-800/50 hover:bg-sky-50/50 dark:hover:bg-sky-900/10 transition-colors">' +
-            '<td class="px-3 py-2 font-mono text-slate-500 dark:text-slate-400">' + (i + 1) + '</td>' +
-            '<td class="px-3 py-2 font-mono text-slate-700 dark:text-slate-300">' + fmtMs(e.tim) + '</td>' +
-            '<td class="px-3 py-2 font-mono font-medium text-slate-800 dark:text-slate-200">' + esc(e.id) + '</td>' +
-            '<td class="px-3 py-2 text-slate-700 dark:text-slate-300">' + esc(e.cat) + '</td>' +
-            '<td class="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">' + esc(e.doc + (e.ref ? '/' + e.ref : '')) + '</td>' +
-            '<td class="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[400px] truncate" title="' + esc(e.txt) + '">' + esc(e.txt) + '</td>' +
-            '<td class="px-3 py-2">' + badge(badgeLevel(getClassNo(e.sta)), getStaText(e.sta)) + '</td>' +
-          '</tr>').join('') +
-        '</tbody></table>';
-    }
+  function buildReport(rows, req, scopeLabel) {
+    const filters = activeFilterText();
+    const cls = e => getClassNo(e.sta);
+    const open = rows.filter(e => [1, 2, 3].indexOf(cls(e)) >= 0).length;
+    const done = rows.filter(e => cls(e) === 4).length;
+    const problem = rows.filter(e => cls(e) >= 5).length;
+    const range = requestLabel(req);
+    return {
+      title: 'Olaylar Raporu',
+      subtitle: (range ? 'Olay zamanı: ' + range : scopeLabel || 'Olay listesi') + (filters.length ? ' · Filtre: ' + filters.join(', ') : '') + ' · Alarmlar · ' + rows.length + ' olay',
+      filename: 'Olaylar',
+      kpis: [
+        { label: 'Olay', value: rows.length },
+        { label: 'Açık (yeni / bekliyor / işliyor)', value: open, tone: open ? 'info' : 'normal' },
+        { label: 'Tamamlandı', value: done, tone: 'normal' },
+        { label: 'Uyarı / Alarm / Kriz', value: problem, tone: problem ? 'alarm' : 'normal' }
+      ],
+      sections: [{
+        title: 'Olay listesi',
+        toneKey: 'tone',
+        columns: [
+          { key: 'time', label: 'Zaman' }, { key: 'id', label: 'Kimlik' }, { key: 'src', label: 'Kaynak' },
+          { key: 'cat', label: 'Kategori' }, { key: 'txt', label: 'Detay' }, { key: 'sta', label: 'Durum' }
+        ],
+        rows: rows.map(e => ({
+          time: fmtMs(e.tim), id: e.id, src: e.src + ' · ' + e.doc + (e.ref ? '/' + e.ref : ''), cat: e.cat, txt: e.txt,
+          sta: getStaText(e.sta), tone: eventTone(cls(e))
+        }))
+      }],
+      notes: rows.length ? ['Olaylar CME olay listesinden (CME_List) okunur; durum olayın sta değerinden çevrilir.'] : ['Seçilen aralıkta olay yok.']
+    };
+  }
 
-    function render() {
-      host.innerHTML =
-        '<div data-panel class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-lg shadow-2xl w-full max-w-[95vw] sm:max-w-7xl flex flex-col max-h-[90vh] transform transition-all animate-modal-pop">' +
-          '<div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/90 dark:bg-slate-900/90 rounded-t-lg shrink-0">' +
-            '<div class="flex items-center gap-3">' +
-              '<div class="w-10 h-10 rounded-md bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-500"><i class="pi pi-bolt text-lg"></i></div>' +
-              '<div><h2 class="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">Olay Raporu Oluştur</h2>' +
-              '<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Otonom olay verilerini filtreleyin ve dışa aktarın</p></div>' +
-            '</div>' +
-            '<button type="button" data-close class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer outline-none"><i class="pi pi-times"></i></button>' +
-          '</div>' +
-          '<div class="p-5 bg-white dark:bg-surface-card border-b border-slate-200 dark:border-slate-800 shrink-0">' +
-            '<div class="flex flex-col sm:flex-row gap-4 items-end">' +
-              '<div class="w-full sm:w-auto flex-1"><label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Başlangıç Tarihi:</label>' +
-                '<div class="relative"><span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none"><i class="pi pi-calendar text-sm"></i></span>' +
-                '<input type="datetime-local" data-start value="' + esc(rs.start) + '" class="' + dtCls + '"></div></div>' +
-              '<div class="w-full sm:w-auto flex-1"><label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Bitiş Tarihi:</label>' +
-                '<div class="relative"><span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none"><i class="pi pi-calendar text-sm"></i></span>' +
-                '<input type="datetime-local" data-end value="' + esc(rs.end) + '" class="' + dtCls + '"></div></div>' +
-              '<div class="w-full sm:w-auto flex-[0.5]"><button type="button" data-search' + (rs.loading ? ' disabled' : '') + ' class="w-full h-[38px] bg-sky-600 hover:bg-sky-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white text-xs font-bold rounded transition-colors shadow-sm flex justify-center items-center gap-2 uppercase tracking-wide cursor-pointer">' +
-                (rs.loading ? '<i class="pi pi-spinner pi-spin"></i>Aranıyor...' : '<i class="pi pi-search"></i>Ara') + '</button></div>' +
-            '</div>' +
-          '</div>' +
-          (rs.data.length && !rs.loading
-            ? '<div class="px-5 py-3 bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-800 shrink-0 flex flex-wrap items-center justify-between gap-3">' +
-                '<div class="flex gap-2">' +
-                  '<button type="button" data-pdf class="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50 text-xs font-semibold rounded transition-colors flex items-center gap-2 cursor-pointer"><i class="pi pi-file-pdf"></i>PDF İndir</button>' +
-                  '<button type="button" data-excel class="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 text-xs font-semibold rounded transition-colors flex items-center gap-2 cursor-pointer"><i class="pi pi-file-excel"></i>Excel İndir</button>' +
-                '</div>' +
-                '<div class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">Toplam ' + rs.data.length + ' kayıt</div>' +
-              '</div>'
-            : '') +
-          '<div class="flex-1 overflow-auto bg-white dark:bg-[#0f172a] relative min-h-[300px] custom-scrollbar">' + body() + '</div>' +
-        '</div>';
-    }
-
-    function search() {
-      const s = host.querySelector('[data-start]').value;
-      const e = host.querySelector('[data-end]').value;
-      rs.start = s; rs.end = e;
-      if (!s || !e) { toast('Lütfen başlangıç ve bitiş tarihlerini seçiniz.', 'warning'); return; }
-      const t0 = new Date(s).getTime(), t1 = new Date(e).getTime() + 59999;
-      if (t0 > t1) { toast('Başlangıç tarihi bitiş tarihinden büyük olamaz!', 'warning'); return; }
-      rs.loading = true;
-      render();
-      setTimeout(() => {
-        rs.data = LIST.filter(x => x.tim.getTime() >= t0 && x.tim.getTime() <= t1).sort((a, b) => b.tim - a.tim);
-        rs.loading = false;
-        rs.searched = true;
-        render();
-      }, 650);
-    }
-
-    const close = () => { document.removeEventListener('keydown', onKey); host.remove(); };
-    const onKey = e => { if (e.key === 'Escape') close(); };
-    host.addEventListener('click', e => {
-      if (!e.target.closest('[data-panel]') || e.target.closest('[data-close]')) { close(); return; }
-      if (e.target.closest('[data-search]')) { search(); return; }
-      if (e.target.closest('[data-excel]')) { exportCsv(rs.data, 'otonom_olay_raporu_' + rs.start.slice(0, 10) + '_' + rs.end.slice(0, 10)); return; }
-      if (e.target.closest('[data-pdf]')) { close(); kit.exportPdf(); }
-    });
-    document.addEventListener('keydown', onKey);
-    render();
-    document.body.appendChild(host);
-    return { search };
+  function exportReport(req) {
+    // Rapor sorgusu ekranın süzgeçleriyle aynı yüklemi kullanır; tarih aralığı olay zamanına (@tim) uygulanır
+    const rows = DCIM.report.applyRange(filtered(), req, 'tim');
+    DCIM.report.generate(buildReport(rows, req), req.format);
   }
 
   // ---------------------------------------------------------------------------
@@ -767,6 +781,7 @@
   renderTableShell();
   renderQuick();
   renderLive();
+  renderMobileFilterBtn();
   renderHead();
   renderBody();
   scheduleLive();
@@ -776,5 +791,9 @@
     const ev = openId === 'first' ? lastFiltered[0] : LIST.find(x => x.id === openId);
     if (ev) openStaModal(ev);
   }
-  if (params.get('report') === '1') openReportPopup().search();
+  // ?report=1 → rapor menüsü açık başlar (eski rapor penceresinin yerini aldı)
+  if (params.get('report') === '1' && !openId) {
+    const btn = document.querySelector('#ev-header [data-rk-btn]');
+    if (btn) btn.click();
+  }
 })();

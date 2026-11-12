@@ -15,7 +15,7 @@
     { value: 'CMR/T00', label: '1.Kat' },
     { value: 'CMR/T02', label: '2.Kat' },
     { value: 'CMR/T03', label: '3.Kat' },
-    { value: 'CMR/T04', label: 'IDC4' }
+    { value: 'CMR/T04', label: 'DCB' }
   ];
   const VALUE_TYPE_OPTIONS = [
     { value: 'Maximum', label: 'Maksimum' },
@@ -96,7 +96,7 @@
     if (!dev || !dev.dev_nfo) return { lokasyon: '', panoIsmi: '', salon: '', panoRaw: '', salterAdi: '', side: '', groupKey: dev ? dev.id : '' };
     const p = dev.dev_nfo.split('/');
     const lokasyon = p[0] || '', panoIsmi = p[1] || '', salon = p[2] || '', panoRaw = p[3] || '', salterAdi = p[4] || '';
-    const idc4 = lokasyon.toUpperCase() === 'IDC4' ? panoRaw.match(/UPS\s*([MK])\s*(\d+)/i) : null;
+    const idc4 = lokasyon.toUpperCase() === 'DCB' ? panoRaw.match(/UPS\s*([MK])\s*(\d+)/i) : null;
     const std = panoRaw.match(/UPS\s*([AB])[- ]?(\d+)/i);
     const side = idc4 ? (idc4[1].toLowerCase() === 'm' ? 'a' : 'b') : (std ? std[1].toLowerCase() : '');
     const groupNo = idc4 ? idc4[2] : (std ? std[2] : panoRaw);
@@ -104,6 +104,8 @@
     const groupKey = [salon, groupNo, gm ? gm[1] : salterAdi].filter(Boolean).join('|');
     return { lokasyon, panoIsmi, salon, panoRaw, salterAdi, side, groupKey };
   }
+  // b024610d2: A/B eşi anahtarı kat içinde tekildir; katlar birlikte seçildiğinde aynı anahtar başka katta da
+  // olabildiği için grup anahtarına kat eklenir. Sıralama önce kat sırası (FLOOR_OPTIONS), sonra eş anahtarı.
   function groupDevices(devices) {
     const groups = new Map();
     devices.forEach(dev => {
@@ -111,12 +113,16 @@
       const side = n.side || (dev.dev_bcu ? dev.dev_bcu.charAt(0).toLowerCase() : '') || 'a';
       const key = n.groupKey || (dev.dev_bcu ? dev.dev_bcu.substring(1) : dev.id);
       if (!key) return;
-      if (!groups.has(key)) groups.set(key, { key });
-      const g = groups.get(key);
+      const floor = dev.floor || '';
+      const groupKey = floor + '|' + key;
+      if (!groups.has(groupKey)) groups.set(groupKey, { key, floor });
+      const g = groups.get(groupKey);
       if (side === 'a') g.a = dev;
       if (side === 'b') g.b = dev;
     });
-    return Array.from(groups.values()).filter(g => g.a || g.b).sort((a, b) => a.key.localeCompare(b.key));
+    const floorOrder = f => { const i = FLOOR_OPTIONS.findIndex(o => o.value === f); return i < 0 ? FLOOR_OPTIONS.length : i; };
+    return Array.from(groups.values()).filter(g => g.a || g.b)
+      .sort((a, b) => (floorOrder(a.floor) - floorOrder(b.floor)) || a.key.localeCompare(b.key, 'tr', { numeric: true }));
   }
   const phaseControl = (phases, cap) => cap && cap > 0 ? Math.max.apply(null, phases.filter(p => p !== null && p > 0).concat([0])) / cap * 100 : null;
 
@@ -313,7 +319,7 @@
       let body;
       if (st.loading) {
         const pct = parseInt(String(st.progress).replace('%', ''), 10) || 0;
-        body = '<div class="py-16 flex flex-col items-center justify-center text-center">' +
+        body = '<div class="rpt-state">' +
           '<i class="pi pi-spin pi-spinner text-sky-600 dark:text-sky-400 text-3xl mb-3"></i>' +
           '<p class="text-slate-800 dark:text-slate-200 text-sm font-medium mb-4">Veriler İşleniyor Lütfen Bekleyiniz...</p>' +
           (st.progress ? '<div class="w-full max-w-md space-y-2">' +
@@ -326,7 +332,7 @@
           '<th class="p-2 text-right ' + BR + '">KAPASİTE</th><th class="p-2 ' + BR + '">ANALİZÖR IP</th>' +
           '<th class="p-2 text-right ' + BR + ' font-mono">L1 (A)</th><th class="p-2 text-right ' + BR + ' font-mono">L2 (A)</th>' +
           '<th class="p-2 text-right ' + BR + ' font-mono">L3 (A)</th><th class="p-2 text-right ' + BR + ' font-semibold">FAZ KONTROLÜ (%)</th>';
-        body = '<div><div class="border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
+        body = '<div><div>' +
           '<table class="w-full text-xs text-left border-collapse min-w-max"><thead>' +
             '<tr class="bg-slate-100 dark:bg-surface-panel text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-border-subtle">' +
               '<th colspan="3" class="p-2 text-center border-r border-slate-200 dark:border-border-subtle bg-slate-200/60 dark:bg-slate-900/60 text-slate-800 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-border-subtle">Genel Bilgiler</th>' +
@@ -351,22 +357,18 @@
       } else {
         body = kit.emptyState({ message: 'Raporlanacak veri bulunamadı.' });
       }
-      return '<div data-popup-backdrop class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 overflow-y-auto">' +
-        '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden my-auto">' +
-          '<div class="p-4 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-surface-panel/50">' +
-            '<div class="flex items-center gap-3">' +
-              '<h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"><i class="pi pi-power-off text-sky-600 dark:text-sky-400"></i><span>Şalter Yük Yedeklilik Raporu</span></h3>' +
-              statusBadge('info', valueTypeLabel()) +
-            '</div>' +
-            '<div class="flex items-center gap-2">' +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: 'PDF İndir', attrs: 'data-action="pdf"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: 'Excel İndir', attrs: 'data-action="excel"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: 'ZIP İndir', attrs: 'data-action="zip"' + dis }) +
-              '<button type="button" data-action="close" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-hover rounded-[2px] transition-colors"><i class="pi pi-times"></i></button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="p-4 overflow-auto flex-1 space-y-6">' + body + '</div>' +
-        '</div></div>';
+      // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur)
+      const RM = DCIM.reportModal;
+      return RM.html({
+        title: 'Şalter Yük Yedeklilik Raporu', subtitle: 'ŞALTER YÜK YEDEKLİLİK RAPORU', icon: 'pi pi-power-off', tone: 'sky', size: 'xl', z: 'z-[100000]',
+        attrs: 'data-popup-backdrop',
+        badge: statusBadge('info', valueTypeLabel()),
+        actions: !st.loading && has ? RM.btn('pdf', 'pi pi-file-pdf', 'PDF İndir', 'data-action="pdf"' + dis) +
+          RM.btn('excel', 'pi pi-file-excel', 'Excel İndir', 'data-action="excel"' + dis) +
+          RM.btn('zip', 'pi pi-folder', 'ZIP İndir', 'data-action="zip"' + dis) : '',
+        summary: !st.loading && has ? RM.total(st.rows.length) : '',
+        body
+      }).replace('data-rpt-close', 'data-rpt-close data-action="close"');
     }
 
     // İskelet + render

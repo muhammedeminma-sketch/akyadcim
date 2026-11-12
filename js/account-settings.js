@@ -1,10 +1,12 @@
 /* ==========================================================================
    DCIM Sunum — Kullanıcı Ayarları (NewUICMPAccountSettingsComponent, "Hesap Ayarları")
    Kaynak: user-app/src/app/new-ui/pages/account-settings/account-settings.component.{html,ts,scss}
-           + engineering/authorization-management (NewUICMPAuthorizationManagementComponent — Müşteri Yetkilendirme)
-   - Kurumsal / Müşteri kullanıcı listeleri, tablo içi filtre satırı, sayfalama, sayfa boyutu
+   - Kurumsal / Müşteri kullanıcı listeleri, tablo içi filtre satırı, sayfalama (alt çubuk), sayfa boyutu (varsayılan 50)
    - Yeni kayıt / düzenleme modalları (telefon maskesi, ülke kodu, müşteri seçimi, şifre üretme)
-   - Silme onayı (app-dialog), Müşteri Yetkilendirme modalı (modül/alt yetki, alarm toplu işlemleri)
+   - Silme onayı (app-dialog); rapor menüsü (app-report-export-menu: Kurumsal / Müşteri kullanıcıları,
+     açık sekmeye ekrandaki filtreler uygulanır; şifre rapora yazılmaz, yalnız LDAP / yerel şifre)
+   - Mobil (lg altı): kart listesi, arama + Filtre (alan paneli) + Yenile; ekleme / düzenleme / silme yok
+   - "Müşteri Yetkilendirme" artık ayrı sayfa: customer-authorization.html (?uid=<das_uid> ile)
    Sunum eklentileri (kaynakta yok, aynı görsel dille): Departman / Durum (Aktif-Pasif) / Son Giriş
    kolonları, aktif-pasif değiştirme, "Şifre Değiştir" sekmesi (oturumdaki kullanıcı için).
    Derin bağlantılar:
@@ -12,18 +14,29 @@
      ?filter=1                          tablo içi filtre satırını açık başlat
      ?open=add                          aktif sekme için "Yeni Kayıt" modalını aç
      ?edit=<das_uid>                    ilgili kullanıcının düzenleme modalını aç (örn. ?edit=egelojistik.selin)
-     ?auth=1 | ?auth=<das_uid>          Müşteri Yetkilendirme modalını aç
+     ?auth=1 | ?auth=<das_uid>          customer-authorization.html'e yönlendirir (eski modal bağlantısı; uid taşınır)
+     ?report=1                          rapor menüsünü açık başlat
    ========================================================================== */
 (function () {
   'use strict';
 
   const DCIM = window.DCIM;
+  const params = new URLSearchParams(window.location.search);
+  // Eski "Müşteri Yetkilendirme" modal bağlantısı → ayrı sayfa (orijinal openAuthModal → /dcim/customer-authorization)
+  const authRedirect = params.get('auth');
+  if (authRedirect) {
+    window.location.replace('customer-authorization.html' + (authRedirect !== '1' ? '?uid=' + encodeURIComponent(authRedirect) : ''));
+    return;
+  }
+
   const { esc, fmtDateTime, statusBadge, button, dialog, toast } = DCIM.ui;
   const kit = DCIM.kit;
   DCIM.shell.init({ active: 'accounts' });
 
   const A = DCIM.data.accounts;
-  const params = new URLSearchParams(window.location.search);
+  // Mobilde ekleme / düzenleme / silme / yetkilendirme yok (isMobileViewport — lg altı)
+  const isMobile = () => window.innerWidth < 1024;
+  const CUST_AUTH_URL = uid => 'customer-authorization.html' + (uid ? '?uid=' + encodeURIComponent(uid) : '');
   const trLower = s => String(s == null ? '' : s).toLocaleLowerCase('tr-TR');
   const trUpper = s => String(s == null ? '' : s).toLocaleUpperCase('tr-TR');
 
@@ -85,33 +98,6 @@
     positions: { Admin: 'Admin', 'Mühendis': 'Mühendis', 'Operatör': 'Operatör', 'Müşteri': 'Müşteri', 'Müsteri': 'Müşteri', Misafir: 'Misafir', Test: 'Test' },
     status: { active: 'Aktif', passive: 'Pasif' }
   };
-  const AM = {
-    title: 'MÜŞTERİ SAYFALARI YETKİLENDİRME', users: 'Kullanıcılar', searchUser: 'Kullanıcı ara...',
-    userNotFound: 'Kullanıcı bulunamadı.', permissionModules: 'Kullanıcı Sayfaları Modülleri',
-    permissionDescription: 'Bu modüle erişim izni tanımlıdır.', subPermissions: 'Alt Yetkiler',
-    noRelatedCustomer: 'İlişkili Müşteri Yok', resetPermissions: 'Yetkileri Sıfırla', saveChanges: 'Değişiklikleri Kaydet',
-    saving: 'Kaydediliyor...', customerAlarmManagement: 'MÜŞTERİ ALARM YÖNETİMİ', total: 'TOPLAM', alarmOn: 'ALARM AÇIK',
-    alarmOff: 'KAPALI', turnOnAll: 'Tümünü Aç', turnOffAll: 'Tümünü Kapat',
-    alarmManagementInfo: 'Sistem genelindeki müşterilerin alarm bildirim tercihlerini merkezi olarak yönetebilir ve toplu yapılandırma işlemlerini gerçekleştirebilirsiniz.',
-    selectUserPrompt: 'Yetkilerini düzenlemek için sol listeden bir kullanıcı seçin.',
-    bulkToggleTitle: 'Tüm Alarmları {action}',
-    bulkToggleMessage: 'Sistemdeki tüm müşteriler için alarm bildirimlerini toplu olarak {action} üzeresiniz.',
-    bulkToggleWarning: 'Bu işlem, müşterilerin mevcut alarm ayarlarını ve yetkilerini devre dışı bırakacaktır.',
-    cancelBtn: 'İptal Et', confirmBulkToggle: 'Evet, Alarmları {action}', confirmResetBtn: 'Evet, Yetkileri Sıfırla',
-    resetTitle: 'Yetkileri Sıfırla',
-    resetMessage: '{name} kullanıcısının yetkilerini varsayılan şablona sıfırlamak istediğinize emin misiniz?',
-    resetWarning: 'Bu işlem kullanıcının yetkilerini standart başlangıç seviyesine (Kabinler, Varlıklar, PDU ve Raporlama) çekecektir.',
-    permissions: { kabinler: 'Kabinler', tumVarliklar: 'Tüm Varlıklar', raporlama: 'Raporlama', pduDetaylari: 'PDU Detayları', alarmListesi: 'Alarm Listesi', musteriHesap: 'Müşteri Bilgileri' },
-    sub: { kabinler_pdu: 'PDU Detayları', kabinler_asm: 'Kabin Görünümü (Asset)', kabinler_sensor: 'Sensör Detayları', raporlama_pduGuc: 'PDU Güç Raporlama', raporlama_sensor: 'Sensör Raporlama', raporlama_alarm: 'Alarm Raporlama' },
-    alerts: {
-      bulkEnabled: 'Tüm kullanıcılar için alarm yetkilendirmesi başarıyla etkinleştirildi.',
-      bulkDisabled: 'Tüm kullanıcılar için alarm yetkilendirmesi başarıyla devre dışı bırakıldı.',
-      resetSuccess: '{username} kullanıcısının yetkileri varsayılan şablona sıfırlandı.',
-      updateSuccess: '{username} kullanıcısının yetkileri başarıyla güncellendi.',
-      noAlarmPermission: 'Kullanıcının Alarm Yetkisi bulunmamaktadır!',
-      noAlarmPermissionTooltip: 'Bu yetkiyi açmak için önce Ana Alarm Listesi yetkisini açmalısınız.'
-    }
-  };
 
   const COUNTRY_CODES = [
     { code: '90', name: 'Türkiye (+90)' }, { code: '44', name: 'İngiltere (+44)' }, { code: '1', name: 'ABD (+1)' },
@@ -137,13 +123,26 @@
     filterModel: emptyFilter(),
     localFilters: {},
     pageOfs: 0,
-    pageRng: 15,
+    pageRng: 50,
     pageInput: 1,
     loading: false,
     visiblePwd: null,
     flashId: null,
-    showPositionDropdown: false
+    showPositionDropdown: false,
+    // Mobil arama kutusu (kartta görünen alanlarda arar; şifre alanı aranmaz)
+    searchQuery: '',
+    // Mobil kartta müşteri listesi açık olan kullanıcılar
+    expandedCustomers: new Set()
   };
+  // Mobil filtre paneli alanları (masaüstü filtre satırıyla aynı filterModel)
+  const MOBILE_FILTER_FIELDS = [
+    { key: 'user_id', label: 'id' }, { key: 'name', label: 'name' }, { key: 'surname', label: 'surname' },
+    { key: 'das_uid', label: 'username' }, { key: 'das_pwd', label: 'password' },
+    { key: 'das_grp', label: 'position', corporateOnly: true }, { key: 'das_acl', label: 'routing' },
+    { key: 'das_cfg', label: 'twoFactor' }, { key: 'mobile', label: 'phoneNumber' }, { key: 'email', label: 'email' },
+    { key: 'customer_name', label: 'customer', customerOnly: true }
+  ];
+  const getCustomerNames = s => String(s || '').split(',').map(c => c.trim()).filter(Boolean);
 
   const root = document.getElementById('as-root');
 
@@ -181,8 +180,22 @@
     return String(phone).replace(/\D/g, '').length === 10;
   }
 
+  function matchesSearch(user, q) {
+    const pos = getDisplayPosition(user.das_grp);
+    return [user.user_id, user.name, user.surname, user.das_uid, user.mobile, user.email, user.customer_name, pos, positionLabel(pos)]
+      .some(v => trLower(v).indexOf(q) >= 0);
+  }
+  const activeFilterCount = () => Object.keys(state.filterModel).filter(k => String(state.filterModel[k] || '').trim() !== '').length;
+
   function filteredUsers() {
-    let users = USERS.filter(u => (state.listTab === 'customer' ? isUserCustomer(u) : !isUserCustomer(u)));
+    return filterUsers(state.listTab, true);
+  }
+  // Sekmenin kullanıcıları; withFilters: ekrandaki sütun süzgeçleri ve arama da uygulanır (liste ve rapor aynı süzgeci kullanır)
+  function filterUsers(tab, withFilters) {
+    let users = USERS.filter(u => (tab === 'customer' ? isUserCustomer(u) : !isUserCustomer(u)));
+    if (!withFilters) return users.sort((a, b) => Number(a.user_id) - Number(b.user_id));
+    const q = trLower(state.searchQuery).trim();
+    if (q) users = users.filter(u => matchesSearch(u, q));
     const keys = Object.keys(state.localFilters);
     if (keys.length) {
       users = users.filter(user => keys.every(key => {
@@ -238,6 +251,7 @@
   // ---------------------------------------------------------------------------
   function render() {
     const isPwd = state.listTab === 'password';
+    if (reportMenu) { reportMenu.destroy(); reportMenu = null; }
     root.innerHTML =
       kit.pageHeader({
         title: title(),
@@ -245,70 +259,246 @@
         actions: '<div class="flex items-center gap-2" id="as-con">' + conBadge() + '</div>'
       }).replace('class="mb-3 pb-2', 'class="shrink-0 mb-3 pb-2') +
       '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs flex flex-col flex-1 min-h-0 overflow-hidden w-full">' +
-        '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0">' +
+        // Üst çubuk: sekmeler + işlemler (mobil: üstte sekmeler, altında arama + Filtre + Yenile tek satır)
+        '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0 max-lg:pt-0 max-lg:bg-white dark:max-lg:bg-surface-card' +
+          (isPwd ? '' : ' max-lg:grid max-lg:grid-cols-[minmax(0,1fr)_auto_auto] max-lg:gap-2') + '">' +
           renderListTabs() +
-          (isPwd ? '' : '<div class="flex items-center gap-1" id="as-pager">' + renderPager() + '</div>' + renderActions()) +
+          (isPwd ? '' : renderMobileSearch() + renderActions()) +
         '</div>' +
         (isPwd ? renderPasswordView() :
           '<div class="flex-1 min-h-0 overflow-auto" id="as-table">' +
-            '<table class="w-full text-left border-collapse text-xs">' +
+            // Mobil kart listesi (lg altı): aynı sayfa, aynı filtre modeli; yalnızca görüntüleme
+            '<div class="lg:hidden p-2 space-y-1.5 min-h-full bg-slate-100 dark:bg-[#080c14]">' +
+              '<div id="as-mfilter">' + renderMobileFilter() + '</div>' +
+              '<div id="as-cards" class="space-y-1.5">' + renderCards() + '</div>' +
+            '</div>' +
+            '<table class="w-full text-left border-collapse text-xs max-lg:hidden">' +
               '<thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider select-none" id="as-thead">' + renderThead() + '</thead>' +
               '<tbody class="divide-y divide-slate-200 dark:divide-slate-800 text-slate-700 dark:text-slate-300" id="as-tbody">' + renderTbody() + '</tbody>' +
             '</table>' +
           '</div>') +
-        '<div class="p-2.5 px-3 border-t border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-base text-xs text-slate-500 dark:text-slate-400 shrink-0">' +
+        // Alt çubuk: toplam + başlık | sayfa boyutu + sayfalama (all-assets data-table düzeni)
+        '<div class="p-2.5 px-3 border-t border-slate-200 dark:border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 dark:bg-surface-base text-xs text-slate-500 dark:text-slate-400 shrink-0">' +
           (isPwd
-            ? '<div class="flex items-center gap-2"><i class="pi pi-user text-xs"></i><span>Oturum:</span><span class="px-1.5 py-0.5 rounded-[2px] font-mono font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">' + esc(SESSION.usr) + '</span></div>'
-            : '<div class="flex items-center gap-2"><span>' + esc(T.totalRecords) + ':</span><span class="px-1.5 py-0.5 rounded-[2px] font-mono font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200" id="as-total">' + filteredUsers().length + '</span></div>') +
-          '<div class="text-[11px] font-mono text-slate-400">' + esc(title()) + '</div>' +
+            ? '<div class="flex items-center gap-2"><i class="pi pi-user text-xs"></i><span>Oturum:</span><span class="px-1.5 py-0.5 rounded-[2px] font-mono font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">' + esc(SESSION.usr) + '</span></div>' +
+              '<div class="text-[11px] font-mono text-slate-400">' + esc(title()) + '</div>'
+            : '<div class="flex items-center gap-2"><span>' + esc(T.totalRecords) + ':</span><span class="px-1.5 py-0.5 rounded-[2px] font-mono font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200" id="as-total">' + filteredUsers().length + '</span>' +
+                '<span class="text-[11px] font-mono text-slate-400 ml-2">' + esc(title()) + '</span></div>' +
+              '<div class="flex items-center gap-3 self-end sm:self-auto max-lg:self-stretch max-lg:justify-between" id="as-pager">' + renderPager() + '</div>') +
         '</div>' +
       '</div>';
     if (isPwd) updatePasswordState();
+    else mountReportMenu();
   }
 
   function renderListTabs() {
     const tab = (key, icon, label) =>
-      '<button type="button" data-list-tab="' + key + '" class="' + (state.listTab === key ? TAB_ON : TAB_OFF) + ' px-3 py-1.5 rounded-[2px] text-xs border transition-all flex items-center gap-1.5 cursor-pointer">' +
+      '<button type="button" role="tab" aria-selected="' + (state.listTab === key) + '" data-list-tab="' + key + '" class="' + (state.listTab === key ? TAB_ON : TAB_OFF) + ' px-3 py-1.5 rounded-[2px] text-xs border transition-all flex items-center gap-1.5 cursor-pointer">' +
         '<i class="' + icon + ' text-xs"></i><span>' + esc(label) + '</span></button>';
-    return '<div class="flex items-center gap-1.5">' +
+    // Mobilde ortak alt çizgili sekme çubuğu (.nu-mtabs — css/account-settings.css)
+    return '<div class="flex items-center gap-1.5 nu-mtabs max-lg:w-full max-lg:col-span-3">' +
       tab('corporate', 'pi pi-building', T.corporateUsers) +
       tab('customer', 'pi pi-users', T.customerUsers) +
       // Sunum eklentisi: oturumdaki kullanıcı için şifre değiştirme
-      '<div class="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>' +
+      '<div class="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1 max-lg:hidden"></div>' +
       tab('password', 'pi pi-key', T.passwordTitle) +
+    '</div>';
+  }
+
+  // Mobil: arama kutusu (diğer tablolardaki Ara / Filtre / Yenile düzeni); masaüstünde sütun filtreleri kullanılır
+  function renderMobileSearch() {
+    return '<div class="lg:hidden relative w-full min-w-0">' +
+      '<i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>' +
+      '<input type="text" id="as-msearch" value="' + esc(state.searchQuery) + '" placeholder="Ara" class="w-full h-10 pl-9 pr-9 py-2.5 text-base font-medium bg-slate-50 dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[3px] text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500" />' +
+      '<button type="button" data-act="msearch-clear" aria-label="Temizle" class="' + (state.searchQuery ? '' : 'hidden ') + 'absolute right-0 top-0 h-10 w-9 flex items-center justify-center text-slate-400 dark:text-slate-500 active:text-rose-500 cursor-pointer"><i class="pi pi-times-circle text-xs"></i></button>' +
     '</div>';
   }
 
   function renderPager() {
     const tp = totalPages();
     const atStart = state.pageOfs === 0;
-    const atEnd = tp > 0 && state.pageOfs + 1 >= tp;
-    return '<button type="button" data-page="first" ' + (atStart ? 'disabled' : '') + ' title="İlk Sayfa" class="' + PAGER_BTN + '"><i class="pi pi-angle-double-left text-xs"></i></button>' +
-      '<button type="button" data-page="prev" ' + (atStart ? 'disabled' : '') + ' title="Önceki" class="' + PAGER_BTN + '"><i class="pi pi-angle-left text-xs"></i></button>' +
-      '<div class="flex items-center gap-1 px-1">' +
-        '<input type="number" id="as-page-input" min="1" max="' + tp + '" value="' + state.pageInput + '" class="w-12 py-1 px-1.5 text-center text-xs bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500 font-mono" />' +
-        (tp > 0 ? '<span class="text-xs text-slate-500 dark:text-slate-400 font-mono">/ ' + tp + '</span>' : '') +
+    const atEnd = tp === 0 || state.pageOfs + 1 >= tp;
+    const PB = PAGER_BTN + ' max-lg:w-10 max-lg:h-10 max-lg:rounded-[3px]';
+    return '<div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"><span>Sayfa:</span>' +
+        '<input id="as-page-size" type="number" min="1" max="999" value="' + state.pageRng + '" class="w-12 max-lg:w-16 max-lg:h-10 py-0.5 px-1 text-center text-xs max-lg:text-base bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
       '</div>' +
-      '<button type="button" data-page="next" ' + (atEnd ? 'disabled' : '') + ' title="Sonraki" class="' + PAGER_BTN + '"><i class="pi pi-angle-right text-xs"></i></button>' +
-      '<button type="button" data-page="last" ' + (atEnd ? 'disabled' : '') + ' title="Son Sayfa" class="' + PAGER_BTN + '"><i class="pi pi-angle-double-right text-xs"></i></button>' +
-      '<div class="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>' +
-      '<button type="button" data-act="filter" title="' + esc(T.tooltips.toggleFilter) + '" class="' +
-        (state.filterSwitch === 1 ? 'bg-sky-600 text-white border-sky-600 font-bold' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700') +
-        ' px-2.5 py-1 text-xs rounded-[2px] border flex items-center gap-1 cursor-pointer transition-colors"><i class="pi pi-filter text-xs"></i><span>' + esc(T.filter) + '</span></button>' +
-      '<button type="button" data-act="refresh" title="' + esc(T.refresh) + '" class="' + PAGER_BTN + '"><i class="pi pi-refresh text-xs' + (state.loading ? ' pi-spin' : '') + '"></i></button>';
+      '<div class="flex items-center gap-1">' +
+        '<button type="button" data-page="first" ' + (atStart ? 'disabled' : '') + ' title="İlk Sayfa" class="' + PB + '"><i class="pi pi-angle-double-left text-xs"></i></button>' +
+        '<button type="button" data-page="prev" ' + (atStart ? 'disabled' : '') + ' title="Önceki" class="' + PB + '"><i class="pi pi-angle-left text-xs"></i></button>' +
+        '<div class="flex items-center gap-1 px-1">' +
+          '<input type="number" id="as-page-input" min="1" max="' + tp + '" value="' + state.pageInput + '" class="w-12 max-lg:w-16 max-lg:h-10 py-1 px-1.5 text-center text-xs max-lg:text-base bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500 font-mono" />' +
+          (tp > 0 ? '<span class="text-xs text-slate-500 dark:text-slate-400 font-mono">/ ' + tp + '</span>' : '') +
+        '</div>' +
+        '<button type="button" data-page="next" ' + (atEnd ? 'disabled' : '') + ' title="Sonraki" class="' + PB + '"><i class="pi pi-angle-right text-xs"></i></button>' +
+        '<button type="button" data-page="last" ' + (atEnd ? 'disabled' : '') + ' title="Son Sayfa" class="' + PB + '"><i class="pi pi-angle-double-right text-xs"></i></button>' +
+      '</div>';
   }
 
+  // Sağ: sekmeye göre işlemler, rapor, Filtre ve Yenile (mobilde kutu kalkar: Filtre ve Yenile arama satırına oturur)
   function renderActions() {
     const corp = state.listTab === 'corporate';
-    return '<div class="flex items-center gap-2">' +
-      button({ variant: 'primary', size: 'sm', icon: 'pi pi-plus', label: corp ? T.addCorporate : T.addCustomer, attrs: 'data-act="add"' }) +
-      button({ variant: 'secondary', size: 'sm', icon: 'pi pi-shield', label: corp ? T.permissionPages : T.customerAuthorization, attrs: corp ? 'data-act="perm-pages"' : 'data-act="cust-auth"' }) +
-      '<div class="h-4 w-px bg-slate-200 dark:bg-slate-700"></div>' +
-      '<div class="flex items-center gap-1">' +
-        '<span class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Sayfa:</span>' +
-        '<input id="as-page-size" type="number" min="1" max="999" value="' + state.pageRng + '" class="w-12 py-1 px-1 text-center text-xs bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
+    const n = activeFilterCount();
+    const on = state.filterSwitch === 1;
+    return '<div class="flex items-center gap-2 max-lg:contents">' +
+      '<span class="contents max-lg:hidden">' + button({ variant: 'primary', size: 'sm', icon: 'pi pi-plus', label: corp ? T.addCorporate : T.addCustomer, attrs: 'data-act="add"' }) + '</span>' +
+      '<span class="contents max-lg:hidden">' + button({ variant: 'secondary', size: 'sm', icon: 'pi pi-shield', label: corp ? T.permissionPages : T.customerAuthorization, attrs: corp ? 'data-act="perm-pages"' : 'data-act="cust-auth"' }) + '</span>' +
+      // Rapor (masaüstü; mobilde arama satırı düzeni korunur)
+      '<div class="max-lg:hidden" id="as-report"></div>' +
+      '<div class="h-4 w-px bg-slate-200 dark:bg-slate-700 max-lg:hidden"></div>' +
+      '<button type="button" data-act="filter" aria-expanded="' + on + '" title="' + esc(T.tooltips.toggleFilter) + '" class="' +
+        (on ? 'bg-sky-600 text-white border-sky-600 font-bold' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700') +
+        ' px-2.5 py-1 text-xs rounded-[2px] border flex items-center gap-1 cursor-pointer transition-colors max-lg:justify-center max-lg:h-10 max-lg:py-0 max-lg:px-3 max-lg:text-[13px] max-lg:font-semibold max-lg:gap-1.5 max-lg:whitespace-nowrap">' +
+        '<i class="pi pi-filter text-xs max-lg:text-[12px]"></i><span>' + esc(T.filter) + '</span>' +
+        '<span data-filter-count' + (n ? '' : ' style="display:none"') + ' class="lg:hidden min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums ' + (on ? 'bg-white text-sky-700' : 'bg-sky-600 text-white') + '">' + n + '</span>' +
+      '</button>' +
+      '<button type="button" data-act="refresh" title="' + esc(T.refresh) + '" aria-label="' + esc(T.refresh) + '" class="w-7 h-7 flex items-center justify-center rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors max-lg:w-10 max-lg:h-10"><i data-refresh-icon class="pi pi-refresh text-xs max-lg:text-sm' + (state.loading ? ' pi-spin' : '') + '"></i></button>' +
+    '</div>';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mobil kart görünümü (account-settings.component.html — lg:hidden kart listesi)
+  // ---------------------------------------------------------------------------
+  function renderMobileFilter() {
+    if (state.filterSwitch !== 1) return '';
+    const n = activeFilterCount();
+    const cust = state.listTab === 'customer';
+    const f = state.filterModel;
+    return '<div class="rounded-[3px] border border-sky-200 dark:border-sky-500/30 bg-white dark:bg-surface-card shadow-sm">' +
+      '<div class="h-11 pl-3 pr-1.5 flex items-center gap-2.5 border-b border-slate-100 dark:border-border-subtle">' +
+        '<span class="w-7 h-7 shrink-0 rounded-[2px] flex items-center justify-center bg-sky-50 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400"><i class="pi pi-filter text-[11px]"></i></span>' +
+        '<span class="flex-1 min-w-0 flex items-center gap-2 text-[13.5px] font-bold text-slate-900 dark:text-slate-100">' + esc(T.filter) +
+          '<span data-mfilter-count' + (n ? '' : ' style="display:none"') + ' class="min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full bg-sky-600 text-white text-[10px] font-bold tabular-nums">' + n + '</span></span>' +
+        '<button type="button" data-act="mfilter-clear" class="h-9 px-2.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-sky-700 dark:text-sky-300 active:bg-sky-100 dark:active:bg-sky-500/20 cursor-pointer"><i class="pi pi-filter-slash text-[11px]"></i><span>Temizle</span></button>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 gap-x-2.5 gap-y-3 p-3">' +
+        MOBILE_FILTER_FIELDS.filter(x => (!x.customerOnly || cust) && (!x.corporateOnly || !cust)).map(x =>
+          '<div class="min-w-0 relative">' +
+            '<label class="block mb-1 text-[10.5px] font-semibold uppercase tracking-wider truncate text-slate-500 dark:text-slate-400">' + esc(T.headers[x.label]) + '</label>' +
+            '<input type="text" autocomplete="off" enterkeyhint="search" data-filter="' + x.key + '" data-mfilter value="' + esc(f[x.key]) + '" class="w-full h-10 pl-2.5 pr-2 text-base font-medium rounded-[3px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0b121e] text-slate-900 dark:text-slate-50 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500" />' +
+          '</div>').join('') +
       '</div>' +
     '</div>';
+  }
+
+  function renderCards() {
+    const list = filteredUsers();
+    if (!list.length) {
+      return '<div class="py-10 text-center">' + kit.emptyState({ message: state.loading ? T.noDataOrWaiting : T.noDataToShow, icon: 'pi pi-inbox' }) + '</div>';
+    }
+    const cust = state.listTab === 'customer';
+    return paginatedUsers().map(el => {
+      const disp = getDisplayPosition(el.das_grp);
+      const vis = state.visiblePwd === el.user_id;
+      const pwd = !el.das_pwd
+        ? '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"><i class="pi pi-lock text-[9px]"></i><span>LDAP</span></span>'
+        : (vis ? '<span class="text-amber-600 dark:text-amber-400 font-bold break-all select-all">' + esc(el.das_pwd) + '</span>' : '<span class="tracking-widest text-slate-400 select-none">••••••••</span>') +
+          '<button type="button" data-pwd-toggle="' + esc(el.user_id) + '" class="w-8 h-8 -my-2 flex items-center justify-center shrink-0 text-slate-400 active:text-slate-600 dark:active:text-slate-200 cursor-pointer"><i class="' + (vis ? 'pi pi-eye-slash' : 'pi pi-eye') + ' text-sm"></i></button>';
+      let custHtml = '';
+      if (cust) {
+        const names = getCustomerNames(el.customer_name);
+        const open = state.expandedCustomers.has(el.user_id);
+        custHtml = '<div class="col-span-2 min-w-0">' +
+          '<dt class="text-[10.5px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 truncate mb-0.5">' + esc(T.headers.customer) + '</dt><dd>' +
+          (names.length > 2
+            ? '<button type="button" data-cust-toggle="' + esc(el.user_id) + '" class="w-full h-9 px-2.5 flex items-center justify-between gap-2 rounded-[3px] border border-sky-200 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 text-[12.5px] font-bold cursor-pointer active:bg-sky-100 dark:active:bg-sky-500/20">' +
+                '<span class="flex items-center gap-1.5 min-w-0"><i class="pi pi-building text-[12px] shrink-0"></i><span class="truncate">' + names.length + ' ' + esc(T.headers.customer) + '</span></span>' +
+                '<i class="pi ' + (open ? 'pi-chevron-up' : 'pi-chevron-down') + ' text-[10px]"></i></button>'
+            : '') +
+          (names.length <= 2 || open
+            ? '<div class="flex flex-wrap gap-1' + (names.length > 2 ? ' mt-1.5' : '') + '">' + (names.length ? names.map(cu => '<span class="inline-block max-w-full whitespace-normal break-words px-1.5 py-0.5 rounded-[2px] text-[11.5px] leading-4 font-semibold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25">' + esc(cu) + '</span>').join('') : '<span class="text-slate-400">-</span>') + '</div>'
+            : '') +
+          '</dd></div>';
+      }
+      return '<article class="rounded-[3px] border border-slate-200 dark:border-border-subtle bg-white dark:bg-surface-card shadow-2xs px-2.5 py-2">' +
+        '<div class="flex items-start justify-between gap-2">' +
+          '<div class="min-w-0">' +
+            '<div class="text-[14px] font-extrabold leading-snug text-slate-900 dark:text-slate-100 break-words">' + esc(el.name + ' ' + el.surname) + '</div>' +
+            '<div class="mt-0.5 flex items-start gap-1.5 text-[12.5px] font-semibold text-sky-700 dark:text-sky-300"><i class="pi pi-user text-[11px] mt-[3px] shrink-0 opacity-80"></i><span class="font-mono break-all">' + esc(el.das_uid) + '</span></div>' +
+            '<div class="mt-0.5 flex items-center gap-1.5 text-[12px] font-mono font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap" title="' + esc(T.headers.phoneNumber) + '"><i class="pi pi-phone text-[11px] shrink-0 text-slate-400 dark:text-slate-500"></i><span>' + esc(el.mobile || '-') + '</span></div>' +
+            '<div class="mt-0.5 flex items-start gap-1.5 text-[12px] font-semibold" title="' + esc(T.headers.email) + '"><i class="pi pi-envelope text-[11px] mt-[3px] shrink-0 text-slate-400 dark:text-slate-500"></i>' +
+              (el.email ? '<a href="mailto:' + esc(el.email) + '" class="min-w-0 break-all text-sky-600 dark:text-sky-400 underline underline-offset-2">' + esc(el.email) + '</a>' : '<span class="text-slate-400">-</span>') + '</div>' +
+          '</div>' +
+          '<div class="shrink-0 flex flex-col items-end gap-1">' +
+            '<span class="inline-block px-1.5 py-0.5 rounded-[2px] text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">' + esc(positionLabel(disp)) + '</span>' +
+            '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[2px] text-[10.5px] font-bold font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25" title="' + esc(T.headers.twoFactor) + '"><i class="pi pi-shield text-[9.5px]"></i>2FA ' + esc(el.das_cfg || '-') + '</span>' +
+            '<span class="font-mono text-[10.5px] text-slate-400 dark:text-slate-500">#' + esc(el.user_id) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<dl class="mt-1.5 pt-1.5 border-t border-slate-200/70 dark:border-slate-800 grid grid-cols-2 gap-x-3 gap-y-1.5">' +
+          '<div class="col-span-2 flex items-center gap-2 min-w-0"><dt class="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">' + esc(T.headers.password) + '</dt>' +
+            '<dd class="flex items-center gap-1 min-w-0 font-mono text-[12px] leading-snug">' + pwd + '</dd></div>' +
+          '<div class="col-span-2 min-w-0"><dt class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 truncate">' + esc(T.headers.routing) + '</dt>' +
+            '<dd class="text-[11.5px] font-mono font-semibold text-slate-700 dark:text-slate-200 break-words leading-snug">' + esc(String(el.das_acl || '-').split(',').join(', ')) + '</dd></div>' +
+          custHtml +
+        '</dl>' +
+      '</article>';
+    }).join('');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rapor (exportReport): Kurumsal / Müşteri kullanıcıları — açık sekmeye ekrandaki arama ve filtreler uygulanır
+  // ---------------------------------------------------------------------------
+  let reportMenu = null;
+  const REPORT_SCOPES = {
+    corporate: [
+      { id: 'corporate', label: 'Kurumsal kullanıcılar', hint: 'Ekrandaki arama ve filtrelerle' },
+      { id: 'customer', label: 'Müşteri kullanıcıları', hint: 'Tüm kayıtlar' }
+    ],
+    customer: [
+      { id: 'corporate', label: 'Kurumsal kullanıcılar', hint: 'Tüm kayıtlar' },
+      { id: 'customer', label: 'Müşteri kullanıcıları', hint: 'Ekrandaki arama ve filtrelerle' }
+    ]
+  };
+  const FILTER_HEADER = { user_id: 'id', name: 'name', surname: 'surname', das_uid: 'username', das_pwd: 'password', das_grp: 'position', das_acl: 'routing', das_cfg: 'twoFactor', mobile: 'phoneNumber', email: 'email', customer_name: 'customer', department: 'department', status: 'status', last_login: 'lastLogin' };
+
+  function mountReportMenu() {
+    const host = document.getElementById('as-report');
+    if (!host || !DCIM.report) return;
+    reportMenu = DCIM.report.menu(host, {
+      label: 'Rapor al', scopes: REPORT_SCOPES[state.listTab], options: 'limit', unit: 'kullanıcı',
+      total: filteredUsers().length, disabled: !USERS.length, onExport: exportReport
+    });
+  }
+
+  // Kullanıcı listesi raporu. Şifre sütunu rapora yazılmaz; yalnız kimlik doğrulama türü (LDAP / yerel) gösterilir.
+  function exportReport(req) {
+    const tab = req.scope === 'customer' ? 'customer' : 'corporate';
+    const filtered = tab === state.listTab;
+    const all = filterUsers(tab, filtered);
+    const rows = DCIM.report.applyLimit(all, req);
+    const scopeLabel = REPORT_SCOPES[state.listTab].find(s => s.id === tab).label;
+    // Şifre süzgecinin değeri rapora yazılmaz
+    const filters = filtered ? [state.searchQuery.trim() ? 'arama "' + state.searchQuery.trim() + '"' : '']
+      .concat(Object.keys(state.localFilters).map(k => (T.headers[FILTER_HEADER[k]] || k) + ': ' + (k === 'das_pwd' ? '***' : state.localFilters[k])))
+      .filter(Boolean) : [];
+    const ldap = rows.filter(u => !u.das_pwd).length;
+    const position = u => { const p = getDisplayPosition(u.das_grp); return p ? positionLabel(p) : '-'; };
+    const H = T.headers;
+    const columns = [
+      { key: 'id', label: H.id, align: 'right' }, { key: 'name', label: H.name }, { key: 'surname', label: H.surname },
+      { key: 'uid', label: H.username }, { key: 'auth', label: 'Kimlik doğrulama' }, { key: 'pos', label: H.position },
+      { key: 'acl', label: H.routing }, { key: 'cfg', label: H.twoFactor }, { key: 'mobile', label: H.phoneNumber }, { key: 'email', label: H.email }
+    ].concat(tab === 'customer' ? [{ key: 'cust', label: H.customer }] : []);
+    DCIM.report.generate({
+      title: 'Kullanıcı Listesi Raporu',
+      subtitle: [scopeLabel, filters.length ? 'Filtre: ' + filters.join(', ') : '', 'Yönetim · ' + (req.limit ? 'İlk ' + rows.length + ' / ' + all.length : 'Tümü (' + all.length + ')') + ' kullanıcı'].filter(Boolean).join(' · '),
+      filename: tab === 'customer' ? 'Musteri_Kullanicilari' : 'Kurumsal_Kullanicilar',
+      kpis: [
+        { label: 'Kullanıcı', value: rows.length },
+        { label: 'LDAP', value: ldap, tone: 'info' },
+        { label: 'Yerel şifre', value: rows.length - ldap }
+      ],
+      sections: [{
+        title: scopeLabel,
+        columns,
+        rows: rows.map(u => ({
+          id: u.user_id, name: u.name, surname: u.surname, uid: u.das_uid, auth: u.das_pwd ? 'Yerel şifre' : 'LDAP', pos: position(u),
+          acl: String(u.das_acl || '-').split(',').join(', '), cfg: u.das_cfg || '-', mobile: u.mobile || '-', email: u.email || '-',
+          cust: getCustomerNames(u.customer_name).join(', ') || '-'
+        }))
+      }],
+      notes: ['Güvenlik gereği şifreler rapora yazılmaz; yalnız kimlik doğrulama türü gösterilir.']
+    }, req.format);
   }
 
   const colCount = () => (state.listTab === 'customer' ? 15 : 14);
@@ -321,7 +511,7 @@
       th(H.id, 'w-16') + th(H.name, 'min-w-[120px]') + th(H.surname, 'min-w-[120px]') + th(H.username, 'min-w-[120px]') +
       th(H.password, 'min-w-[130px]') + th(H.position, 'min-w-[110px]') + th(H.department, 'min-w-[150px]') +
       th(H.routing, 'min-w-[140px]') + th(H.twoFactor, 'min-w-[90px]') + th(H.phoneNumber, 'min-w-[130px]') +
-      th(H.email, 'min-w-[160px]') + (cust ? th(H.customer, 'min-w-[140px]') : '') +
+      th(H.email, 'min-w-[160px]') + (cust ? th(H.customer, 'min-w-[304px]') : '') +
       th(H.status, 'min-w-[90px]') + th(H.lastLogin, 'min-w-[130px]') + th(H.actions, 'w-24 text-center ' + STICKY_HEAD) +
     '</tr>';
     if (state.filterSwitch === 1) {
@@ -380,7 +570,9 @@
         '<td class="py-2 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400">' + esc(el.das_cfg) + '</td>' +
         '<td class="py-2 px-3 font-mono text-[11px] whitespace-nowrap">' + esc(el.mobile) + '</td>' +
         '<td class="py-2 px-3">' + (el.email ? '<a href="mailto:' + esc(el.email) + '" class="text-sky-600 dark:text-sky-400 hover:underline">' + esc(el.email) + '</a>' : '') + '</td>' +
-        (cust ? '<td class="py-2 px-3 font-medium text-slate-800 dark:text-slate-200"><div class="max-w-[180px] truncate" title="' + esc(el.customer_name) + '">' + esc(el.customer_name) + '</div></td>' : '') +
+        // Müşteriler chip olarak listelenir; sığmazsa hücre içinde dikey kaydırılır
+        (cust ? '<td class="py-2 px-3 align-middle"><div class="flex flex-wrap items-start content-start gap-1 w-[280px] max-h-[52px] overflow-x-hidden overflow-y-auto pr-1 [scrollbar-width:thin]">' +
+          getCustomerNames(el.customer_name).map(cu => '<span class="inline-block max-w-full whitespace-normal break-words px-1.5 py-px rounded-[2px] text-[11px] leading-4 font-semibold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25">' + esc(cu) + '</span>').join('') + '</div></td>' : '') +
         '<td class="py-2 px-3 whitespace-nowrap">' + statusBadge(passive ? 'passive' : 'active', passive ? T.status.passive : T.status.active) + '</td>' +
         '<td class="py-2 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">' + (el.last_login ? esc(fmtDateTime(el.last_login)) : '-') + '</td>' +
         '<td class="py-2 px-3 text-center ' + STICKY_CELL + '"><div class="flex items-center justify-center gap-1 opacity-80 group-hover:opacity-100">' +
@@ -397,6 +589,16 @@
     const tb = document.getElementById('as-tbody');
     if (!tb) return render();
     tb.innerHTML = renderTbody();
+    const cards = document.getElementById('as-cards');
+    if (cards) cards.innerHTML = renderCards();
+    // Dolu filtre alanı sayısı: mobil Filtre düğmesi ve panel başlığındaki rozet
+    const n = activeFilterCount();
+    root.querySelectorAll('[data-filter-count], [data-mfilter-count]').forEach(b => { b.textContent = n; b.style.display = n ? '' : 'none'; });
+    const clr = root.querySelector('[data-act="msearch-clear"]');
+    if (clr) clr.classList.toggle('hidden', !state.searchQuery);
+    const ri = root.querySelector('[data-refresh-icon]');
+    if (ri) ri.classList.toggle('pi-spin', state.loading);
+    if (reportMenu) reportMenu.update({ total: filteredUsers().length });
     const total = document.getElementById('as-total');
     if (total) total.textContent = filteredUsers().length;
     const pager = document.getElementById('as-pager');
@@ -414,6 +616,7 @@
     state.pageInput = 1;
     state.filterModel = emptyFilter();
     state.localFilters = {};
+    state.searchQuery = '';
     state.visiblePwd = null;
     render();
   }
@@ -459,7 +662,7 @@
     refreshBody();
   }
   function onPageSizeChange(raw) {
-    let n = Math.round(Number(raw)) || 15;
+    let n = Math.round(Number(raw)) || 50;
     if (n > 999) n = 999; else if (n < 1) n = 1;
     state.pageRng = n;
     state.pageOfs = 0;
@@ -493,6 +696,8 @@
   }
 
   function deleteUser(user) {
+    // Mobilde ekleme / düzenleme / silme / yetkilendirme yok (yalnızca görüntüleme)
+    if (!user || isMobile()) return;
     dialog({
       title: T.deleteModal.title,
       variant: 'danger',
@@ -523,6 +728,25 @@
     const label = user.name + ' ' + user.surname + ' (' + user.das_uid + ')';
     if (user.status === 'passive') toast(label + ' pasif duruma alındı; oturum açamaz.', 'warning', 'Kullanıcı Pasif');
     else toast(label + ' yeniden aktif edildi.', 'success', 'Kullanıcı Aktif');
+  }
+
+  // Mobil arama kutusu
+  function onSearchChange(v) {
+    state.searchQuery = v;
+    state.pageOfs = 0;
+    state.pageInput = 1;
+    const inp = document.getElementById('as-msearch');
+    if (inp && inp.value !== v) inp.value = v;
+    refreshBody();
+  }
+  // Mobil filtre panelindeki "Temizle": tüm alan filtrelerini ve aramayı sıfırlar (panel açık kalır)
+  function clearAllFilters() {
+    state.filterModel = emptyFilter();
+    state.localFilters = {};
+    state.searchQuery = '';
+    state.pageOfs = 0;
+    state.pageInput = 1;
+    render();
   }
 
   // Pozisyon filtresi açılır listesi (filterPositionDropdown)
@@ -556,12 +780,20 @@
     if (t.hasAttribute('data-row-del')) { e.stopPropagation(); return deleteUser(find(t.getAttribute('data-row-del'))); }
     if (t.hasAttribute('data-row-status')) { e.stopPropagation(); return toggleStatus(find(t.getAttribute('data-row-status'))); }
     if (t.hasAttribute('data-pw-eye')) return togglePwEye(t);
+    if (t.hasAttribute('data-cust-toggle')) {
+      const id = t.getAttribute('data-cust-toggle');
+      if (state.expandedCustomers.has(id)) state.expandedCustomers.delete(id); else state.expandedCustomers.add(id);
+      return refreshBody();
+    }
     switch (t.getAttribute('data-act')) {
       case 'filter': return openFilter();
       case 'refresh': return onRefreshData();
       case 'add': return openAddModal(state.listTab === 'customer' ? 'customer' : 'corporate');
-      case 'perm-pages': window.location.href = 'permission-settings.html'; return;
-      case 'cust-auth': return openAuthModal('');
+      case 'perm-pages': if (!isMobile()) window.location.href = 'permission-settings.html'; return;
+      // Müşteri yetkilendirme artık ayrı sayfa: seçili kullanıcı (varsa) ?uid= ile taşınır
+      case 'cust-auth': if (!isMobile()) window.location.href = CUST_AUTH_URL(lastRecordUid); return;
+      case 'msearch-clear': return onSearchChange('');
+      case 'mfilter-clear': return clearAllFilters();
       case 'pw-clear': return clearPasswordForm();
       case 'pw-submit': return submitPasswordChange();
     }
@@ -573,6 +805,7 @@
       if (e.target.hasAttribute('data-pos-filter')) updatePositionDropdown(true);
       inputFilter();
     }
+    if (e.target.id === 'as-msearch') onSearchChange(e.target.value);
     if (e.target.hasAttribute('data-pw')) updatePasswordState();
   });
   root.addEventListener('change', e => {
@@ -608,14 +841,19 @@
   let modal = null;
   const emptyRecord = () => ({ user_id: '', name: '', surname: '', mobile: '', email: '', das_uid: '', das_pwd: '', das_kid: '', das_grp: '', das_acl: '', das_cfg: '', customer_name: '', cdb_id: '', country_code: '', department: '', status: 'active' });
 
+  let lastRecordUid = ''; // newRecord?.das_uid — Müşteri Yetkilendirme sayfasına taşınır
+
   function openAddModal(type) {
+    // Mobilde ekleme / düzenleme / silme / yetkilendirme yok (yalnızca görüntüleme)
+    if (isMobile()) return;
     modal = { mode: 'add', tab: type, rec: emptyRecord(), sel: [], custSelectVisible: false, pwdVisible: false, custSearch: '', submitting: false, el: null };
     mountModal();
   }
 
   // rowClickSelect — kaydı modala yükle, telefonu ülke kodu + maske biçimine ayır
   function rowClickSelect(rec) {
-    if (!rec) return;
+    if (!rec || isMobile()) return;
+    lastRecordUid = rec.das_uid || '';
     const r = Object.assign(emptyRecord(), rec);
     const sel = [];
     if (r.cdb_id && r.cdb_id.trim() !== '') {
@@ -653,7 +891,7 @@
     modal = null;
   }
   function onModalKey(e) {
-    if (e.key === 'Escape' && modal && !authModal && !document.querySelector('[data-dialog-panel]')) closeModal();
+    if (e.key === 'Escape' && modal && !document.querySelector('[data-dialog-panel]')) closeModal();
   }
 
   function isFormValid() {
@@ -901,7 +1139,8 @@
         return;
       }
       if (b.hasAttribute('data-cust-cancel')) { modal.custSelectVisible = false; modal.custSearch = ''; return mountModal(); }
-      if (b.hasAttribute('data-m-open-auth')) return openAuthModal(modal.rec.das_uid);
+      // Müşteri yetkilendirme artık ayrı sayfa (customer-authorization.html?uid=)
+      if (b.hasAttribute('data-m-open-auth')) { window.location.href = CUST_AUTH_URL(modal.rec.das_uid); return; }
       if (b.hasAttribute('data-m-submit')) return submitModal();
     });
     host.addEventListener('input', e => {
@@ -1017,393 +1256,6 @@
       flash(saved.user_id);
       render();
     }, 450);
-  }
-
-  // ===========================================================================
-  // Müşteri Yetkilendirme modalı (NewUICMPAuthorizationManagementComponent)
-  // ===========================================================================
-  let authModal = null;
-  const SUB_MAP = {
-    kabinler: ['kabinler_pdu', 'kabinler_asm', 'kabinler_sensor'],
-    raporlama: ['raporlama_pduGuc', 'raporlama_sensor', 'raporlama_alarm']
-  };
-  const PERM_KEYS = Object.keys(AM.permissions);
-  const splitAcl = acl => String(acl || '').split(/,(?![^(]*\))/).map(t => t.trim());
-
-  function parseAclToSubPermissions(acl) {
-    const tags = splitAcl(acl);
-    const sp = { raporlama_pduGuc: false, raporlama_sensor: false, raporlama_alarm: false, kabinler_pdu: false, kabinler_asm: false, kabinler_sensor: false };
-    if (tags.some(t => t === '*')) { Object.keys(sp).forEach(k => { sp[k] = true; }); return sp; }
-    if (tags.some(t => t === 'CAB*')) { sp.kabinler_pdu = sp.kabinler_asm = sp.kabinler_sensor = true; }
-    else if (tags.some(t => t === '*CAB' || t === 'CAB')) { sp.kabinler_pdu = sp.kabinler_asm = true; }
-    else {
-      const cab = tags.find(t => t.startsWith('CAB('));
-      const mm = cab && cab.match(/^CAB\(([^)]+)\)$/);
-      if (mm) {
-        const parts = mm[1].split(/[,|-]/).map(p => p.trim().toLowerCase());
-        sp.kabinler_pdu = parts.includes('pdu'); sp.kabinler_asm = parts.includes('asm'); sp.kabinler_sensor = parts.includes('sen');
-      }
-    }
-    if (tags.some(t => t === 'REP*')) { sp.raporlama_pduGuc = sp.raporlama_sensor = sp.raporlama_alarm = true; }
-    else {
-      const rep = tags.find(t => t.startsWith('REP('));
-      const mm = rep && rep.match(/^REP\(([^)]+)\)$/);
-      if (mm) {
-        const parts = mm[1].split(/[,|-]/).map(p => p.trim().toLowerCase());
-        sp.raporlama_pduGuc = parts.includes('pdu'); sp.raporlama_sensor = parts.includes('sen'); sp.raporlama_alarm = parts.includes('cma');
-      }
-    }
-    return sp;
-  }
-  function parseAclToPermissions(acl) {
-    const tags = splitAcl(acl);
-    const has = tag => tags.some(t => t === tag || t === tag + '*' || t === '*' + tag || t === '*' || t.startsWith(tag + '('));
-    const sp = parseAclToSubPermissions(acl);
-    return {
-      kabinler: sp.kabinler_pdu || sp.kabinler_asm || sp.kabinler_sensor,
-      tumVarliklar: has('ASM'),
-      pduDetaylari: has('PDU'),
-      raporlama: sp.raporlama_pduGuc || sp.raporlama_sensor || sp.raporlama_alarm,
-      alarmListesi: has('CMA'),
-      musteriHesap: has('CDB')
-    };
-  }
-  function buildAclFromUser(u) {
-    const parts = [];
-    const p = u.permissions;
-    const sp = u.subPermissions;
-    if (!p.alarmListesi) sp.raporlama_alarm = false;
-    if (p.kabinler) {
-      const c = [];
-      if (sp.kabinler_pdu) c.push('pdu');
-      if (sp.kabinler_asm) c.push('asm');
-      if (sp.kabinler_sensor) c.push('sen');
-      if (c.length === 3) parts.push('CAB*'); else if (c.length) parts.push('CAB(' + c.join(', ') + ')');
-    }
-    if (p.tumVarliklar) parts.push('ASM*');
-    if (p.pduDetaylari) parts.push('PDU*');
-    if (p.raporlama) {
-      const r = [];
-      if (sp.raporlama_pduGuc) r.push('pdu');
-      if (sp.raporlama_sensor) r.push('sen');
-      if (sp.raporlama_alarm) r.push('cma');
-      if (r.length === 3) parts.push('REP*'); else if (r.length) parts.push('REP(' + r.join(', ') + ')');
-    }
-    if (p.musteriHesap) parts.push('CDB*');
-    if (p.alarmListesi) parts.push('CMA*');
-    let acl = parts.join(',');
-    if (acl.length) acl += ',';
-    return acl;
-  }
-  const authUser = u => ({
-    user_id: u.user_id, das_uid: u.das_uid, name: u.name, surname: u.surname, email: u.email, das_acl: u.das_acl,
-    das_grp: u.das_grp, customer_name: u.customer_name,
-    permissions: parseAclToPermissions(u.das_acl), subPermissions: parseAclToSubPermissions(u.das_acl)
-  });
-  const clone = o => JSON.parse(JSON.stringify(o));
-
-  function openAuthModal(selectedUid) {
-    const users = USERS.filter(isUserCustomer).map(authUser);
-    authModal = { users, search: '', selected: null, openDD: null, saving: false, el: null };
-    const found = selectedUid ? users.find(u => u.das_uid === selectedUid || u.user_id === selectedUid) : null;
-    authModal.selected = found ? clone(found) : users.length ? clone(users[0]) : null;
-    const host = document.createElement('div');
-    host.className = 'fixed inset-0 z-50 overflow-hidden bg-slate-950/80 flex items-center justify-center p-2 sm:p-4 md:p-6 animate-fade-in';
-    document.body.appendChild(host);
-    authModal.el = host;
-    host.innerHTML = authShellHtml();
-    renderAuthList();
-    renderAuthDetail();
-    bindAuth(host);
-  }
-  function closeAuthModal() {
-    if (!authModal) return;
-    authModal.el.remove();
-    authModal = null;
-  }
-  function authStats() {
-    const total = authModal.users.length;
-    const active = authModal.users.filter(u => u.permissions.alarmListesi).length;
-    return { total, active, inactive: total - active };
-  }
-  function authFiltered() {
-    const term = trLower(authModal.search).trim();
-    if (!term) return authModal.users;
-    return authModal.users.filter(u => trLower(u.das_uid).indexOf(term) >= 0 || trLower(u.name).indexOf(term) >= 0 ||
-      trLower(u.surname).indexOf(term) >= 0 || trLower(u.name + ' ' + u.surname).indexOf(term) >= 0);
-  }
-
-  function authShellHtml() {
-    return '<div class="as-modal bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xl w-full max-w-7xl h-[85vh] max-h-[85vh] flex flex-col overflow-hidden transform transition-all animate-modal-pop" data-am-panel>' +
-      '<div class="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-surface-base shrink-0">' +
-        '<div class="flex items-center gap-2.5">' +
-          '<span class="w-7 h-7 rounded-[2px] flex items-center justify-center text-xs bg-sky-500/10 text-sky-500 border border-sky-500/20"><i class="pi pi-shield"></i></span>' +
-          '<h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">' + esc(AM.title) + '</h3>' +
-        '</div>' +
-        '<button type="button" data-am-close class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-[2px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><i class="pi pi-times text-xs"></i></button>' +
-      '</div>' +
-      '<div class="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-100 dark:bg-surface-base">' +
-        '<div class="grid grid-cols-12 gap-4">' +
-          '<div class="col-span-12 lg:col-span-3">' +
-            '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs flex flex-col h-[calc(100vh-13rem)] min-h-[480px]">' +
-              '<div class="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/40 select-none">' +
-                '<div class="flex items-center gap-2"><i class="pi pi-users text-sky-500 text-sm"></i><span class="text-xs font-bold text-slate-800 dark:text-slate-200">' + esc(AM.users) + '</span></div>' +
-                '<span data-am-count class="px-2 py-0.5 text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xs shrink-0"></span>' +
-              '</div>' +
-              '<div class="p-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10"><div class="relative">' +
-                '<i class="pi pi-search absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>' +
-                '<input type="text" data-am-search placeholder="' + esc(AM.searchUser) + '" class="w-full pl-7 pr-2 py-1 text-xs bg-white dark:bg-surface-base border border-slate-200 dark:border-border-subtle rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500" />' +
-              '</div></div>' +
-              '<div data-am-list class="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/40"></div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="col-span-12 lg:col-span-9" data-am-detail></div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }
-
-  function renderAuthList() {
-    const list = authFiltered();
-    const sel = authModal.selected;
-    authModal.el.querySelector('[data-am-count]').textContent = list.length;
-    authModal.el.querySelector('[data-am-list]').innerHTML = list.length
-      ? list.map(u => {
-        const on = sel && sel.user_id === u.user_id;
-        return '<div data-am-user="' + esc(u.user_id) + '" class="' +
-          (on ? 'bg-sky-500/10 border-l-2 border-sky-600 dark:bg-sky-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/30 border-l-2 border-transparent') +
-          ' p-2.5 flex items-center gap-2.5 cursor-pointer transition-all border-b border-slate-100 dark:border-slate-800/10">' +
-          '<div class="w-8 h-8 rounded-[2px] bg-sky-100 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 font-extrabold text-[11px] flex items-center justify-center shrink-0 select-none uppercase">' + esc(u.name.charAt(0) + u.surname.charAt(0)) + '</div>' +
-          '<div class="flex-1 min-w-0">' +
-            '<div class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">' + esc(u.name + ' ' + u.surname) + '</div>' +
-            '<div class="flex items-center justify-between gap-1 text-[10px] text-slate-500 dark:text-slate-400 truncate"><span>' + esc(u.das_uid) + '</span>' +
-              '<span class="px-1.5 py-0.5 rounded-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9px] font-bold">' + esc(positionLabel(getDisplayPosition(u.das_grp))) + '</span></div>' +
-          '</div>' +
-          (on ? '<i class="pi pi-chevron-right text-sky-500 text-[10px]"></i>' : '') +
-        '</div>';
-      }).join('')
-      : '<div class="flex flex-col items-center justify-center p-8 text-center h-48 select-none"><i class="pi pi-search-minus text-slate-400 text-xl mb-2"></i><span class="text-xs text-slate-500 dark:text-slate-400 font-medium">' + esc(AM.userNotFound) + '</span></div>';
-  }
-
-  function renderAuthDetail() {
-    const host = authModal.el.querySelector('[data-am-detail]');
-    const u = authModal.selected;
-    if (!u) {
-      host.innerHTML = '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs h-[calc(100vh-13rem)] min-h-[480px] flex items-center justify-center p-8 select-none">' +
-        kit.emptyState({ message: AM.selectUserPrompt, icon: 'pi pi-users', tone: 'info' }) + '</div>';
-      return;
-    }
-    const chk = 'rounded-[2px] border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sky-600 focus:ring-sky-500';
-    const perms = PERM_KEYS.map(key => {
-      const open = authModal.openDD === key;
-      const subs = SUB_MAP[key];
-      return '<div class="' + (open ? 'border-sky-500 dark:border-sky-500/80 ring-1 ring-sky-500/20' : 'border-slate-200 dark:border-slate-800') + ' relative bg-slate-50/50 dark:bg-slate-900/30 border rounded-[2px] flex flex-col p-3 transition-all">' +
-        '<div class="flex items-start justify-between gap-3">' +
-          '<div data-am-perm="' + key + '" class="flex items-start gap-2.5 flex-1 min-w-0 cursor-pointer">' +
-            '<input type="checkbox"' + (u.permissions[key] ? ' checked' : '') + ' class="pointer-events-none mt-0.5 ' + chk + ' focus:ring-offset-0 focus:outline-none shrink-0" />' +
-            '<div class="flex flex-col min-w-0 pointer-events-none">' +
-              '<span class="text-xs font-bold text-slate-800 dark:text-slate-200 select-none truncate">' + esc(AM.permissions[key]) + '</span>' +
-              '<span class="text-[10px] text-slate-400 dark:text-slate-500 leading-normal mt-0.5 select-none line-clamp-2">' + esc(AM.permissionDescription) + '</span>' +
-            '</div>' +
-          '</div>' +
-          (subs ? '<button type="button" data-am-dd="' + key + '" class="' + (open ? 'bg-sky-600/10 text-sky-600 dark:text-sky-400 rotate-90' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80') + ' w-6 h-6 rounded-[2px] flex items-center justify-center transition-all cursor-pointer select-none shrink-0" title="' + esc(AM.subPermissions) + '"><i class="pi pi-chevron-right text-[9px]"></i></button>' : '') +
-        '</div>' +
-        (subs && open
-          ? '<div class="mt-3 pt-2.5 border-t border-slate-200 dark:border-slate-800/85 space-y-1.5 select-none">' +
-              '<div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">' + esc(AM.subPermissions) + '</div>' +
-              '<div class="space-y-1">' + subs.map(sk => {
-                const locked = sk === 'raporlama_alarm' && !u.permissions.alarmListesi;
-                return '<label data-am-sublabel="' + sk + '" class="flex items-center justify-between gap-4 p-1.5 rounded-xs hover:bg-slate-100/60 dark:hover:bg-slate-800/40 ' + (locked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer') + '"' + (locked ? ' title="' + esc(AM.alerts.noAlarmPermissionTooltip) + '"' : '') + '>' +
-                  '<span class="text-[11px] text-slate-600 dark:text-slate-300">' + esc(AM.sub[sk]) + '</span>' +
-                  '<input type="checkbox" data-am-sub="' + sk + '" data-parent="' + key + '"' + (u.subPermissions[sk] ? ' checked' : '') + (locked ? ' disabled' : '') + ' class="' + chk + '" />' +
-                '</label>';
-              }).join('') + '</div>' +
-            '</div>'
-          : '') +
-      '</div>';
-    }).join('');
-
-    const st = authStats();
-    const permCard = kit.card({
-      title: u.name + ' ' + u.surname + ' - Yetkileri',
-      badge: u.das_uid,
-      icon: 'pi pi-shield',
-      cls: 'h-full flex flex-col justify-between',
-      body:
-        '<div class="space-y-4 flex-1">' +
-          '<div class="text-xs font-bold text-slate-400 dark:text-slate-500 border-b border-slate-200 dark:border-slate-800/80 pb-1.5">' + esc(AM.permissionModules) + '</div>' +
-          '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">' + perms + '</div>' +
-        '</div>' +
-        '<div class="mt-8 pt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">' +
-          '<div class="text-xs text-slate-500 dark:text-slate-400"><span class="font-medium mr-1">Müşteri:</span><strong class="text-slate-800 dark:text-slate-200 font-bold">' + esc(u.customer_name || AM.noRelatedCustomer) + '</strong></div>' +
-          '<div class="flex items-center gap-2 w-full sm:w-auto justify-end">' +
-            button({ variant: 'secondary', size: 'sm', icon: 'pi pi-refresh', label: AM.resetPermissions, attrs: 'data-am-reset' + (authModal.saving ? ' disabled' : '') }) +
-            button({ variant: 'primary', size: 'sm', icon: authModal.saving ? 'pi pi-spin pi-spinner' : 'pi pi-save', label: authModal.saving ? AM.saving : AM.saveChanges, attrs: 'data-am-save' + (authModal.saving ? ' disabled' : '') }) +
-          '</div>' +
-        '</div>'
-    });
-    const tile = (icon, val, label, box, valCls, lblCls) =>
-      '<div class="' + box + ' p-2.5 rounded-[2px] text-center"><i class="' + icon + ' text-sm"></i>' +
-        '<div class="text-base font-extrabold ' + valCls + ' mt-1 leading-none">' + val + '</div>' +
-        '<div class="text-[9px] font-bold ' + lblCls + ' uppercase tracking-wider mt-1.5 leading-none truncate">' + esc(label) + '</div></div>';
-    const alarmCard = kit.card({
-      title: AM.customerAlarmManagement,
-      icon: 'pi pi-bell',
-      cls: 'h-full flex flex-col justify-between',
-      body:
-        '<div class="space-y-4 flex-1">' +
-          '<div class="grid grid-cols-3 gap-2 select-none">' +
-            tile('pi pi-chart-bar text-slate-400', st.total, AM.total, 'bg-slate-50/50 dark:bg-slate-900/30 border border-slate-200 dark:border-border-subtle', 'text-slate-800 dark:text-slate-100', 'text-slate-400 dark:text-slate-500') +
-            tile('pi pi-bell text-emerald-500', st.active, AM.alarmOn, 'bg-emerald-500/5 dark:bg-emerald-950/10 border border-emerald-500/10 dark:border-emerald-900/30', 'text-emerald-600 dark:text-emerald-400', 'text-emerald-500 dark:text-emerald-500') +
-            tile('pi pi-bell-slash text-rose-500', st.inactive, AM.alarmOff, 'bg-rose-500/5 dark:bg-rose-950/10 border border-rose-500/10 dark:border-rose-900/30', 'text-rose-600 dark:text-rose-400', 'text-rose-500 dark:text-rose-500') +
-          '</div>' +
-          '<div class="h-px bg-slate-200 dark:bg-slate-800/80 my-2"></div>' +
-          '<div class="flex gap-2 p-3 bg-sky-500/5 dark:bg-sky-500/5 border border-sky-500/10 dark:border-sky-500/10 rounded-[2px] text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed select-none">' +
-            '<i class="pi pi-info-circle text-sky-500 text-xs shrink-0 mt-0.5"></i><span>' + esc(AM.alarmManagementInfo) + '</span>' +
-          '</div>' +
-        '</div>' +
-        '<div class="mt-6 space-y-2 select-none">' +
-          button({ variant: 'primary', size: 'md', icon: 'pi pi-bell', label: AM.turnOnAll, attrs: 'data-am-bulk="on"' + (authModal.saving ? ' disabled' : '') }).replace('inline-flex', 'w-full inline-flex') +
-          button({ variant: 'danger', size: 'md', icon: 'pi pi-bell-slash', label: AM.turnOffAll, attrs: 'data-am-bulk="off"' + (authModal.saving ? ' disabled' : '') }).replace('inline-flex', 'w-full inline-flex') +
-        '</div>'
-    });
-    host.innerHTML = '<div class="grid grid-cols-12 gap-4">' +
-      '<div class="col-span-12 xl:col-span-8">' + permCard + '</div>' +
-      '<div class="col-span-12 xl:col-span-4">' + alarmCard + '</div>' +
-    '</div>';
-  }
-
-  // togglePermission / checkParentStatus
-  function togglePermission(key) {
-    const u = authModal.selected;
-    const next = !u.permissions[key];
-    u.permissions[key] = next;
-    if (key === 'kabinler') { SUB_MAP.kabinler.forEach(k => { u.subPermissions[k] = next; }); checkParentStatus('kabinler'); }
-    if (key === 'raporlama') {
-      SUB_MAP.raporlama.forEach(k => { u.subPermissions[k] = next; });
-      if (next) u.permissions.alarmListesi = true;
-      checkParentStatus('raporlama');
-    }
-    if (key === 'alarmListesi') { u.subPermissions.raporlama_alarm = next; checkParentStatus('raporlama'); }
-  }
-  function checkParentStatus(parent) {
-    const u = authModal.selected;
-    if (SUB_MAP[parent]) u.permissions[parent] = SUB_MAP[parent].some(k => u.subPermissions[k]);
-  }
-  function applyAcl(userId, acl) {
-    const row = USERS.find(x => x.user_id === userId);
-    if (row) row.das_acl = acl;
-    const idx = authModal.users.findIndex(x => x.user_id === userId);
-    if (idx >= 0) {
-      authModal.users[idx].das_acl = acl;
-      authModal.users[idx].permissions = parseAclToPermissions(acl);
-      authModal.users[idx].subPermissions = parseAclToSubPermissions(acl);
-    }
-  }
-  function saveWithDelay(fn) {
-    authModal.saving = true;
-    renderAuthDetail();
-    setTimeout(() => {
-      if (!authModal) return;
-      authModal.saving = false;
-      fn();
-      renderAuthList();
-      renderAuthDetail();
-      refreshBody();
-    }, 450);
-  }
-
-  function bindAuth(host) {
-    host.addEventListener('click', e => {
-      if (e.target === host) return closeAuthModal();
-      if (e.target.closest('[data-am-close]')) return closeAuthModal();
-      const userEl = e.target.closest('[data-am-user]');
-      if (userEl) {
-        const u = authModal.users.find(x => x.user_id === userEl.getAttribute('data-am-user'));
-        authModal.selected = u ? clone(u) : null;
-        authModal.openDD = null;
-        renderAuthList();
-        renderAuthDetail();
-        return;
-      }
-      const perm = e.target.closest('[data-am-perm]');
-      if (perm) { togglePermission(perm.getAttribute('data-am-perm')); return renderAuthDetail(); }
-      const dd = e.target.closest('[data-am-dd]');
-      if (dd) { const k = dd.getAttribute('data-am-dd'); authModal.openDD = authModal.openDD === k ? null : k; return renderAuthDetail(); }
-      const subLabel = e.target.closest('[data-am-sublabel="raporlama_alarm"]');
-      if (subLabel && !authModal.selected.permissions.alarmListesi) { e.preventDefault(); toast(AM.alerts.noAlarmPermission, 'error'); return; }
-      const b = e.target.closest('button');
-      if (!b || b.disabled) return;
-      const u = authModal.selected;
-      if (b.hasAttribute('data-am-save')) {
-        const acl = buildAclFromUser(u);
-        return saveWithDelay(() => {
-          applyAcl(u.user_id, acl);
-          authModal.selected = clone(authModal.users.find(x => x.user_id === u.user_id));
-          toast(AM.alerts.updateSuccess.replace('{username}', u.das_uid) + ' ACL: ' + acl, 'success');
-        });
-      }
-      if (b.hasAttribute('data-am-reset')) {
-        const name = u.name + ' ' + u.surname;
-        dialog({
-          title: AM.resetTitle, subtitle: name, variant: 'warning', confirmLabel: AM.confirmResetBtn, cancelLabel: AM.cancelBtn, confirmIcon: 'pi pi-refresh',
-          body: '<div class="space-y-3 select-none"><p class="text-xs leading-normal">' + esc(AM.resetMessage.replace('{name}', name)) + '</p>' +
-            '<div class="flex gap-2 p-2.5 bg-amber-500/5 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-[2px] leading-relaxed"><i class="pi pi-info-circle text-xs shrink-0 mt-0.5"></i><span class="text-[10px]">' + esc(AM.resetWarning) + '</span></div></div>',
-          onConfirm() {
-            saveWithDelay(() => {
-              applyAcl(u.user_id, DEFAULT_CUSTOMER_ACL);
-              authModal.selected = clone(authModal.users.find(x => x.user_id === u.user_id));
-              toast(AM.alerts.resetSuccess.replace('{username}', u.das_uid), 'success');
-            });
-          }
-        });
-        return;
-      }
-      if (b.hasAttribute('data-am-bulk')) {
-        const on = b.getAttribute('data-am-bulk') === 'on';
-        const action = on ? AM.turnOnAll : AM.turnOffAll;
-        dialog({
-          title: AM.bulkToggleTitle.replace('{action}', action), variant: 'warning',
-          confirmLabel: AM.confirmBulkToggle.replace('{action}', action), cancelLabel: AM.cancelBtn, confirmIcon: on ? 'pi pi-bell' : 'pi pi-bell-slash',
-          body: '<div class="space-y-3 select-none"><p class="text-xs leading-normal">' + esc(AM.bulkToggleMessage.replace('{action}', action)) + '</p>' +
-            (!on ? '<div class="flex gap-2 p-2.5 bg-rose-500/5 border border-rose-500/25 text-rose-600 dark:text-rose-400 rounded-[2px] leading-relaxed"><i class="pi pi-info-circle text-xs shrink-0 mt-0.5"></i><span class="text-[10px]">' + esc(AM.bulkToggleWarning) + '</span></div>' : '') + '</div>',
-          onConfirm() {
-            // HIS_bulk_update_alarms(ENABLE|DISABLE) karşılığı: tüm müşterilerde CMA yetkisini aç/kapat
-            saveWithDelay(() => {
-              authModal.users.forEach(x => {
-                const cp = clone(x);
-                cp.permissions.alarmListesi = on;
-                cp.subPermissions.raporlama_alarm = on && cp.permissions.raporlama ? cp.subPermissions.raporlama_alarm : false;
-                applyAcl(x.user_id, buildAclFromUser(cp));
-              });
-              const sel = authModal.selected && authModal.users.find(x => x.user_id === authModal.selected.user_id);
-              authModal.selected = sel ? clone(sel) : null;
-              toast(on ? AM.alerts.bulkEnabled : AM.alerts.bulkDisabled, 'success');
-            });
-          }
-        });
-      }
-    });
-    host.addEventListener('change', e => {
-      const sk = e.target.getAttribute('data-am-sub');
-      if (!sk) return;
-      authModal.selected.subPermissions[sk] = e.target.checked;
-      checkParentStatus(e.target.getAttribute('data-parent'));
-      renderAuthDetail();
-    });
-    host.addEventListener('input', e => {
-      if (!e.target.hasAttribute('data-am-search')) return;
-      authModal.search = e.target.value;
-      if (authModal.selected && !authFiltered().some(u => u.user_id === authModal.selected.user_id)) {
-        authModal.selected = null;
-        renderAuthDetail();
-      }
-      renderAuthList();
-    });
-    document.addEventListener('keydown', function onKey(e) {
-      if (!authModal) { document.removeEventListener('keydown', onKey); return; }
-      if (e.key === 'Escape' && !document.querySelector('[data-dialog-panel]')) closeAuthModal();
-    });
   }
 
   // ===========================================================================
@@ -1577,12 +1429,14 @@
   // ---------------------------------------------------------------------------
   render();
   const editUid = params.get('edit');
-  const authParam = params.get('auth');
   if (editUid) {
     const u = USERS.find(x => x.das_uid === editUid || x.user_id === editUid);
     if (u) { showUserPage(u); render(); rowClickSelect(u); }
   } else if (params.get('open') === 'add' && state.listTab !== 'password') {
     openAddModal(state.listTab === 'customer' ? 'customer' : 'corporate');
   }
-  if (authParam) openAuthModal(authParam === '1' ? '' : authParam);
+  if (params.get('report') === '1' && state.listTab !== 'password') {
+    const rb = root.querySelector('#as-report [data-rk-btn]');
+    if (rb) setTimeout(() => rb.click(), 60);
+  }
 })();

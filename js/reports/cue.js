@@ -71,7 +71,7 @@
     { value: 'CMR/T00', label: '1.Kat' },
     { value: 'CMR/T02', label: '2.Kat' },
     { value: 'CMR/T03', label: '3.Kat' },
-    { value: 'CMR/T04', label: 'IDC4' }
+    { value: 'CMR/T04', label: 'DCB' }
   ];
   const AGG_OPTIONS = [
     { value: 'average', label: 'Ortalama' },
@@ -320,46 +320,41 @@
     function renderModal() {
       if (!state.showHistoricalData) { hosts.modal.innerHTML = ''; return; }
       const has = hasCUEData();
+      const RM = DCIM.reportModal;
+      const dis = has ? '' : ' disabled';
       let content;
       if (state.isLoadingReport) {
-        content = '<div class="flex flex-col items-center justify-center py-12">' +
+        content = '<div class="rpt-state">' +
           '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl mb-3"></i>' +
           '<p class="text-slate-600 dark:text-slate-300 text-sm font-medium">' + esc(T.loadingData) + '</p></div>';
       } else if (has) {
-        content = '<div class="overflow-x-auto"><table class="w-full text-xs text-left border-collapse">' +
-          '<thead><tr class="border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold bg-slate-100 dark:bg-slate-800/60">' +
-            '<th class="py-2.5 px-3.5">' + esc(state.reportMode === 'hourly' ? T.dateTime : T.date) + '</th>' +
-            '<th class="py-2.5 px-3.5">' + esc(T.floor) + '</th>' +
-            '<th class="py-2.5 px-3.5 text-right">' + esc(T.cueValue) + ' (' + esc(getAggregationLabel()) + ')</th>' +
+        content = '<table class="rpt-table">' +
+          '<thead><tr>' +
+            '<th>' + esc(state.reportMode === 'hourly' ? T.dateTime : T.date) + '</th>' +
+            '<th>' + esc(T.floor) + '</th>' +
+            '<th class="text-right">' + esc(T.cueValue) + ' (' + esc(getAggregationLabel()) + ')</th>' +
           '</tr></thead>' +
-          '<tbody class="divide-y divide-slate-200 dark:divide-slate-800/80">' +
+          '<tbody>' +
             state.historicalCUEData.map(item =>
-              '<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">' +
-                '<td class="py-2.5 px-3.5 text-slate-700 dark:text-slate-200 font-mono">' + esc(item.date) + '</td>' +
-                '<td class="py-2.5 px-3.5 text-slate-800 dark:text-slate-300">' + esc(item.floorLabel) + '</td>' +
-                '<td class="py-2.5 px-3.5 text-right font-mono font-bold text-sky-600 dark:text-sky-400">' + fmtDec(item.cueValue, 3, 3) + '</td>' +
+              '<tr>' +
+                '<td class="text-slate-700 dark:text-slate-200 font-mono">' + esc(item.date) + '</td>' +
+                '<td class="text-slate-800 dark:text-slate-300">' + esc(item.floorLabel) + '</td>' +
+                '<td class="text-right font-mono font-bold text-sky-600 dark:text-sky-400">' + fmtDec(item.cueValue, 3, 3) + '</td>' +
               '</tr>').join('') +
-          '</tbody></table></div>';
+          '</tbody></table>';
       } else {
         content = kit.emptyState({ message: T.noDataMessage });
       }
-      hosts.modal.innerHTML =
-        '<div data-modal-backdrop class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-sm z-[200000] flex items-center justify-center p-4">' +
-          '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">' +
-            '<div class="p-4 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-panel/40">' +
-              '<h3 class="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">' +
-                '<i class="pi pi-history text-sky-500"></i><span>' + esc(T.historyData) + '</span>' +
-              '</h3>' +
-              '<div class="flex items-center gap-2">' +
-                btn({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: T.pdfDownload, act: 'pdf', disabled: !has }) +
-                btn({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: T.excelDownload, act: 'excel', disabled: !has }) +
-                btn({ variant: 'secondary', size: 'sm', icon: 'pi pi-folder', label: T.zipDownload, act: 'zip', disabled: !has }) +
-                btn({ variant: 'ghost', size: 'sm', icon: 'pi pi-times', iconOnly: true, act: 'close-modal' }) +
-              '</div>' +
-            '</div>' +
-            '<div class="p-4 overflow-y-auto flex-1">' + content + '</div>' +
-          '</div>' +
-        '</div>';
+      // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur)
+      hosts.modal.innerHTML = RM.html({
+        title: T.historyData, subtitle: T.title, icon: 'pi pi-history', tone: 'sky', size: 'lg', z: 'z-[200000]',
+        attrs: 'data-modal-backdrop',
+        actions: RM.btn('pdf', 'pi pi-file-pdf', T.pdfDownload, 'data-act="pdf"' + dis) +
+          RM.btn('excel', 'pi pi-file-excel', T.excelDownload, 'data-act="excel"' + dis) +
+          RM.btn('zip', 'pi pi-folder', T.zipDownload, 'data-act="zip"' + dis),
+        summary: !state.isLoadingReport && has ? RM.total(state.historicalCUEData.length) : '',
+        body: content
+      }).replace('data-rpt-close', 'data-rpt-close data-act="close-modal"');
     }
 
     // -------------------------------------------------------------------------

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/tailwind-extra.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/2d.css">
 </head>
 <body class="dark">
   <div class="h-screen flex flex-col font-sans bg-slate-100 dark:bg-surface-base text-slate-900 dark:text-slate-100 transition-colors duration-150 overflow-hidden">
@@ -38,37 +39,40 @@
           </div>
         </div>
 
-        <!-- Digital Twin Layout -->
+        <!-- Digital Twin Layout: sol panel + kroki + (kabin seçiliyken) sağda bölünmüş kabin paneli -->
         <div class="flex flex-1 gap-2.5 min-h-0 overflow-hidden">
-          <!-- 1. Left Location & Layers Panel -->
-          <div id="left-panel" data-report-hide class="w-72 shrink-0 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-border-subtle rounded-[2px] p-2.5 flex flex-col justify-between shadow-xs transition-all duration-300 overflow-y-auto custom-scrollbar"></div>
+          <!-- 1. Sol panel: kat / salon ağacı, görünüm modu, alarm renklendirme filtreleri, mini harita -->
+          <div id="left-panel" data-report-hide class="w-72 shrink-0 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-border-subtle rounded-[2px] p-2.5 flex flex-col shadow-xs transition-all duration-300 overflow-y-auto lg:overflow-hidden custom-scrollbar"></div>
 
-          <!-- 2. Center Canvas -->
+          <!-- 2. Kroki -->
           <div class="flex-1 flex flex-col min-w-0 h-full">
             <div id="canvas-wrap" class="relative flex-1 w-full h-full bg-white dark:bg-surface-base border border-slate-200 dark:border-border-subtle rounded-[2px] overflow-hidden shadow-2xs flex flex-col">
-              <button id="open-left-panel" type="button" data-report-hide title="Sol paneli aç" class="hidden absolute top-2.5 left-2.5 z-20 px-2.5 py-1 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-sm flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer backdrop-blur-sm pointer-events-auto">
-                <i class="pi pi-bars text-xs text-sky-600 dark:text-sky-400"></i>
-                <span>1. Kat 1. Salon Sistem Odası</span>
-              </button>
+              <!-- Krokide arama (kabin, klima, UPS, POD) ve kategoriye göre hızlı seçim -->
+              <div id="map-strip" data-report-hide class="shrink-0 relative z-30 px-2 py-1.5 flex items-stretch gap-1.5 bg-slate-50 dark:bg-[#0b121e] border-b border-slate-200 dark:border-border-subtle"></div>
 
-              <!-- Canlı durum lejantı -->
-              <div class="absolute bottom-2.5 right-2.5 z-20 hidden md:flex items-center gap-3 px-3 py-1.5 rounded-[2px] bg-white/95 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-700/80 text-[10px] text-slate-700 dark:text-slate-300 shadow-md backdrop-blur-xs pointer-events-none" id="legend"></div>
-
-              <div class="w-full h-full" id="schematic-host"></div>
+              <div class="relative flex-1 min-h-0">
+                <!-- Tuvalin sağ altı: bu ekranda canlı izlenen telemetri noktası sayısı -->
+                <div id="live-points" class="absolute bottom-2.5 right-2.5 z-30 pointer-events-none px-3 py-2 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-sm backdrop-blur-sm text-right"></div>
+                <!-- Tuvalin sol üstü: görünüm filtresi + sol panel açma -->
+                <div id="canvas-tools" data-report-hide class="absolute top-2.5 left-2.5 z-30 flex items-start gap-1.5"></div>
+                <div class="w-full h-full" id="schematic-host"></div>
+              </div>
             </div>
           </div>
+
+          <!-- 3. Kabin 3D izometrik + alarm + PDU/sensör: krokinin sağında bölünmüş panel (kroki daralır) -->
+          <div id="detail-host" data-report-hide class="hidden detail-slide-in min-h-0 h-full w-1/2 xl:w-[54%] shrink-0"></div>
         </div>
       </div>
     </main>
   </div>
 
-  <!-- Kabin İzometrik & Sensör Çekmecesi -->
-  <div id="drawer-backdrop" class="dcim-drawer-backdrop fixed inset-0 z-40 bg-slate-950/45 dark:bg-slate-950/65 backdrop-blur-[2px]"></div>
-  <aside id="cabinet-drawer" class="dcim-drawer-panel fixed top-0 right-0 bottom-0 z-50 w-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col select-none" style="width: min(84vw, 1620px); min-width: min(100vw, 560px); max-width: 100vw;"></aside>
-
   <script src="js/layout-data.js"></script>
   <script src="js/mock-data.js"></script>
+  <script src="js/mock/alarms.data.js"></script>
+  <script src="js/mock/twin2d.data.js"></script>
   <script src="js/shell.js"></script>
+  <script src="js/report-kit.js"></script>
   <script src="js/ui-components.js"></script>
   <script src="js/2d.js"></script>
 </body>

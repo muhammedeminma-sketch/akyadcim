@@ -9,6 +9,9 @@
 
   const DCIM = (window.DCIM = window.DCIM || {});
   const LAYOUT = window.DCIM_LAYOUT || null;
+  // Kurgusal bina: kat başına yerleşim (tools/gen-mock-layout.js). Yerleşimi olmayan hane (4 = DCB) son katınkini kullanır.
+  const FLOOR_LAYOUTS = window.DCIM_FLOOR_LAYOUTS || (LAYOUT ? [LAYOUT] : []);
+  const layoutOf = digit => FLOOR_LAYOUTS[digit - 1] || FLOOR_LAYOUTS[FLOOR_LAYOUTS.length - 1] || null;
 
   // ---------------------------------------------------------------------------
   // Tohumlu rastgele sayı üreticisi (mulberry32)
@@ -66,20 +69,20 @@
   // Senaryo: sunum sırasında anlatılacak olaylar (tüm sayfalarda tutarlı)
   // ---------------------------------------------------------------------------
   const CABINET_SCENARIO = {
-    '1BJ53': { status: 'alarm', tempMid: 32.4, tempTop: 34.1, tempLow: 29.8, note: 'Yüksek sıcaklık' },
-    '1BC37': { status: 'alarm', tempMid: 31.2, tempTop: 33.0, tempLow: 28.4, note: 'Kritik sıcaklık' },
-    '1AV42': { status: 'alarm', pduFault: true, note: 'PDU-B faz kaybı' },
-    '1BQ55': { status: 'warning', tempMid: 27.9, tempTop: 28.8, tempLow: 25.6, note: 'Sıcaklık uyarısı' },
-    '1CB52': { status: 'warning', powerKw: 7.9, note: 'Yüksek akım' },
-    '1BU54': { status: 'warning', humidity: 62, note: 'Yüksek nem' },
-    '1BX50': { status: 'warning', tempMid: 17.2, tempTop: 18.0, tempLow: 16.5, note: 'Düşük sıcaklık' },
-    '1CE56': { status: 'warning', tempMid: 28.3, tempTop: 29.6, tempLow: 26.1, note: 'Sıcaklık uyarısı' },
-    '1CE51': { status: 'lost', note: 'Sensör haberleşme kaybı' },
-    '1AZ39': { frontDoor: 'open', lockAlarm: 'Yetkisiz kapak açılması', note: 'Yetkisiz kapak açıldı' },
-    '1BN52': { rearDoor: 'open', lockAlarm: 'Kapak 5 dakikadan uzun açık', note: 'Arka kapak açık kaldı' },
-    '1BG41': { frontDoor: 'open', note: 'Yetkili bakım çalışması' },
-    '1BU50': { lockAlarm: 'Yetkisiz kart denemesi (3x)', note: 'Yetkisiz kart denemesi' },
-    '1BX54': { lockAlarm: 'Kilit motoru arızası', lockState: 'fault', note: 'Kilit motoru arızası' }
+    '1DU06': { status: 'alarm', tempMid: 32.4, tempTop: 34.1, tempLow: 29.8, note: 'Yüksek sıcaklık' },
+    '1DA07': { status: 'alarm', tempMid: 31.2, tempTop: 33.0, tempLow: 28.4, note: 'Kritik sıcaklık' },
+    '1NA06': { status: 'alarm', pduFault: true, note: 'PDU-B faz kaybı' },
+    '1DS07': { status: 'warning', tempMid: 27.9, tempTop: 28.8, tempLow: 25.6, note: 'Sıcaklık uyarısı' },
+    '1DL03': { status: 'warning', powerKw: 7.9, note: 'Yüksek akım' },
+    '1DN05': { status: 'warning', humidity: 62, note: 'Yüksek nem' },
+    '1DP02': { status: 'warning', tempMid: 17.2, tempTop: 18.0, tempLow: 16.5, note: 'Düşük sıcaklık' },
+    '1DL01': { status: 'warning', tempMid: 28.3, tempTop: 29.6, tempLow: 26.1, note: 'Sıcaklık uyarısı' },
+    '1DM03': { status: 'lost', note: 'Sensör haberleşme kaybı' },
+    '1DA03': { frontDoor: 'open', lockAlarm: 'Yetkisiz kapak açılması', note: 'Yetkisiz kapak açıldı' },
+    '1DR03': { rearDoor: 'open', lockAlarm: 'Kapak 5 dakikadan uzun açık', note: 'Arka kapak açık kaldı' },
+    '1DC06': { frontDoor: 'open', note: 'Yetkili bakım çalışması' },
+    '1DN01': { lockAlarm: 'Yetkisiz kart denemesi (3x)', note: 'Yetkisiz kart denemesi' },
+    '1DP06': { lockAlarm: 'Kilit motoru arızası', lockState: 'fault', note: 'Kilit motoru arızası' }
   };
 
   const EQUIPMENT_SCENARIO = {
@@ -148,7 +151,10 @@
         serial: (model.m.slice(0, 2).toUpperCase()) + Math.floor(between(rnd, 100000000, 999999999)),
         weight: model.w,
         powerKw: round1(model.p * between(rnd, 0.75, 1.15) * 10) / 10,
-        status: 'normal'
+        status: 'normal',
+        // ASM atama durumu: '0' = Kullanımda; diğerleri (stok/bakım/demonte) raf görünümlerinde gizlenir.
+        // rnd tüketmez (diğer tohumlu değerler değişmesin)
+        assignment: hashStr(code + '-A' + idx) % 23 === 0 ? '2' : '0'
       });
       u += model.u;
     }
@@ -173,18 +179,20 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Kabinler (gerçek Kat-1 yerleşiminden türetilir)
+  // Kabinler (kurgusal kat yerleşimlerinden türetilir)
   // ---------------------------------------------------------------------------
   function buildCabinets(floorDigit, seedBase) {
-    if (!LAYOUT) return [];
+    const FL = layoutOf(floorDigit);
+    if (!FL) return [];
     const scenarioOn = floorDigit === 1;
-    return LAYOUT.items
+    return FL.items
       .filter(it => it.type === 'cabinet')
       .map(it => {
         const code = floorDigit + it.label.slice(1);
+        const salon = (FL.salons || []).find(sl => sl.id === it.salon) || null;
         const rnd = createRng(hashStr(code) ^ seedBase);
         const sc = scenarioOn ? CABINET_SCENARIO[code] || {} : {};
-        const isNetworkRow = it.col === '1AS' || it.col === '1AV';
+        const isNetworkRow = /^NW-/.test(it.pod);
         const assets = buildAssets(code, rnd, isNetworkRow);
         const usedU = assets.reduce((s, a) => s + a.uSize, 0);
         const itPower = assets.reduce((s, a) => s + a.powerKw, 0);
@@ -203,6 +211,10 @@
           devId: code,
           col: floorDigit + it.col.slice(1),
           pod: it.pod,
+          floor: floorDigit,
+          salonId: it.salon || 'S1',
+          salon: salon ? salon.name : '1. Salon',
+          facing: it.facing || 'N',
           x: it.x, y: it.y, w: it.w, h: it.h,
           status: sc.status || 'normal',
           note: sc.note || '',
@@ -292,38 +304,38 @@
   // ---------------------------------------------------------------------------
   // severity: critical | major | minor | warning ; level: alarm | warning | lost
   const ACTIVE_ALARMS_SRC = [
-    { m: 4, sev: 'critical', lvl: 'alarm', rid: 'IDC1_1BJ53_TEMP_MID', desc: 'Kabin 1BJ53 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-8', fnc: 'onlhi', grp: 'Soğutma', txt: 'Kabin 1BJ53 Yüksek Sıcaklık: 32.4 °C (Üst Limit 27.0 °C)', dev: 'cabinet', target: '1BJ53' },
+    { m: 4, sev: 'critical', lvl: 'alarm', rid: 'DCA_1DU06_TEMP_MID', desc: 'Kabin 1DU06 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-9', fnc: 'onlhi', grp: 'Soğutma', txt: 'Kabin 1DU06 Yüksek Sıcaklık: 32.4 °C (Üst Limit 27.0 °C)', dev: 'cabinet', target: '1DU06' },
     { m: 7, sev: 'critical', lvl: 'alarm', rid: 'KAT1_SAL1_A5_UPS_MODE', desc: 'UPS A5', loc: 'Kat 1 / Salon 1 / UPS Hattı A', fnc: 'onequ', grp: 'Enerji Grubu', txt: 'UPS A5 Akü Modunda Çalışıyor — Kalan süre 18 dk', dev: 'ups', target: 'UPS A5' },
-    { m: 11, sev: 'critical', lvl: 'alarm', rid: 'NS2_1AZ39_FDOOR', desc: '1AZ39 Ön Kapak', loc: 'Kat 1 / Salon 1 / POD-10', fnc: 'door', grp: 'Beyaz Alan', txt: 'Yetkisiz Kapak Açıldı — kart okutulmadan açılma', dev: 'lock', target: '1AZ39' },
-    { m: 16, sev: 'major', lvl: 'alarm', rid: 'IDC1_KLM109_HP', desc: 'KLIMA 109', loc: 'Kat 1 / Salon 1 / Kuzey Duvar', fnc: 'onlhi', grp: 'Soğutma', txt: 'Kompresör 1 Yüksek Basınç: 27.8 bar (Limit 26.0 bar)', dev: 'climate', target: 'KLIMA 109' },
-    { m: 23, sev: 'major', lvl: 'alarm', rid: 'NS1_1AV42_PDU_B_L2', desc: 'Kabin 1AV42 PDU-B', loc: 'Kat 1 / Salon 1 / NS1', fnc: 'onllo', grp: 'Beyaz Alan', txt: 'PDU-B L2 Faz Kaybı: 0 V (Alt Limit 207 V)', dev: 'cabinet', target: '1AV42' },
-    { m: 29, sev: 'major', lvl: 'alarm', rid: 'IDC1_1BC37_TEMP_MID', desc: 'Kabin 1BC37 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-1', fnc: 'onlhi', grp: 'Soğutma', txt: 'Kabin 1BC37 Yüksek Sıcaklık: 31.2 °C (Üst Limit 27.0 °C)', dev: 'cabinet', target: '1BC37' },
-    { m: 34, sev: 'major', lvl: 'lost', rid: 'IDC1_1CE51_SNS', desc: 'Kabin 1CE51 Sensör Modülü', loc: 'Kat 1 / Salon 1 / POD-5', fnc: 'devsta', grp: 'Beyaz Alan', txt: 'Cihaz haberleşmesi koptu (Modbus TCP zaman aşımı)', dev: 'cabinet', target: '1CE51' },
+    { m: 11, sev: 'critical', lvl: 'alarm', rid: 'POD1_1DA03_FDOOR', desc: '1DA03 Ön Kapak', loc: 'Kat 1 / Salon 1 / POD-1', fnc: 'door', grp: 'Beyaz Alan', txt: 'Yetkisiz Kapak Açıldı — kart okutulmadan açılma', dev: 'lock', target: '1DA03' },
+    { m: 16, sev: 'major', lvl: 'alarm', rid: 'DCA_KLM109_HP', desc: 'KLIMA 109', loc: 'Kat 1 / Salon 1 / Kuzey Duvar', fnc: 'onlhi', grp: 'Soğutma', txt: 'Kompresör 1 Yüksek Basınç: 27.8 bar (Limit 26.0 bar)', dev: 'climate', target: 'KLIMA 109' },
+    { m: 23, sev: 'major', lvl: 'alarm', rid: 'NW1_1NA06_PDU_B_L2', desc: 'Kabin 1NA06 PDU-B', loc: 'Kat 1 / Salon 1 / NW-1', fnc: 'onllo', grp: 'Beyaz Alan', txt: 'PDU-B L2 Faz Kaybı: 0 V (Alt Limit 207 V)', dev: 'cabinet', target: '1NA06' },
+    { m: 29, sev: 'major', lvl: 'alarm', rid: 'DCA_1DA07_TEMP_MID', desc: 'Kabin 1DA07 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-1', fnc: 'onlhi', grp: 'Soğutma', txt: 'Kabin 1DA07 Yüksek Sıcaklık: 31.2 °C (Üst Limit 27.0 °C)', dev: 'cabinet', target: '1DA07' },
+    { m: 34, sev: 'major', lvl: 'lost', rid: 'DCA_1DM03_SNS', desc: 'Kabin 1DM03 Sensör Modülü', loc: 'Kat 1 / Salon 1 / POD-6', fnc: 'devsta', grp: 'Beyaz Alan', txt: 'Cihaz haberleşmesi koptu (Modbus TCP zaman aşımı)', dev: 'cabinet', target: '1DM03' },
     { m: 41, sev: 'major', lvl: 'lost', rid: 'KAT1_SAL1_B7_UPS_SNMP', desc: 'UPS B7', loc: 'Kat 1 / Salon 1 / UPS Hattı B', fnc: 'devsta', grp: 'Enerji Grubu', txt: 'SNMP haberleşme kaybı (3 ardışık sorgu yanıtsız)', dev: 'ups', target: 'UPS B7' },
     { m: 47, sev: 'major', lvl: 'alarm', rid: 'FIRE_PNL_Z3_SMK', desc: 'Yangın Paneli Zon-3', loc: 'Kat 1 / Salon 1 / POD-4 Tavan', fnc: 'onlhi', grp: 'Diğer', txt: 'Duman dedektörü Z3-07 ön alarm (VESDA seviye 1)', dev: 'other', target: '' },
-    { m: 52, sev: 'minor', lvl: 'warning', rid: 'IDC1_1BQ55_TEMP_MID', desc: 'Kabin 1BQ55 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-7', fnc: 'onlhi', grp: 'Soğutma', txt: 'Sıcaklık Uyarısı: 27.9 °C (Uyarı Limiti 27.0 °C)', dev: 'cabinet', target: '1BQ55' },
-    { m: 58, sev: 'minor', lvl: 'warning', rid: 'IDC1_1CB52_OCP_CURR', desc: 'Kabin 1CB52 Toplam Akım', loc: 'Kat 1 / Salon 1 / POD-6', fnc: 'onlhi', grp: 'Beyaz Alan', txt: 'Yüksek Akım: 34.3 A (Uyarı Limiti 32.0 A)', dev: 'cabinet', target: '1CB52' },
-    { m: 64, sev: 'minor', lvl: 'warning', rid: 'IDC1_1BU54_HUM_MID', desc: 'Kabin 1BU54 Nem', loc: 'Kat 1 / Salon 1 / POD-4', fnc: 'onlhi', grp: 'Soğutma', txt: 'Yüksek Nem: %62 (Uyarı Limiti %60)', dev: 'cabinet', target: '1BU54' },
-    { m: 73, sev: 'minor', lvl: 'warning', rid: 'IDC1_KLM104_FLT', desc: 'KLIMA 104', loc: 'Kat 1 / Salon 1 / Güney Duvar', fnc: 'onequ', grp: 'Soğutma', txt: 'Filtre kirli — bakım gerekli (Δp 182 Pa)', dev: 'climate', target: 'KLIMA 104' },
-    { m: 81, sev: 'minor', lvl: 'warning', rid: 'IDC1_1BX50_TEMP_MID', desc: 'Kabin 1BX50 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-4', fnc: 'onllo', grp: 'Soğutma', txt: 'Düşük Sıcaklık: 17.2 °C (Alt Limit 18.0 °C)', dev: 'cabinet', target: '1BX50' },
-    { m: 88, sev: 'minor', lvl: 'warning', rid: 'IDC1_KLM112_RET', desc: 'KLIMA 112', loc: 'Kat 1 / Salon 1 / Kuzey Duvar', fnc: 'onlhi', grp: 'Soğutma', txt: 'Dönüş havası yüksek: 29.4 °C (Limit 28.0 °C)', dev: 'climate', target: 'KLIMA 112' },
-    { m: 96, sev: 'minor', lvl: 'warning', rid: 'IDC1_1CE56_TEMP_MID', desc: 'Kabin 1CE56 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-6', fnc: 'onlhi', grp: 'Soğutma', txt: 'Sıcaklık Uyarısı: 28.3 °C (Uyarı Limiti 27.0 °C)', dev: 'cabinet', target: '1CE56' },
-    { m: 104, sev: 'warning', lvl: 'warning', rid: 'POD9_1BN52_RDOOR', desc: '1BN52 Arka Kapak', loc: 'Kat 1 / Salon 1 / POD-8', fnc: 'door', grp: 'Beyaz Alan', txt: 'Kapak 5 dakikadan uzun süredir açık', dev: 'lock', target: '1BN52' },
-    { m: 112, sev: 'warning', lvl: 'warning', rid: 'POD8_1BG41_FDOOR', desc: '1BG41 Ön Kapak', loc: 'Kat 1 / Salon 1 / POD-2', fnc: 'door', grp: 'Beyaz Alan', txt: 'Ön kapak açık — yetkili bakım (İE-2026-0931)', dev: 'lock', target: '1BG41' },
+    { m: 52, sev: 'minor', lvl: 'warning', rid: 'DCA_1DS07_TEMP_MID', desc: 'Kabin 1DS07 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-8', fnc: 'onlhi', grp: 'Soğutma', txt: 'Sıcaklık Uyarısı: 27.9 °C (Uyarı Limiti 27.0 °C)', dev: 'cabinet', target: '1DS07' },
+    { m: 58, sev: 'minor', lvl: 'warning', rid: 'DCA_1DL03_OCP_CURR', desc: 'Kabin 1DL03 Toplam Akım', loc: 'Kat 1 / Salon 1 / POD-6', fnc: 'onlhi', grp: 'Beyaz Alan', txt: 'Yüksek Akım: 34.3 A (Uyarı Limiti 32.0 A)', dev: 'cabinet', target: '1DL03' },
+    { m: 64, sev: 'minor', lvl: 'warning', rid: 'DCA_1DN05_HUM_MID', desc: 'Kabin 1DN05 Nem', loc: 'Kat 1 / Salon 1 / POD-7', fnc: 'onlhi', grp: 'Soğutma', txt: 'Yüksek Nem: %62 (Uyarı Limiti %60)', dev: 'cabinet', target: '1DN05' },
+    { m: 73, sev: 'minor', lvl: 'warning', rid: 'DCA_KLM104_FLT', desc: 'KLIMA 104', loc: 'Kat 1 / Salon 1 / Güney Duvar', fnc: 'onequ', grp: 'Soğutma', txt: 'Filtre kirli — bakım gerekli (Δp 182 Pa)', dev: 'climate', target: 'KLIMA 104' },
+    { m: 81, sev: 'minor', lvl: 'warning', rid: 'DCA_1DP02_TEMP_MID', desc: 'Kabin 1DP02 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-7', fnc: 'onllo', grp: 'Soğutma', txt: 'Düşük Sıcaklık: 17.2 °C (Alt Limit 18.0 °C)', dev: 'cabinet', target: '1DP02' },
+    { m: 88, sev: 'minor', lvl: 'warning', rid: 'DCA_KLM112_RET', desc: 'KLIMA 112', loc: 'Kat 1 / Salon 1 / Kuzey Duvar', fnc: 'onlhi', grp: 'Soğutma', txt: 'Dönüş havası yüksek: 29.4 °C (Limit 28.0 °C)', dev: 'climate', target: 'KLIMA 112' },
+    { m: 96, sev: 'minor', lvl: 'warning', rid: 'DCA_1DL01_TEMP_MID', desc: 'Kabin 1DL01 Orta Sıcaklık', loc: 'Kat 1 / Salon 1 / POD-6', fnc: 'onlhi', grp: 'Soğutma', txt: 'Sıcaklık Uyarısı: 28.3 °C (Uyarı Limiti 27.0 °C)', dev: 'cabinet', target: '1DL01' },
+    { m: 104, sev: 'warning', lvl: 'warning', rid: 'POD8_1DR03_RDOOR', desc: '1DR03 Arka Kapak', loc: 'Kat 1 / Salon 1 / POD-8', fnc: 'door', grp: 'Beyaz Alan', txt: 'Kapak 5 dakikadan uzun süredir açık', dev: 'lock', target: '1DR03' },
+    { m: 112, sev: 'warning', lvl: 'warning', rid: 'POD2_1DC06_FDOOR', desc: '1DC06 Ön Kapak', loc: 'Kat 1 / Salon 1 / POD-2', fnc: 'door', grp: 'Beyaz Alan', txt: 'Ön kapak açık — yetkili bakım (İE-2026-0931)', dev: 'lock', target: '1DC06' },
     { m: 125, sev: 'warning', lvl: 'warning', rid: 'KAT1_SAL1_A1_KLM_PANO_L3', desc: 'A1 KLIMA PANOSU', loc: 'Kat 1 / Salon 1 / Doğu Duvar', fnc: 'onlhi', grp: 'Enerji Grubu', txt: 'Faz dengesizliği: L3 78.6 A (%34 sapma)', dev: 'panel', target: 'A1 KLIMA PANOSU' },
     { m: 139, sev: 'warning', lvl: 'warning', rid: 'KAT1_SAL1_A3_UPS_BTEMP', desc: 'UPS A3', loc: 'Kat 1 / Salon 1 / UPS Hattı A', fnc: 'onlhi', grp: 'Enerji Grubu', txt: 'Akü sıcaklığı yüksek: 31.2 °C (Limit 30.0 °C)', dev: 'ups', target: 'UPS A3' },
     { m: 151, sev: 'warning', lvl: 'warning', rid: 'KAT1_SAL1_B4_UPS_LOAD', desc: 'UPS B4', loc: 'Kat 1 / Salon 1 / UPS Hattı B', fnc: 'onlhi', grp: 'Enerji Grubu', txt: 'Yük oranı %82 (Uyarı Limiti %80)', dev: 'ups', target: 'UPS B4' },
-    { m: 167, sev: 'warning', lvl: 'warning', rid: 'POD4_1BU50_FDOOR_AUTH', desc: '1BU50 Kart Okuyucu', loc: 'Kat 1 / Salon 1 / POD-4', fnc: 'onequ', grp: 'Beyaz Alan', txt: 'Yetkisiz kart denemesi (3x) — Kart 04:9C:11:7E', dev: 'lock', target: '1BU50' },
-    { m: 184, sev: 'warning', lvl: 'warning', rid: 'IDC1_MASTER_PANO_THD', desc: 'Master Pano', loc: 'Kat 1 / Salon 1 / Doğu Duvar', fnc: 'onlhi', grp: 'Enerji Grubu', txt: 'Akım harmoniği THD-I %8.9 (Limit %8.0)', dev: 'panel', target: '' },
-    { m: 203, sev: 'warning', lvl: 'lost', rid: 'POD5_1BX54_LOCK', desc: '1BX54 Kilit Motoru', loc: 'Kat 1 / Salon 1 / POD-5', fnc: 'bista', grp: 'Beyaz Alan', txt: 'Kilit motoru geri bildirimi okunamıyor', dev: 'lock', target: '1BX54' }
+    { m: 167, sev: 'warning', lvl: 'warning', rid: 'POD7_1DN01_FDOOR_AUTH', desc: '1DN01 Kart Okuyucu', loc: 'Kat 1 / Salon 1 / POD-7', fnc: 'onequ', grp: 'Beyaz Alan', txt: 'Yetkisiz kart denemesi (3x) — Kart 04:9C:11:7E', dev: 'lock', target: '1DN01' },
+    { m: 184, sev: 'warning', lvl: 'warning', rid: 'DCA_MASTER_PANO_THD', desc: 'Master Pano', loc: 'Kat 1 / Salon 1 / Doğu Duvar', fnc: 'onlhi', grp: 'Enerji Grubu', txt: 'Akım harmoniği THD-I %8.9 (Limit %8.0)', dev: 'panel', target: '' },
+    { m: 203, sev: 'warning', lvl: 'lost', rid: 'POD7_1DP06_LOCK', desc: '1DP06 Kilit Motoru', loc: 'Kat 1 / Salon 1 / POD-7', fnc: 'bista', grp: 'Beyaz Alan', txt: 'Kilit motoru geri bildirimi okunamıyor', dev: 'lock', target: '1DP06' }
   ];
 
   const ACKED = {
     'KAT1_SAL1_B7_UPS_SNMP': { user: 'Mehmet Kaya', min: 30 },
-    'IDC1_KLM104_FLT': { user: 'Ayşe Demir', min: 60 },
-    'POD8_1BG41_FDOOR': { user: 'Mehmet Kaya', min: 105 },
+    'DCA_KLM104_FLT': { user: 'Ayşe Demir', min: 60 },
+    'POD2_1DC06_FDOOR': { user: 'Mehmet Kaya', min: 105 },
     'KAT1_SAL1_B4_UPS_LOAD': { user: 'Burak Şahin', min: 140 },
-    'IDC1_MASTER_PANO_THD': { user: 'Ayşe Demir', min: 170 }
+    'DCA_MASTER_PANO_THD': { user: 'Ayşe Demir', min: 170 }
   };
 
   function buildActiveAlarms() {
@@ -351,17 +363,17 @@
   }
 
   const HISTORY_TEMPLATES = [
-    { sev: 'minor', lvl: 'warning', fnc: 'onlhi', grp: 'Soğutma', dev: 'cabinet', mk: (c, r) => ({ rid: 'IDC1_' + c + '_TEMP_MID', desc: 'Kabin ' + c + ' Orta Sıcaklık', txt: 'Sıcaklık Uyarısı: ' + (27 + r()).toFixed(1) + ' °C' }) },
-    { sev: 'major', lvl: 'alarm', fnc: 'onlhi', grp: 'Soğutma', dev: 'cabinet', mk: (c, r) => ({ rid: 'IDC1_' + c + '_TEMP_TOP', desc: 'Kabin ' + c + ' Üst Sıcaklık', txt: 'Yüksek Sıcaklık: ' + (30 + r() * 2).toFixed(1) + ' °C' }) },
+    { sev: 'minor', lvl: 'warning', fnc: 'onlhi', grp: 'Soğutma', dev: 'cabinet', mk: (c, r) => ({ rid: 'DCA_' + c + '_TEMP_MID', desc: 'Kabin ' + c + ' Orta Sıcaklık', txt: 'Sıcaklık Uyarısı: ' + (27 + r()).toFixed(1) + ' °C' }) },
+    { sev: 'major', lvl: 'alarm', fnc: 'onlhi', grp: 'Soğutma', dev: 'cabinet', mk: (c, r) => ({ rid: 'DCA_' + c + '_TEMP_TOP', desc: 'Kabin ' + c + ' Üst Sıcaklık', txt: 'Yüksek Sıcaklık: ' + (30 + r() * 2).toFixed(1) + ' °C' }) },
     { sev: 'warning', lvl: 'warning', fnc: 'door', grp: 'Beyaz Alan', dev: 'lock', mk: (c, r) => ({ rid: 'POD_' + c + '_FDOOR', desc: c + ' Ön Kapak', txt: 'Ön kapak açıldı — yetkili kart ile' }) },
     { sev: 'critical', lvl: 'alarm', fnc: 'door', grp: 'Beyaz Alan', dev: 'lock', mk: (c, r) => ({ rid: 'POD_' + c + '_RDOOR', desc: c + ' Arka Kapak', txt: 'Yetkisiz Kapak Açıldı' }) },
-    { sev: 'minor', lvl: 'warning', fnc: 'onlhi', grp: 'Beyaz Alan', dev: 'cabinet', mk: (c, r) => ({ rid: 'IDC1_' + c + '_OCP_CURR', desc: 'Kabin ' + c + ' Toplam Akım', txt: 'Yüksek Akım: ' + (32 + r() * 3).toFixed(1) + ' A' }) },
-    { sev: 'major', lvl: 'lost', fnc: 'devsta', grp: 'Beyaz Alan', dev: 'cabinet', mk: (c, r) => ({ rid: 'IDC1_' + c + '_SNS', desc: 'Kabin ' + c + ' Sensör Modülü', txt: 'Cihaz haberleşmesi koptu' }) }
+    { sev: 'minor', lvl: 'warning', fnc: 'onlhi', grp: 'Beyaz Alan', dev: 'cabinet', mk: (c, r) => ({ rid: 'DCA_' + c + '_OCP_CURR', desc: 'Kabin ' + c + ' Toplam Akım', txt: 'Yüksek Akım: ' + (32 + r() * 3).toFixed(1) + ' A' }) },
+    { sev: 'major', lvl: 'lost', fnc: 'devsta', grp: 'Beyaz Alan', dev: 'cabinet', mk: (c, r) => ({ rid: 'DCA_' + c + '_SNS', desc: 'Kabin ' + c + ' Sensör Modülü', txt: 'Cihaz haberleşmesi koptu' }) }
   ];
   const HISTORY_EQUIP = [
     { sev: 'critical', lvl: 'alarm', fnc: 'onequ', grp: 'Enerji Grubu', dev: 'ups', rid: 'KAT1_SAL1_B2_UPS_MODE', desc: 'UPS B2', txt: 'UPS B2 Akü Modu — şebeke kesintisi (42 sn)' },
-    { sev: 'major', lvl: 'alarm', fnc: 'onlhi', grp: 'Soğutma', dev: 'climate', rid: 'IDC1_KLM101_HP', desc: 'KLIMA 101', txt: 'Kompresör yüksek basınç' },
-    { sev: 'minor', lvl: 'warning', fnc: 'onequ', grp: 'Soğutma', dev: 'climate', rid: 'IDC1_KLM106_FAN', desc: 'KLIMA 106', txt: 'Fan hızı düşük (%38)' },
+    { sev: 'major', lvl: 'alarm', fnc: 'onlhi', grp: 'Soğutma', dev: 'climate', rid: 'DCA_KLM101_HP', desc: 'KLIMA 101', txt: 'Kompresör yüksek basınç' },
+    { sev: 'minor', lvl: 'warning', fnc: 'onequ', grp: 'Soğutma', dev: 'climate', rid: 'DCA_KLM106_FAN', desc: 'KLIMA 106', txt: 'Fan hızı düşük (%38)' },
     { sev: 'warning', lvl: 'warning', fnc: 'onlhi', grp: 'Enerji Grubu', dev: 'ups', rid: 'KAT1_SAL1_A2_UPS_LOAD', desc: 'UPS A2', txt: 'Yük oranı %81' },
     { sev: 'major', lvl: 'lost', fnc: 'devsta', grp: 'Enerji Grubu', dev: 'ups', rid: 'KAT1_SAL1_A6_UPS_SNMP', desc: 'UPS A6', txt: 'SNMP haberleşme kaybı' },
     { sev: 'warning', lvl: 'warning', fnc: 'onlhi', grp: 'Diğer', dev: 'other', rid: 'LEAK_POD4_01', desc: 'Su Kaçak Sensörü POD-4', txt: 'Kablo sensörü arızası' }
@@ -381,7 +393,7 @@
         rec = { sev: e.sev, lvl: e.lvl, fnc: e.fnc, grp: e.grp, dev: e.dev, rid: e.rid, desc: e.desc, txt: e.txt, loc: 'Kat 1 / Salon 1' };
       } else {
         const t = pick(rnd, HISTORY_TEMPLATES);
-        const cab = cabs.length ? pick(rnd, cabs) : { label: '1AS49', pod: 'NS2' };
+        const cab = cabs.length ? pick(rnd, cabs) : { label: '1NB01', pod: 'NW-2' };
         const r = t.mk(cab.label, rnd);
         rec = { sev: t.sev, lvl: t.lvl, fnc: t.fnc, grp: t.grp, dev: t.dev, rid: r.rid, desc: r.desc, txt: r.txt, loc: 'Kat 1 / Salon 1 / ' + cab.pod };
       }
@@ -453,8 +465,7 @@
   const FLOORS = [
     { id: 'T00', digit: 1, label: '1. Kat', seed: 1 },
     { id: 'T02', digit: 2, label: '2. Kat', seed: 7331 },
-    { id: 'T03', digit: 3, label: '3. Kat', seed: 90211 },
-    { id: 'T04', digit: 4, label: '4. Kat', seed: 424242 }
+    { id: 'T03', digit: 3, label: '3. Kat', seed: 90211 }
   ];
 
   const lockCache = {};
@@ -491,7 +502,7 @@
         cabinetCode: c.code,
         description: c.code + ' — ' + c.customer,
         floor: floor.label,
-        room: 'Salon 1',
+        room: c.salon || 'Salon 1',
         pod: c.pod,
         x: c.x, y: c.y, w: c.w, h: c.h,
         front, rear,
@@ -518,6 +529,8 @@
   DCIM.data = {
     site: SITE,
     layout: LAYOUT,
+    floorLayouts: FLOOR_LAYOUTS,
+    layoutOf,
     floors: FLOORS,
     cabinets: CABINETS,
     climates: EQUIPMENT.climates,
@@ -560,7 +573,7 @@
      monofaz  : K<kabin>_PDU_A_IN_CURR / _IN_VOLT / _IN_POW / _IN_APPOW / _IN_PF / _IN_AENRG, OCP C1..C2
      trifaz   : _IN1.._IN3_CURR / _VOLT_FN / _VOLT_FF, _IN_TOT_POW / _APPOW / _PF / _AENRG, _IN_FREQ, OCP C1..C6
      ortak    : _NFO_PDU*, _RTD_VOLT / _RTD_CURR / _RTD_VA / _RTD_OCPn_CURR, _OUTnn_*, _OCP_Cn_CURR / _STATUS / _ONLVLHI*
-   Senaryo: 1AV42 PDU-B L2 faz kaybı (0 V, alarm) · 1CB52 PDU-B C1 kesici yüksek akım (uyarı).
+   Senaryo: 1NA06 PDU-B L2 faz kaybı (0 V, alarm) · 1DL03 PDU-B C1 kesici yüksek akım (uyarı).
    Kabin toplamları DCIM.data.cabinets[].pduA / pduB ile birebir aynıdır (2D/3D sayfalarıyla tutarlı).
    Bağımlılık: js/mock-data.js (DCIM.data)
    ========================================================================== */
@@ -588,15 +601,15 @@
     { model: 'PX2-5844R', phases: 1, outlets: 20, ocp: 2, rtdVolt: '230', rtdCurr: '32', rtdVA: '7360', ocpRtd: 16 }
   ];
   // Senaryo kabinleri trifaz PDU kullanır
-  const FORCE_MODEL = { '1AV42': 'PX3-5528V-V2', '1CB52': 'PX3-5528V-V2' };
+  const FORCE_MODEL = { '1NA06': 'PX3-5528V-V2', '1DL03': 'PX3-5528V-V2' };
 
   // Senaryo: PDU bazlı olaylar
   const PDU_SCENARIO = {
-    '1AV42_B': { sta: 'alarm', lostPhase: 2, note: 'PDU-B L2 faz kaybı' },
-    '1CB52_B': { sta: 'warning', hotBreaker: 1, hotCurrent: 13.4, note: 'C1 kesici yüksek akım' }
+    '1NA06_B': { sta: 'alarm', lostPhase: 2, note: 'PDU-B L2 faz kaybı' },
+    '1DL03_B': { sta: 'warning', hotBreaker: 1, hotCurrent: 13.4, note: 'C1 kesici yüksek akım' }
   };
 
-  // mock-data.js POD adları → XDB dev_loc grup adları (POD-1 → "POD 1", NS1 → "NON-S1")
+  // mock-data.js POD adları → XDB dev_loc grup adları (POD-1 → "POD 1", NW-1 → "NON-S1")
   const groupName = pod => /^NS(\d+)$/i.test(pod) ? 'NON-S' + pod.replace(/\D/g, '') : String(pod).replace('-', ' ');
   const devLoc = c => '1.KAT/1.SALON/' + groupName(c.pod) + '/' + c.col.slice(1) + ' SIRASI';
   const devBase = (code, side) => 'K' + code + '_PDU_' + side;
@@ -662,7 +675,7 @@
       const baseTarget = target > 0 ? target : (cab.currentA || 0) / 2;
       outlets.forEach(ot => { ot.baseCurr = sumW > 0 ? baseTarget * ot.weight / sumW : 0; });
 
-      // 1CB52 PDU-B: C1 kesicisinde yük yoğunlaşması (toplam korunur)
+      // 1DL03 PDU-B: C1 kesicisinde yük yoğunlaşması (toplam korunur)
       if (sc && sc.hotBreaker) {
         const hot = outlets.filter(ot => ot.breaker === sc.hotBreaker && ot.weight > 0);
         const rest = outlets.filter(ot => ot.breaker !== sc.hotBreaker && ot.weight > 0);
@@ -674,7 +687,7 @@
           rest.forEach(ot => { ot.curr = ot.curr * (target - hotTarget) / restSum; });
         }
       }
-      // 1AV42 PDU-B: kayıp fazdaki outlet'ler kapalı; yük A beslemesine aktarıldı (pduB = 0)
+      // 1NA06 PDU-B: kayıp fazdaki outlet'ler kapalı; yük A beslemesine aktarıldı (pduB = 0)
       if (sc && sc.lostPhase) {
         outlets.forEach(ot => { ot.curr = 0; if (ot.phase === sc.lostPhase) ot.on = false; });
       }
@@ -858,7 +871,7 @@
      ASM (cihaz detay), CAT (model kataloğu, ön/arka görsel + port şablonu), LNK (port bağlantıları)
    Cihaz görselleri SVG olarak üretilir; port koordinatları (0..1 oranı) görselle birebir eşleşir.
    Bağlantılar tüm kabinler için tohumlu ve iki yönlü üretilir (NIC → patch panel / ToR / omurga switch,
-   PSU → PDU-A/B outlet). Senaryo değerleri DCIM.data.cabinets'tan gelir (1BJ53 sıcaklık alarmı vb.).
+   PSU → PDU-A/B outlet). Senaryo değerleri DCIM.data.cabinets'tan gelir (1DU06 sıcaklık alarmı vb.).
    Bağımlılık: DCIM.data (yukarıdaki bölümler), opsiyonel DCIM.data.pdu
    ========================================================================== */
 (function () {
@@ -1117,7 +1130,7 @@
   const cabOfAsset = {};
   D.cabinets.forEach(c => c.assets.forEach(a => { cabOfAsset[a.id] = c; }));
   const uRange = a => String(a.startU) + (a.uSize > 1 ? '-' + (a.startU + a.uSize - 1) : '');
-  const isNetCab = c => c.col === '1AS' || c.col === '1AV';
+  const isNetCab = c => /^NW-/.test(c.pod || '');
   const WORK_NOTES = ['Kablo etiketlendi, bağlantı Fluke DSX ile test edildi.', 'Yeni devreye alma — İE-2026-0744 kapsamında çekildi.', 'Port yeniden eşleştirildi, eski bağlantı sökülüp raporlandı.', 'Yedekli bağlantı; LACP grubu Po1 üyesi.', 'Müşteri talebi ile aktif edildi.'];
   let LINKS = null;
 
@@ -1137,7 +1150,7 @@
       setEnd(b, bPort, bSide, a, aPort, aSide, linkType, label, work);
     };
 
-    // Omurga (network sırası 1AS/1AV) switch portları — sırayla dağıtılır
+    // Omurga (ağ sıraları NW-*) switch portları — sırayla dağıtılır
     const net = [];
     D.cabinets.filter(isNetCab).forEach(c => c.assets.forEach(a => { if (a.assetType === 'Switch') net.push(a); }));
     const used = {};
@@ -1166,18 +1179,20 @@
       };
       const toNet = (a, port, side, type) => { const n = allocNet(a); if (n) link(a, port, side, n.sw, n.port, 'front', type || 'OM4 LC-LC'); };
       c.assets.forEach(a => {
+        // Sunum kablolama politikası (3D ile aynı): kabin içi veri bağlantısı ~%10; gerisi fiber runner / tel tava ile NW omurgasına
+        const r = D.rng(D.hash(a.id + '|ports'));
         if (a.assetType === 'Sunucu') {
-          toPP(a, 'NIC1');
-          toTor(a, 'NIC2', 'back');
-          toNet(a, 'MGMT', 'back', 'Cat6 (OOB Yönetim)');
+          if (r() < 0.1) toPP(a, 'NIC1'); else toNet(a, 'NIC1', 'back', 'OM4 LC-LC (Fiber Runner)');
+          toNet(a, 'NIC2', 'back', 'OM4 LC-LC (Fiber Runner)');
+          toNet(a, 'MGMT', 'back', 'Cat6 (OOB Yönetim · Tel Tava)');
         } else if (a.assetType === 'Depolama') {
-          toPP(a, 'A-MG');
+          if (r() < 0.1) toPP(a, 'A-MG'); else toNet(a, 'A-MG', 'back', 'Cat6 (Yönetim · Tel Tava)');
           toNet(a, 'A-FC1', 'back', 'OM4 LC-LC (SAN-A)');
           toNet(a, 'B-FC1', 'back', 'OM4 LC-LC (SAN-B)');
         } else if (a.assetType === 'Switch' && !isNetCab(c)) {
           toNet(a, 'U1', 'front', 'OS2 LC-LC (Uplink)');
           toNet(a, 'U2', 'front', 'OS2 LC-LC (Uplink)');
-          toPP(a, 'MGMT');
+          if (r() < 0.1) toPP(a, 'MGMT'); else toNet(a, 'MGMT', 'back', 'Cat6 (Yönetim · Tel Tava)');
         } else if (a.assetType === 'Router' || a.assetType === 'Firewall') {
           toNet(a, 'X1', 'front', 'OM4 LC-LC');
           toNet(a, 'X2', 'front', 'OM4 LC-LC');
@@ -1460,7 +1475,7 @@
 
   const PDUS = [];
   D.cabinets.forEach(cab => {
-    const outlets = cab.col === '1AS' || cab.col === '1AV' ? 16 : 24;
+    const outlets = /^NW-/.test(cab.pod || '') ? 16 : 24;
     ['A', 'B'].forEach(side => {
       PDUS.push({
         id: 'K' + cab.code + '_PDU_' + side,
@@ -1703,7 +1718,7 @@
   const THREADS = [
     { rid: 'thr_mqtt_io', doc: 'DAS/S00', desc: 'MQTT yayın / abonelik', load: 38, wrk: 2 },
     { rid: 'thr_qry', doc: 'DAS/S00', desc: 'XDBT sorgu işleyici', load: 31, wrk: 4 },
-    { rid: 'thr_mb_ns', doc: 'CMR/T01', desc: 'Modbus TCP yoklama NS1-NS2', load: 44, wrk: 2 },
+    { rid: 'thr_mb_ns', doc: 'CMR/T01', desc: 'Modbus TCP yoklama NW-1 / NW-2', load: 44, wrk: 2 },
     { rid: 'thr_mb_pod1_4', doc: 'CMR/T01', desc: 'Modbus TCP yoklama POD-1..4', load: 52, wrk: 3 },
     { rid: 'thr_mb_pod5_7', doc: 'CMR/T01', desc: 'Modbus TCP yoklama POD-5..7', load: 71, wrk: 3, p: 'drop' },
     { rid: 'thr_mb_pod8_10', doc: 'CMR/T01', desc: 'Modbus TCP yoklama POD-8..10', load: 49, wrk: 3 },
@@ -1763,7 +1778,7 @@
       row.thr_lat_max_us = Math.round(j(640000, 60000));
     }
     if (def.p === 'drop') {
-      // 1CE51 sensör modülü Modbus zaman aşımı → tetiklemeler düşüyor
+      // 1DM03 sensör modülü Modbus zaman aşımı → tetiklemeler düşüyor
       row.tmr_skp = 1840 + tick * 3 + (tick % 2);
       row.thr_lat_us = Math.round(j(96000, 12000));
       row.thr_lat_max_us = Math.round(j(430000, 40000));
@@ -1774,8 +1789,8 @@
   // ---------------------------------------------------------------------------
   // Saha cihazları (CMR/*) — senaryo ile tutarlı durumlar
   // ---------------------------------------------------------------------------
-  const SENSOR_STATE = { '1BJ53': ALARM, '1BC37': ALARM, '1BQ55': WARN, '1CE56': WARN, '1BX50': WARN, '1BU54': WARN };
-  const PDU_STATE = { '1AV42_B': ALARM, '1CB52_A': WARN };
+  const SENSOR_STATE = { '1DU06': ALARM, '1DA07': ALARM, '1DS07': WARN, '1DL01': WARN, '1DP02': WARN, '1DN05': WARN };
+  const PDU_STATE = { '1NA06_B': ALARM, '1DL03_A': WARN };
   const EQUIP_STATE = { alarm: ALARM, warning: WARN };
 
   function buildDevices() {
@@ -1783,7 +1798,7 @@
     const push = (rid, doc, desc, cls, sta, con) => list.push({ rid, qry_doc: doc, desc, dev_nfo: desc, sta, xdb_cls: cls, pro_con: con });
     D.cabinets.forEach(c => {
       const lost = c.status === 'lost';
-      push('IDC1_' + c.code + '_SNS', 'CMR/T01', 'Kabin ' + c.code + ' Sensör Modülü', 'SNS', lost ? OFFLINE : RUN | (SENSOR_STATE[c.code] || 0), 'con_mb_gw');
+      push('DCA_' + c.code + '_SNS', 'CMR/T01', 'Kabin ' + c.code + ' Sensör Modülü', 'SNS', lost ? OFFLINE : RUN | (SENSOR_STATE[c.code] || 0), 'con_mb_gw');
       ['A', 'B'].forEach(side => {
         push('K' + c.code + '_PDU_' + side, 'CMR/T01', 'Kabin ' + c.code + ' PDU-' + side, 'PDU', RUN | (PDU_STATE[c.code + '_' + side] || 0), 'con_mb_gw');
       });
@@ -1792,7 +1807,7 @@
     ['Master Pano PMM-1', 'A1 Klima Panosu PMM', 'B1 Klima Panosu PMM', 'UPS Çıkış Panosu A PMM', 'UPS Çıkış Panosu B PMM'].forEach((d, i) =>
       push('PMM_' + (i + 1), 'CMR/T02', d, 'PMM', RUN, 'con_snmp'));
     push('PMM_7', 'CMR/T02', 'Yedek Pano Analizörü PMM-7', 'PMM', 0, 'con_snmp'); // devre dışı (planlı)
-    D.climates.forEach(k => push('IDC1_' + k.label.replace(/\s+/g, ''), 'CMR/T03', k.label, 'KLM', RUN | (EQUIP_STATE[k.status] || 0), 'con_bacnet'));
+    D.climates.forEach(k => push('DCA_' + k.label.replace(/\s+/g, ''), 'CMR/T03', k.label, 'KLM', RUN | (EQUIP_STATE[k.status] || 0), 'con_bacnet'));
     D.panels.forEach((p, i) => push('PANO_' + (i + 1), 'CMR/T03', p.label, 'PNL', RUN | (EQUIP_STATE[p.status] || 0), 'con_bacnet'));
     const pods = Array.from(new Set(D.cabinets.map(c => c.pod)));
     pods.forEach(pod => push('SNS_GW_' + pod.replace('-', ''), 'CMR/T04', 'Kilit Ağ Geçidi ' + pod, 'GW', RUN, 'con_mb_gw'));
@@ -1878,7 +1893,7 @@
     'CMR/T00': { prefix: '1.Kat Sistem Salonu', pue: D.site && D.site.pue ? D.site.pue : 1.42 },
     'CMR/T02': { prefix: '2.Kat Sistem Salonu', pue: 1.48, panels: ['A1 Klima Panosu', 'A2 Klima Panosu', 'B1 Klima Panosu', 'B2 Klima Panosu', 'Klimalar Kontrol Panosu'], sdp: ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5'] },
     'CMR/T03': { prefix: '3.Kat Sistem Salonu', pue: 1.53, panels: ['A1 Klima Panosu', 'A2 Klima Panosu', 'B1 Klima Panosu', 'B2 Klima Panosu'], sdp: ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4'] },
-    'CMR/T04': { prefix: 'IDC4 Salon-1', pue: 1.36, panels: ['C1 Klima Panosu', 'C2 Klima Panosu', 'D1 Klima Panosu', 'D2 Klima Panosu', 'Klimalar Kontrol Panosu', 'CRAH Klima Panosu'], sdp: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'] }
+    'CMR/T04': { prefix: 'DCB Salon-1', pue: 1.36, panels: ['C1 Klima Panosu', 'C2 Klima Panosu', 'D1 Klima Panosu', 'D2 Klima Panosu', 'Klimalar Kontrol Panosu', 'CRAH Klima Panosu'], sdp: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'] }
   };
 
   // 1. Kat: gerçek pano (Toplam Aktif Güç) ve UPS (yük oranı) değerleri.
@@ -1987,19 +2002,19 @@
   // ===========================================================================
   // UPS Modül Raporu — bölüm (INP/BYP/OUT/BAT) × veri türü × faz geçmişi
   // ===========================================================================
-  // CMR/T00 (IDC1): gerçek UPS etiketleri (DCIM.data.ups). CMR/T04 (IDC4): bileşendeki liste.
+  // CMR/T00 (DCA): gerçek UPS etiketleri (DCIM.data.ups). CMR/T04 (DCB): bileşendeki liste.
   const UPS_BY_FLOOR = {
     'CMR/T00': D.ups.slice().sort(byUpsLabel).map(u => ({
       id: 'KAT1_SAL1_' + upsCode(u.label) + '_UPS', label: u.label, floor: 'CMR/T00',
       load: u.load || 50, battery: u.status === 'alarm' && /Akü/i.test(u.note || ''), lost: u.status === 'lost'
     })),
     'CMR/T04': [
-      { id: 'H_U_IDC4_RA_M1', label: 'IDC4 A UPS-1' },
-      { id: 'H_U_IDC4_RA_M2', label: 'IDC4 A UPS-2' },
-      { id: 'H_U_IDC4_RB_M1', label: 'IDC4 B UPS-1' },
-      { id: 'H_U_IDC4_RB_M2', label: 'IDC4 B UPS-2' },
-      { id: 'IDC4_UPSC1C2', label: 'IDC4 UPS C1/C2' },
-      { id: 'IDC4_UPSD1D2', label: 'IDC4 UPS D1/D2' }
+      { id: 'H_U_DCB_RA_M1', label: 'DCB A UPS-1' },
+      { id: 'H_U_DCB_RA_M2', label: 'DCB A UPS-2' },
+      { id: 'H_U_DCB_RB_M1', label: 'DCB B UPS-1' },
+      { id: 'H_U_DCB_RB_M2', label: 'DCB B UPS-2' },
+      { id: 'DCB_UPSC1C2', label: 'DCB UPS C1/C2' },
+      { id: 'DCB_UPSD1D2', label: 'DCB UPS D1/D2' }
     ].map(u => Object.assign(u, { floor: 'CMR/T04', load: Math.round(between(rngOf('ups-idc4-' + u.id), 36, 68)), battery: false, lost: false }))
   };
   const ALL_UPS = UPS_BY_FLOOR['CMR/T00'].concat(UPS_BY_FLOOR['CMR/T04']);
@@ -2130,7 +2145,7 @@
      N+N: her taraf şalter anma akımının ≤ %50'si. UPS B4 (%82 yük) → SDP B4 ≈ %32 (kırmızı).
    - Trafolar: 1600 kVA, 400 V AG → anma akımı ≈ 2309 A; yük ≈ %36–40 (≤ %50 N+N).
      Kompanzasyon çıkışları: 150–190 A, güç faktörü ≈ 0,04 (kapasitif, aktif güç birkaç kW).
-   - Senaryo: 1AV42 PDU-B faz kaybı → SDP B2 Giriş 2 L2 ↓, SDP A2 Giriş 2 L2 ↑ (yük A'ya aktarıldı;
+   - Senaryo: 1NA06 PDU-B faz kaybı → SDP B2 Giriş 2 L2 ↓, SDP A2 Giriş 2 L2 ↑ (yük A'ya aktarıldı;
      besleme CTD'ye göre 1B2G2 / 1A2G2 — connectivity.html ile aynı).
    ========================================================================== */
 (function () {
@@ -2235,10 +2250,10 @@
   // SDP (UPS dağıtım panosu girişleri) — db_CMR_T00.xml yapısı: KAT1_SAL1_A5_UPS_GIR1_DV
   // ---------------------------------------------------------------------------
   const SDP_FLOORS = {
-    'CMR/T00': { region: 'KAT1_SAL1', lokasyon: 'IDC1', salon: '1.KAT SİSTEM SALONU', ipBase: 20, codes: null },
-    'CMR/T02': { region: 'KAT2_SAL1', lokasyon: 'IDC1', salon: '2.KAT SİSTEM SALONU', ipBase: 90, codes: ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5'] },
-    'CMR/T03': { region: 'KAT3_SAL1', lokasyon: 'IDC1', salon: '3.KAT SİSTEM SALONU', ipBase: 130, codes: ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4'] },
-    'CMR/T04': { region: 'IDC4_SAL1', lokasyon: 'IDC4', salon: 'IDC4 SİSTEM SALONU', ipBase: 170, codes: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'] }
+    'CMR/T00': { region: 'KAT1_SAL1', lokasyon: 'DCA', salon: '1.KAT SİSTEM SALONU', ipBase: 20, codes: null },
+    'CMR/T02': { region: 'KAT2_SAL1', lokasyon: 'DCA', salon: '2.KAT SİSTEM SALONU', ipBase: 90, codes: ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5'] },
+    'CMR/T03': { region: 'KAT3_SAL1', lokasyon: 'DCA', salon: '3.KAT SİSTEM SALONU', ipBase: 130, codes: ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4'] },
+    'CMR/T04': { region: 'DCB_SAL1', lokasyon: 'DCB', salon: 'DCB SİSTEM SALONU', ipBase: 170, codes: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'] }
   };
 
   const sdpCache = {};
@@ -2264,7 +2279,7 @@
         const a = between(rnd, -0.05, 0.05);
         const b = between(rnd, -0.05, 0.05);
         const I = [iAvg * (1 + a), iAvg * (1 + b), iAvg * (1 - a - b)];
-        // Senaryo: 1AV42 PDU-B faz kaybı (CTD: 1B2G2 / 1A2G2 beslemesi) → L2 yükü A tarafına geçti
+        // Senaryo: 1NA06 PDU-B faz kaybı (CTD: 1B2G2 / 1A2G2 beslemesi) → L2 yükü A tarafına geçti
         if (floorId === 'CMR/T00' && gir === 2 && s.code === 'B2') I[1] -= 5.2;
         if (floorId === 'CMR/T00' && gir === 2 && s.code === 'A2') I[1] += 5.2;
         const ipIdx = f.ipBase + idx * 2 + gir;
@@ -2324,16 +2339,16 @@
   };
 
   // ---------------------------------------------------------------------------
-  // Trafo analizörleri — db_CMR_T00.xml: IDC1_A_TRAFO3_Q1_DV ... (7 cihaz)
+  // Trafo analizörleri — db_CMR_T00.xml: DCA_A_TR1_Q1_DV ... (7 cihaz)
   // ---------------------------------------------------------------------------
   const TRAFO_DEFS = [
-    { id: 'A_TRAFO3_Q1', amps: 905, komp: false },
-    { id: 'A_TRAFO4_Q2', amps: 862, komp: false },
-    { id: 'A_TRAFO1KOMP_Q146', amps: 176, komp: true },
-    { id: 'B_TRAFO1_Q3', amps: 884, komp: false },
-    { id: 'B_TRAFO2_Q4', amps: 846, komp: false },
-    { id: 'B_TRAFO1KOMP_Q16', amps: 158, komp: true },
-    { id: 'B_TRAFO2KOMP_Q145', amps: 191, komp: true }
+    { id: 'A_TR1_Q1', amps: 905, komp: false },
+    { id: 'A_TR2_Q2', amps: 862, komp: false },
+    { id: 'A_TR2_KOMP_Q16', amps: 176, komp: true },
+    { id: 'B_TR3_Q3', amps: 884, komp: false },
+    { id: 'B_TR4_Q4', amps: 846, komp: false },
+    { id: 'B_TR3_KOMP_Q17', amps: 158, komp: true },
+    { id: 'B_TR4_KOMP_Q18', amps: 191, komp: true }
   ];
   const TRAFOS = TRAFO_DEFS.map(d => {
     const rnd = rngOf('trafo-' + d.id);
@@ -2341,7 +2356,7 @@
     const b = between(rnd, -0.025, 0.025);
     const busV = d.id.charAt(0) === 'A' ? 233.6 : 234.2;
     return finishUnit({
-      id: d.id, region: 'IDC1', komp: d.komp, ratedKva: d.komp ? 0 : 1600,
+      id: d.id, region: 'DCA', komp: d.komp, ratedKva: d.komp ? 0 : 1600,
       I: [d.amps * (1 + a), d.amps * (1 + b), d.amps * (1 - a - b)],
       V: [busV + between(rnd, -1.1, 1.1), busV + between(rnd, -1.1, 1.1), busV + between(rnd, -1.1, 1.1)],
       pf: d.komp ? between(rnd, 0.03, 0.06) : between(rnd, 0.958, 0.976)
@@ -2350,7 +2365,7 @@
 
   R.trafo = {
     units: TRAFOS,
-    regions: ['IDC1'],
+    regions: ['DCA'],
     query(units, sensors, filter) {
       return historyRows((id, region) => TRAFOS.find(t => t.id === id && (!region || t.region === region)) || null, units, sensors, filter);
     }
@@ -2359,7 +2374,7 @@
   // ---------------------------------------------------------------------------
   // Şalter Yük Yedeklilik — SDP girişlerinin (Giriş 1/2) dönem içi faz akımları
   // ---------------------------------------------------------------------------
-  // Katlar: CMR/T00, T02, T03, T04 (IDC4: yalnızca A/B tarafları eşlenir)
+  // Katlar: CMR/T00, T02, T03, T04 (DCB: yalnızca A/B tarafları eşlenir)
   function switchDevices(floorIds) {
     const out = [];
     floorIds.forEach(fid => {
@@ -2457,7 +2472,7 @@
    PDU Envanter Raporu (HIS_PDU_Inventory) ve PDU Güç Raporu (HIS_Energy_HSD/HSH)
    çağrılarının yerine geçen tohumlu üreticiler. Sonra mock-data.js ile birleştirilecek.
    Bağımlılık: js/mock-data.js (DCIM.data)
-   Senaryo: 1AV42 PDU-B faz kaybı, 1CB52 yüksek akım, 1CE51 haberleşme kaybı.
+   Senaryo: 1NA06 PDU-B faz kaybı, 1DL03 yüksek akım, 1DM03 haberleşme kaybı.
    ========================================================================== */
 (function () {
   'use strict';
@@ -2494,14 +2509,14 @@
     return null;
   }
 
-  // CMR dokümanındaki dev_loc biçimi: "<Kat> / <Salon> / <POD>" (T04 / IDC4: "<IDC4> / <POD>")
-  function devLoc(floorId, pod) {
+  // CMR dokümanındaki dev_loc biçimi: "<Kat> / <Salon> / <POD>" (T04 / DCB: "<DCB> / <POD>")
+  function devLoc(floorId, pod, cab) {
     const podNum = parseInt((String(pod).match(/\d+/) || ['0'])[0], 10);
     switch (floorId) {
       case 'T01': return '1. KAT / 1. SALON / ' + pod;
-      case 'T02': return '2. KAT / ' + (podNum <= 5 && pod !== 'NS2' ? '1. SALON' : '2. SALON') + ' / ' + pod;
+      case 'T02': return '2. KAT / ' + (cab && cab.salonId === 'S2' ? '2. SALON' : '1. SALON') + ' / ' + pod;
       case 'T03': return '3. KAT / 1. SALON / ' + pod;
-      case 'T04': return 'IDC4 / ' + pod;
+      case 'T04': return 'DCB / ' + pod;
       default: return '';
     }
   }
@@ -2512,7 +2527,7 @@
     if (cmrCache[floorId]) return cmrCache[floorId];
     const out = [];
     floorCabinets(floorId).forEach(c => {
-      ['A', 'B'].forEach(side => out.push({ id: 'K' + c.code + '_PDU_' + side + '_DV', dev_loc: devLoc(floorId, c.pod), cabinet: c.code, side }));
+      ['A', 'B'].forEach(side => out.push({ id: 'K' + c.code + '_PDU_' + side + '_DV', dev_loc: devLoc(floorId, c.pod, c), cabinet: c.code, side }));
     });
     cmrCache[floorId] = out;
     return out;
@@ -2551,8 +2566,8 @@
       // Yüksek yüklü kabinlerde 3 fazlı PDU; aynı kabindeki A/B beslemeleri aynı model
       const pool = (cab.powerKw || 0) > 6.5 ? PDU_MODELS.filter(p => p.three) : PDU_MODELS.filter(p => !p.three);
       const model = pool[Math.floor(cabRnd() * pool.length) % pool.length];
-      const podNum = parseInt((String(cab.pod || '').match(/\d+/) || ['0'])[0], 10) + (String(cab.pod || '').startsWith('NS') ? 20 : 0);
-      const lastSeen = dev.cabinet === '1CE51'
+      const podNum = parseInt((String(cab.pod || '').match(/\d+/) || ['0'])[0], 10) + (String(cab.pod || '').startsWith('NW') ? 20 : 0);
+      const lastSeen = dev.cabinet === '1DM03'
         ? new Date(now - (3 * 60 + 12) * 60000 - Math.floor(rnd() * 40) * 1000)   // haberleşme kaybı: son veri ~3 saat önce
         : new Date(now - Math.floor(between(rnd, 5, 280)) * 1000);
       return {
@@ -2584,9 +2599,9 @@
   // Senaryo zamanları (her açılışta "şimdi"ye göre)
   const NOW = Date.now();
   const SCN = {
-    '1AV42': { bLossFrom: NOW - 38 * HOUR },                 // PDU-B faz kaybı ~38 saattir
-    '1CB52': { boostFrom: NOW - 3 * DAY, boost: 1.18 },       // son günlerde yüksek akım
-    '1CE51': { lostFrom: startOfDay(NOW) - DAY }              // dünden beri veri yok
+    '1NA06': { bLossFrom: NOW - 38 * HOUR },                 // PDU-B faz kaybı ~38 saattir
+    '1DL03': { boostFrom: NOW - 3 * DAY, boost: 1.18 },       // son günlerde yüksek akım
+    '1DM03': { lostFrom: startOfDay(NOW) - DAY }              // dünden beri veri yok
   };
 
   function cabinetBase(code) {
@@ -2616,7 +2631,7 @@
     }
     if (sc.boostFrom && ts >= sc.boostFrom) total *= sc.boost;
     let share = side === 'A' ? base.shareA : 1 - base.shareA;
-    // 1AV42: faz kaybı sonrası tüm yük PDU-A'ya biner
+    // 1NA06: faz kaybı sonrası tüm yük PDU-A'ya biner
     if (sc.bLossFrom && end > sc.bLossFrom) {
       const lossRatio = Math.min(1, (end - sc.bLossFrom) / (end - ts));
       share = side === 'A' ? share + (1 - share) * lossRatio : share * (1 - lossRatio);
@@ -2625,7 +2640,7 @@
     if (avg <= 0.0001) return { Average: 0, Minimum: 0, Maximum: 0 };
     const spread = granularity === 'day' ? 1 : 0.45;
     let max = avg * (1 + between(rnd, 0.07, 0.18) * spread);
-    if (code === '1CB52' && sc.boostFrom && ts >= sc.boostFrom) max = avg * (1 + between(rnd, 0.16, 0.24) * spread);
+    if (code === '1DL03' && sc.boostFrom && ts >= sc.boostFrom) max = avg * (1 + between(rnd, 0.16, 0.24) * spread);
     const min = avg * (1 - between(rnd, 0.08, 0.16) * spread);
     return { Average: avg, Minimum: sc.bLossFrom && end > sc.bLossFrom && ts < sc.bLossFrom && side === 'B' ? 0 : min, Maximum: max };
   }
@@ -2658,8 +2673,8 @@
    DCIM Sunum — Rapor mock verileri (R4): PDU Yük (failover) + Maksimum Güç (maxpow)
    DCIM.data.reports.failover / DCIM.data.reports.maxpow
    Tüm değerler filtre anahtarına göre tohumlanır (aynı filtre → aynı sonuç).
-   Senaryo: 1AV42 PDU-B L2 faz kaybı (L2 yükü PDU-A'ya biner → failover riski),
-            1CB52 yüksek akım (L1 fazı ağır yüklü).
+   Senaryo: 1NA06 PDU-B L2 faz kaybı (L2 yükü PDU-A'ya biner → failover riski),
+            1DL03 yüksek akım (L1 fazı ağır yüklü).
    Bağımlılık: js/mock-data.js (DCIM.data)
    ========================================================================== */
 (function () {
@@ -2751,7 +2766,7 @@
   function basePhases(c) {
     const rnd = rng(hash(c.code + '-phase'));
     let sh = [between(rnd, 0.3, 0.37), between(rnd, 0.3, 0.37), between(rnd, 0.3, 0.37)];
-    if (c.code === '1CB52') sh = [0.38, 0.32, 0.30]; // yüksek akım: L1 ağır
+    if (c.code === '1DL03') sh = [0.38, 0.32, 0.30]; // yüksek akım: L1 ağır
     const tot = sh[0] + sh[1] + sh[2];
     sh = sh.map(x => x / tot);
     const half = c.currentA / 2;
@@ -2759,7 +2774,7 @@
     const feedB = c.pduFault ? half : c.pduB;
     const a = sh.map(x => feedA * x);
     const b = sh.map(x => feedB * x);
-    if (c.pduFault) { a[1] += b[1] * 1.12; b[1] = 0; } // 1AV42: PDU-B L2 faz kaybı → yük PDU-A'ya biner
+    if (c.pduFault) { a[1] += b[1] * 1.12; b[1] = 0; } // 1NA06: PDU-B L2 faz kaybı → yük PDU-A'ya biner
     return { a, b };
   }
 
@@ -2812,7 +2827,7 @@
     F1: { digit: 1, mock: 'T00', halls: ['KAT1_SAL1'] },
     F2: { digit: 2, mock: 'T02', halls: ['KAT2_SAL1', 'KAT2_SAL2', 'KAT2_SAL3', 'KAT2_SAL4', 'KAT2_SAL5'] },
     F3: { digit: 3, mock: 'T03', halls: ['KAT3_SAL1', 'KAT3_SAL2', 'KAT3_SAL3', 'KAT3_SAL5', 'KAT3_SAL6'] },
-    IDC4: { digit: 4, mock: 'T04', halls: ['IDC4'] }
+    DCB: { digit: 4, mock: 'T04', halls: ['DCB'] }
   };
 
   // Kategori → güç ölçümlü nokta RID listesi (seçili kat için)
@@ -2845,8 +2860,8 @@
       const c = findCab(m[1]);
       if (!c) return between(rnd, 1500, 4000);
       let amps = m[2] === 'A' ? c.pduA : c.pduB;
-      if (c.pduFault) amps = m[2] === 'A' ? c.currentA * 0.66 : c.currentA * 0.34; // 1AV42: L2 yükü PDU-A'da
-      if (c.code === '1CB52') amps *= 1.12;
+      if (c.pduFault) amps = m[2] === 'A' ? c.currentA * 0.66 : c.currentA * 0.34; // 1NA06: L2 yükü PDU-A'da
+      if (c.code === '1DL03') amps *= 1.12;
       return amps * 230 * between(rnd, 1.05, 1.22);
     }
     if ((m = rid.match(/^KAT1_SAL1_(\w+)_UPS_TOT_POW$/))) {
@@ -2947,10 +2962,10 @@
   // KLİMA RAPORU — HIS_Climate
   // ---------------------------------------------------------------------------
   const CLIMATE_FLOORS = {
-    'CMR/T00': { prefix: 'IDC1', no: 1, units: null },
-    'CMR/T02': { prefix: 'IDC1', no: 2, units: 10 },
-    'CMR/T03': { prefix: 'IDC1', no: 3, units: 8 },
-    'CMR/T04': { prefix: 'IDC4', no: 4, units: 6 }
+    'CMR/T00': { prefix: 'DCA', no: 1, units: null },
+    'CMR/T02': { prefix: 'DCA', no: 2, units: 10 },
+    'CMR/T03': { prefix: 'DCA', no: 3, units: 8 },
+    'CMR/T04': { prefix: 'DCB', no: 4, units: 6 }
   };
 
   // Kattaki klima üniteleri (KLM101 ...). 1. kat gerçek yerleşimden gelir.
@@ -3064,7 +3079,7 @@
     'CMR/T00': { prefix: 'K1S1', digit: '1' },
     'CMR/T02': { prefix: 'K2S1', digit: '2' },
     'CMR/T03': { prefix: 'K3S1', digit: '3' },
-    'CMR/T04': { prefix: 'IDC4', digit: '4' }
+    'CMR/T04': { prefix: 'DCB', digit: '4' }
   };
   const CABIN_SENSORS = ['TEMP_BOT', 'TEMP_MID', 'TEMP_TOP', 'HUM_MID', 'FDOOR', 'RDOOR'];
 
@@ -3149,7 +3164,7 @@
       const sensor = parts.slice(3).join('_');
       const p = cabinProfile(module);
       times.forEach(t => {
-        // 1CE51: sensör modülü haberleşmesi koptu → son saatte veri yok
+        // 1DM03: sensör modülü haberleşmesi koptu → son saatte veri yok
         if (p.lost && Date.now() - t.getTime() < (hourly ? 3600000 : 0)) return;
         out.push({ rid, tim: hourly ? t.toISOString() : dateKey(t), result_value: cabinValue(module, sensor, t, opts.calc, hourly) });
       });
@@ -3186,7 +3201,7 @@
     'CMR/T01': { prefix: 'K1S1', digit: '1' },
     'CMR/T02': { prefix: 'K2S1', digit: '2' },
     'CMR/T03': { prefix: 'K3S1', digit: '3' },
-    'CMR/T04': { prefix: 'IDC4', digit: '4' }
+    'CMR/T04': { prefix: 'DCB', digit: '4' }
   };
 
   // opts: { kats: ['CMR/T01'], period, filterDate, startDate, endDate }
@@ -3222,7 +3237,7 @@
         ['A', 'B'].forEach(feed => {
           const rid = f.prefix + '_' + c.pod.replace('-', '') + '_' + code + '_PDU_' + feed + '_TOT_POW';
           const rnd = rngOf(rid + '|' + periodKey);
-          // 1AV42 PDU-B faz kaybı → B beslemesi 0 W
+          // 1NA06 PDU-B faz kaybı → B beslemesi 0 W
           if (f.digit === '1' && c.pduFault && feed === 'B') { out.push({ rid, max: 0, tim: to.toISOString() }); return; }
           const share = f.digit === '1' && c.pduFault ? 1 : between(rnd, 0.44, 0.56);
           const max = kw * 1000 * share * peakBoost * between(rnd, 0.97, 1.06);
@@ -3247,8 +3262,8 @@
    cat_main, cat_sub1, asn_grp, svc_id, svc_name, svc_desc, loc_main, loc_sub1, wor_name,
    usr / note (durum metni → değer JSON dizgisi), jsn { prm1, prm2 }.
    Sunum eki (orijinal WOR_List'te yok): prio, asn_usr (atanan teknisyen), tim_due (termin).
-   Senaryo: 1AV42 PDU-B faz kaybı, KLIMA 109 yüksek basınç, UPS A5 akü modu, UPS B7 SNMP kaybı,
-   1BJ53/1BC37 sıcaklık, 1AZ39 yetkisiz kapak, 1BX54 kilit motoru… (README "Sunum senaryosu").
+   Senaryo: 1NA06 PDU-B faz kaybı, KLIMA 109 yüksek basınç, UPS A5 akü modu, UPS B7 SNMP kaybı,
+   1DU06/1DA07 sıcaklık, 1DA03 yetkisiz kapak, 1DP06 kilit motoru… (README "Sunum senaryosu").
    Tamamlanmış enerji siparişleri DCIM.data.customers.worList'ten alınır (Müşteri Eşleştirme ile aynı kayıtlar).
    Bağımlılık: js/mock-data.js → DCIM.data (rng, hash, cabinets, personnel, customers)
    ========================================================================== */
@@ -3379,35 +3394,35 @@
   }
 
   // --- Senaryo ile uyumlu operasyon iş emirleri ------------------------------------------
-  add({ t: '1AV42 PDU-B Faz Kaybı Onarımı', sta: 3, prio: 'critical', tech: 'Emre Çelik', target: '1AV42', type: 'fault', open: -5, due: 3,
+  add({ t: '1NA06 PDU-B Faz Kaybı Onarımı', sta: 3, prio: 'critical', tech: 'Emre Çelik', target: '1NA06', type: 'fault', open: -5, due: 3,
     notes: { 2: 'PDU-B L2 fazında gerilim yok; yedek sigorta ve ölçüm ekipmanı hazırlandı.', 3: 'PDU-B besleme sigortası değiştiriliyor, yük PDU-A üzerinde.' } });
   add({ t: 'KLIMA 109 Kompresör Yüksek Basınç Bakımı', sta: 3, prio: 'critical', tech: 'Can Öztürk', target: 'KLIMA 109', type: 'fault', open: -4, due: 6,
     notes: { 2: 'Yüklenici firma çağrıldı; kondenser temizliği ve gaz kontrolü planlandı.', 3: 'Kompresör 1 basıncı 27,8 bar; kondenser fan motoru kontrol ediliyor.' } });
   add({ t: 'UPS A5 Akü Grubu Kontrolü ve Yük Testi', sta: 3, prio: 'critical', tech: 'Emre Çelik', target: 'UPS A5', type: 'check', open: -2, due: 2,
     notes: { 2: 'UPS A5 akü modunda; şebeke girişi ve akü blokları kontrol edilecek.', 3: 'Giriş rölesi kontrol ediliyor, akü blok gerilimleri ölçülüyor.' } });
-  add({ t: '1BJ53 Yüksek Sıcaklık — Hava Akışı İncelemesi', sta: 6, prio: 'high', tech: 'Mehmet Kaya', target: '1BJ53', type: 'fault', open: -20, due: -2,
+  add({ t: '1DU06 Yüksek Sıcaklık — Hava Akışı İncelemesi', sta: 6, prio: 'high', tech: 'Mehmet Kaya', target: '1DU06', type: 'fault', open: -20, due: -2,
     notes: { 2: 'Orta sensör 32,4 °C; sıcak koridor sızıntısı şüphesi.', 3: 'Kabin önü delikli karo yerleşimi kontrol edildi.', 6: 'Kör panel (blanking panel) tedariki bekleniyor.' } });
-  add({ t: '1BC37 Kör Panel ve Hava Akışı Düzenlemesi', sta: 2, prio: 'high', tech: 'Mehmet Kaya', target: '1BC37', type: 'maint', open: -9, due: 15,
+  add({ t: '1DA07 Kör Panel ve Hava Akışı Düzenlemesi', sta: 2, prio: 'high', tech: 'Mehmet Kaya', target: '1DA07', type: 'maint', open: -9, due: 15,
     notes: { 2: '6 adet 1U kör panel ve kablo fırçası montajı planlandı.' } });
   add({ t: 'UPS B7 SNMP Kartı Değişimi', sta: 6, prio: 'high', tech: 'Burak Şahin', target: 'UPS B7', type: 'fault', open: -30, due: -6,
     notes: { 2: 'UPS B7 SNMP yanıt vermiyor; kart resetlendi, sorun devam ediyor.', 3: 'Ağ kablosu ve switch portu değiştirildi.', 6: 'Yedek SNMP kartı üreticiden bekleniyor.' } });
-  add({ t: '1CB52 Yüksek Akım — PDU Yük Dengeleme', sta: 2, prio: 'high', tech: 'Emre Çelik', target: '1CB52', type: 'check', open: -7, due: 20,
+  add({ t: '1DL03 Yüksek Akım — PDU Yük Dengeleme', sta: 2, prio: 'high', tech: 'Emre Çelik', target: '1DL03', type: 'check', open: -7, due: 20,
     notes: { 2: 'Kabin 7,9 kW; iki sunucunun PDU-B çıkışlarına taşınması planlandı.' } });
-  add({ t: '1BU54 Yüksek Nem — Sensör Kalibrasyonu', sta: 1, prio: 'medium', tech: 'Zeynep Arslan', target: '1BU54', type: 'check', open: -1.5, due: 46 });
-  add({ t: '1CE51 Sensör Haberleşme Arızası Giderme', sta: 3, prio: 'high', tech: 'Burak Şahin', target: '1CE51', type: 'fault', open: -6, due: 4,
+  add({ t: '1DN05 Yüksek Nem — Sensör Kalibrasyonu', sta: 1, prio: 'medium', tech: 'Zeynep Arslan', target: '1DN05', type: 'check', open: -1.5, due: 46 });
+  add({ t: '1DM03 Sensör Haberleşme Arızası Giderme', sta: 3, prio: 'high', tech: 'Burak Şahin', target: '1DM03', type: 'fault', open: -6, due: 4,
     notes: { 2: 'Modbus TCP yoklaması yanıtsız; ağ geçidi ve RJ45 bağlantısı kontrol edilecek.', 3: 'Sensör ağ geçidi yeniden başlatıldı, kablo testi yapılıyor.' } });
-  add({ t: '1AZ39 Yetkisiz Kapak Açılması İncelemesi', sta: 3, prio: 'high', tech: 'Deniz Koç', target: '1AZ39', type: 'security', open: -3, due: 5,
+  add({ t: '1DA03 Yetkisiz Kapak Açılması İncelemesi', sta: 3, prio: 'high', tech: 'Deniz Koç', target: '1DA03', type: 'security', open: -3, due: 5,
     notes: { 2: 'Kart okuma ve kamera kayıtları talep edildi.', 3: 'Kamera kayıtları inceleniyor, müşteri temsilcisi ile görüşülüyor.' } });
-  add({ t: '1BX54 Kilit Motoru Değişimi', sta: 6, prio: 'medium', tech: 'Can Öztürk', target: '1BX54', type: 'fault', open: -40, due: 12,
+  add({ t: '1DP06 Kilit Motoru Değişimi', sta: 6, prio: 'medium', tech: 'Can Öztürk', target: '1DP06', type: 'fault', open: -40, due: 12,
     notes: { 2: 'Ön kapak kilit motoru tepki vermiyor.', 3: 'Motor sökülerek test edildi, arızalı.', 6: 'Yedek kilit motoru siparişi verildi.' } });
-  add({ t: '1BN52 Arka Kapak Sensörü ve Menteşe Kontrolü', sta: 1, prio: 'low', tech: 'Mehmet Kaya', target: '1BN52', type: 'check', open: -0.8, due: 70 });
-  add({ t: '1BG41 Periyodik Kabin Bakımı', sta: 4, prio: 'low', tech: 'Mehmet Kaya', target: '1BG41', type: 'maint', open: -26, due: -4,
+  add({ t: '1DR03 Arka Kapak Sensörü ve Menteşe Kontrolü', sta: 1, prio: 'low', tech: 'Mehmet Kaya', target: '1DR03', type: 'check', open: -0.8, due: 70 });
+  add({ t: '1DC06 Periyodik Kabin Bakımı', sta: 4, prio: 'low', tech: 'Mehmet Kaya', target: '1DC06', type: 'maint', open: -26, due: -4,
     notes: { 2: 'Yetkili bakım penceresi 09:00–11:00 olarak onaylandı.', 3: 'Filtre, kablo düzeni ve PDU bağlantıları kontrol ediliyor.', 4: 'Bakım tamamlandı, kapak kilitlendi.' } });
-  add({ t: '1BU50 Kart Okuyucu Yetki Denetimi', sta: 2, prio: 'medium', tech: 'Deniz Koç', target: '1BU50', type: 'security', open: -11, due: 26,
+  add({ t: '1DN01 Kart Okuyucu Yetki Denetimi', sta: 2, prio: 'medium', tech: 'Deniz Koç', target: '1DN01', type: 'security', open: -11, due: 26,
     notes: { 2: 'Yetkisiz kart denemesi sonrası erişim listesi gözden geçirilecek.' } });
-  add({ t: 'Kabin 1BQ56 Server Montajı (2×2U)', sta: 2, prio: 'medium', tech: 'Zeynep Arslan', target: '1BQ56', type: 'mount', open: -16, due: 30, pkg: 'Sunucu Barındırma - 4U Paylaşımlı Kabin', erp: '8100427715', kw: 2.5,
+  add({ t: 'Kabin 1DR01 Server Montajı (2×2U)', sta: 2, prio: 'medium', tech: 'Zeynep Arslan', target: '1DR01', type: 'mount', open: -16, due: 30, pkg: 'Sunucu Barındırma - 4U Paylaşımlı Kabin', erp: '8100427715', kw: 2.5,
     notes: { 2: 'Müşteri cihazları depoya teslim alındı; U19–U22 arası ayrıldı.' } });
-  add({ t: 'Kabin 1AV43 Server Montajı (4U)', sta: 1, prio: 'medium', tech: 'Zeynep Arslan', target: '1AV43', type: 'mount', open: -2.5, due: 52, pkg: 'Sunucu Barındırma - Yarım Kabin (21U) 2,5 kW', erp: '8100433902', kw: 2.5 });
+  add({ t: 'Kabin 1NA07 Server Montajı (4U)', sta: 1, prio: 'medium', tech: 'Zeynep Arslan', target: '1NA07', type: 'mount', open: -2.5, due: 52, pkg: 'Sunucu Barındırma - Yarım Kabin (21U) 2,5 kW', erp: '8100433902', kw: 2.5 });
   add({ t: 'POD-6 PDU-B Faz Dengeleme', sta: 3, prio: 'high', tech: 'Emre Çelik', target: 'POD-6', type: 'check', open: -10, due: 8,
     notes: { 2: 'L1/L2/L3 faz dengesizliği %18; çıkış bazlı yük dağılımı çıkarıldı.', 3: 'Bakım penceresinde kabin bazlı yük aktarımı yapılıyor.' } });
   add({ t: 'KLIMA 104 Filtre Değişimi', sta: 2, prio: 'medium', tech: 'Can Öztürk', target: 'KLIMA 104', type: 'maint', open: -14, due: 10,
@@ -3421,9 +3436,9 @@
     notes: { 2: 'Tüp basınçları ve dedektör testi için yetkili firma ile randevu alındı.' } });
   add({ t: 'POD-8 Yapısal Kablolama — Patch Panel Düzenleme', sta: 5, prio: 'low', tech: 'Burak Şahin', target: 'POD-8', type: 'network', open: -60, due: 60,
     notes: { 2: '1BQ sırası patch panelleri etiketlenecek.', 5: 'Müşteri bakım penceresi onayı bekleniyor.' } });
-  add({ t: '1CE56 Sıcaklık Uyarısı — Delikli Karo Yerleşimi', sta: 3, prio: 'medium', tech: 'Mehmet Kaya', target: '1CE56', type: 'maint', open: -8, due: 16,
+  add({ t: '1DL01 Sıcaklık Uyarısı — Delikli Karo Yerleşimi', sta: 3, prio: 'medium', tech: 'Mehmet Kaya', target: '1DL01', type: 'maint', open: -8, due: 16,
     notes: { 2: 'Soğuk koridor karo yerleşimi ve kabin önü akış ölçümü planlandı.', 3: 'İki adet %56 delikli karo yerleştirildi, sıcaklık izleniyor.' } });
-  add({ t: '1BX50 Düşük Sıcaklık — Klima Set Değeri Ayarı', sta: 4, prio: 'low', tech: 'Can Öztürk', target: '1BX50', type: 'check', open: -34, due: -10,
+  add({ t: '1DP02 Düşük Sıcaklık — Klima Set Değeri Ayarı', sta: 4, prio: 'low', tech: 'Can Öztürk', target: '1DP02', type: 'check', open: -34, due: -10,
     notes: { 2: 'KLIMA 113 set değeri kontrol edilecek.', 3: 'Set değeri 20 °C → 22 °C güncellendi.', 4: 'Kabin sıcaklığı 21,4 °C, uyarı kalktı.' } });
   add({ t: 'UPS A Hattı Yıllık Üretici Bakımı', sta: 0, prio: 'medium', tech: 'Emre Çelik', target: 'UPS A5', type: 'maint', open: -90, due: -30,
     notes: { 0: 'Mükerrer kayıt; bakım yeni tarihle yeniden açılacak.' } });
@@ -3476,7 +3491,7 @@
 
   // Hedef seçenekleri (Yeni İş Emri formu)
   const TARGETS = [
-    '1AV42', '1AV43', '1BJ53', '1BC37', '1CB52', '1BU54', '1CE51', '1AZ39', '1BX54', '1BN52', '1BQ55', '1BQ56', '1CE56', '1BG41',
+    '1NA06', '1NA07', '1DU06', '1DA07', '1DL03', '1DN05', '1DM03', '1DA03', '1DP06', '1DR03', '1DS07', '1DR01', '1DL01', '1DC06',
     'UPS A5', 'UPS B7', 'KLIMA 109', 'KLIMA 104', 'KLIMA 112', 'Master Pano', 'Jeneratör G1', 'POD-6', 'POD-8'
   ].map(t => { const l = locate(t); return { value: t, label: t + (l.kind === 'cabinet' ? ' — ' + l.loc_sub1.split(' / ')[0] + ' · ' + l.customer : ' — ' + l.loc_sub1.split(' / ')[0]) }; });
 
@@ -3499,15 +3514,11 @@
 /* ==========================================================================
    DCIM Sunum — Lokasyon Listesi mock verisi (DCIM.data.locations) — location-list.html
    Kaynak sorgu: doc('ASM/S00')/id('LOC_List')/item  (XDBT yedek yolu, queryAssetLocHistoryApi)
-   Lokasyon ID / ad / tam ad değerleri P24A01_S01/db41/db_ASM.xml → LOC_List kayıtlarından alındı
-   (test amaçlı bozuk kopyalar — "rus TELEKOM", "ALMANYA TELEKOM", "?" vb. — alınmadı).
-   Şema kimlikleri LOC_List_static biçimindedir (LC0102010101000000 = ÜMİTKÖY/KAT-1/SALON-1).
-
-   Sunum için türetilenler (gerçek kayıtta yok):
-     - Alan (m²), kabin kapasitesi, sensör sayıları, açıklamalar (tohumlu)
-     - 2. ve 3. Kat SALOON-1 pod kayıtları (L0159xx): kilit izleme sayfasının T02/T03 katlarıyla aynı
-       yerleşim kullanıldığı için podlar/kabinler DCIM.data.getLockFloor('T02' | 'T03')'ten türetilir.
-   Kat 1 / SALOON-1 podları ve kabinleri doğrudan DCIM.data.cabinets (window.DCIM_LAYOUT) ile birebir aynıdır.
+   Tümü KURGUSAL kampüs: DCA (ana bina, 3 kat; 2. katta 2 salon) + DCB (ek bina) + açık alan.
+   Lokasyon ID biçimi: L2fsnn (DCA: f = kat, s = salon, nn = pod sırası), L3xxxx DCB, L4xxxx açık alan.
+   Şema kimlikleri kat yerleşimlerinin schId değeridir (window.DCIM_FLOOR_LAYOUTS: LC-MOCK-K1-00 …).
+   Pod / kabin düğümleri kat yerleşimlerinden türetilir: kat 1 = DCIM.data.cabinets, kat 2/3 = getLockFloor('T02' | 'T03').
+   Alan (m²), kabin kapasitesi, sensör sayıları ve açıklamalar tohumludur.
    Alan ölçeği: yerleşim ızgarası 40 birim = 60 cm yükseltilmiş döşeme karosu → 1 birim = 0,015 m.
    ========================================================================== */
 (function () {
@@ -3519,15 +3530,14 @@
   D.lazy('locations', function () {
   const LAYOUT = D.layout;
   const UNIT_M = 0.015;
-  const ROOT = '/TÜRK TELEKOM/TTVM/ANKARA/DC/';
+  const ROOT = '/TÜRK TELEKOM/DCIM KAMPÜS/';
+  const LAYOUTS = D.floorLayouts || window.DCIM_FLOOR_LAYOUTS || (LAYOUT ? [LAYOUT] : []);
 
-  // Atanabilir 2D/3D şemalar (Lokasyon Şeması). href yalnızca sunumda açılabilen şema için doludur.
-  const SCHEMAS = [
-    { id: 'LC0102010101000000', name: '1. Kat 1. Salon Sistem Odası', kinds: ['2D', '3D'], href2d: '2d.html', href3d: '3d.html' },
-    { id: 'LC0102010201000000', name: '2. Kat 1. Salon Sistem Odası', kinds: ['2D'], href2d: '', href3d: '' },
-    { id: 'LC0102010301000000', name: '3. Kat 1. Salon Sistem Odası', kinds: ['2D'], href2d: '', href3d: '' },
-    { id: 'LC0102040101000000', name: 'IDC4 1. Kat Salon Yerleşimi', kinds: ['2D'], href2d: '', href3d: '' }
-  ];
+  // Atanabilir 2D/3D şemalar (Lokasyon Şeması): DCA kat yerleşimleri 2D/3D ikizde açılır (?floor=); DCB şeması sunumda yok.
+  const SCHEMAS = LAYOUTS.map(l => ({
+    id: l.schId, name: 'DCA ' + l.title, kinds: ['2D', '3D'], floor: l.floor,
+    href2d: '2d.html?floor=' + l.floor, href3d: '3d.html?floor=' + l.floor
+  })).concat([{ id: 'LC-MOCK-DCB-00', name: 'DCB 1. Kat Salon Yerleşimi', kinds: ['2D'], floor: 0, href2d: '', href3d: '' }]);
 
   const TYPES = [
     { value: 'building', label: 'Bina', icon: 'pi pi-building' },
@@ -3554,7 +3564,7 @@
     const p = parent ? nodes.find(n => n.rid === parent) : null;
     const node = Object.assign({
       rid, name, type, parent: parent || null,
-      full_name: (p ? p.full_name : '/TÜRK TELEKOM/TTVM/ANKARA/') + name + '/',
+      full_name: (p ? p.full_name : ROOT) + name + '/',
       desc: '', area: null, extraArea: 0, capacity: null, installed: null,
       sensors: { active: 0, total: 0 }, status: 'normal', schemaId: '', schemaFocus: '', cabinet: null
     }, extra || {});
@@ -3597,22 +3607,25 @@
 
   // Kabin başına sensör: üst/orta/alt sıcaklık + nem + ön/arka kapak = 6 (haberleşme kaybında 0 aktif)
   const CAB_SENSORS = 6;
-  const podName = p => (p === 'NS1' ? 'NON-STANDART 1' : p === 'NS2' ? 'NON-STANDART 2' : p.replace('POD-', '') + '.POD');
-  const POD_ORDER = ['POD-1', 'POD-2', 'POD-3', 'POD-4', 'POD-5', 'POD-6', 'POD-7', 'POD-8', 'POD-9', 'POD-10', 'NS1', 'NS2'];
+  const podName = p => (/^NW-/.test(p) ? 'AĞ SIRASI ' + p.slice(3) : p.replace('POD-', '') + '.POD');
+  // Pod sırası: POD-n sayısal, ağ sıraları (NW-n) sonda
+  const podKey = p => (/^NW-/.test(p) ? 1000 : 0) + (parseInt(String(p).replace(/\D/g, ''), 10) || 0);
 
-  // Yerleşimden pod + kabin düğümleri (floorDigit: 1 → kabin/3D derin bağlantısı var)
-  function addLayoutPods(hallRid, cabinets, podIds, schemaId, floorDigit) {
-    POD_ORDER.forEach((pod, i) => {
+  // Yerleşimden pod + kabin düğümleri; pod kimliği = ridBase + sıra (01, 02 …). Tüm DCA katları 2D/3D ikizde açılır.
+  function addLayoutPods(hallRid, cabinets, ridBase, schemaId, floorDigit) {
+    const pods = Array.from(new Set(cabinets.map(c => c.pod))).sort((a, b) => podKey(a) - podKey(b));
+    pods.forEach((pod, i) => {
       const list = cabinets.filter(c => c.pod === pod).sort((a, b) => a.code.localeCompare(b.code, 'tr'));
       if (!list.length) return;
       const x0 = Math.min(...list.map(c => c.x)), x1 = Math.max(...list.map(c => c.x + c.w));
       const y0 = Math.min(...list.map(c => c.y)), y1 = Math.max(...list.map(c => c.y + c.h));
       const isNs = pod.indexOf('NS') === 0;
-      const podNode = add(hallRid, podIds[i], podName(pod), 'pod', {
-        desc: (isNs ? 'Standart dışı kabin sırası' : 'Soğuk koridor muhafazalı pod') + ' · ' + pod,
+      const isNw = /^NW-/.test(pod);
+      const podNode = add(hallRid, ridBase + String(i + 1).padStart(2, '0'), podName(pod), 'pod', {
+        desc: (isNw ? 'Ağ (network) kabin sırası' : isNs ? 'Standart dışı kabin sırası' : 'Soğuk koridor muhafazalı pod') + ' · ' + pod,
         area: Math.round((x1 - x0) * (y1 - y0) * UNIT_M * UNIT_M * 10) / 10,
-        capacity: isNs ? 18 : 16,
-        schemaId, schemaFocus: floorDigit === 1 ? list[0].code : ''
+        capacity: Math.max(list.length, isNw ? 10 : isNs ? 18 : list.length > 16 ? 18 : 16),
+        schemaId, schemaFocus: list[0].code
       });
       list.forEach(c => {
         const lost = c.status === 'lost';
@@ -3621,7 +3634,7 @@
           area: Math.round(c.w * c.h * UNIT_M * UNIT_M * 100) / 100,
           sensors: { active: lost ? 0 : CAB_SENSORS, total: CAB_SENSORS },
           status: c.status || 'normal',
-          schemaId, schemaFocus: floorDigit === 1 ? c.code : '',
+          schemaId, schemaFocus: c.code,
           cabinet: { code: c.code, usedU: c.usedU, totalU: 42, powerKw: c.powerKw, note: c.note || '', floorDigit }
         });
       });
@@ -3638,119 +3651,88 @@
     return { sensors: { active, total }, status: worst };
   }
 
-  const hallArea = LAYOUT ? Math.round(LAYOUT.gridCols * 0.6 * LAYOUT.gridRows * 0.6) : 738;
-
   // ---------------------------------------------------------------------------
-  // ÜMİTKÖY (Ana bina)
+  // DCA (ana bina, 3 kat) — salonlar ve podlar kat yerleşimlerinden (window.DCIM_FLOOR_LAYOUTS)
   // ---------------------------------------------------------------------------
-  add(null, 'L015605', 'VERI MERKEZI', 'building', { desc: 'DC — Ankara (Ana Bina)', extraArea: 640 });
-
-  // FLOOR-1
-  add('L015605', 'L015675', 'FLOOR-1', 'floor', { desc: '1. Kat', extraArea: 385 });
-  const eq1 = equipmentSensors();
-  add('L015675', 'L015799', 'SALOON-1', 'hall', {
-    desc: '1. Kat 1. Salon Sistem Odası', area: hallArea, schemaId: 'LC0102010101000000',
-    sensors: eq1.sensors, status: eq1.status
-  });
-  addLayoutPods('L015799', D.cabinets,
-    ['L015834', 'L015836', 'L015837', 'L015838', 'L015839', 'L015840', 'L015841', 'L015842', 'L015843', 'L015835', 'L015844', 'L015845'],
-    'LC0102010101000000', 1);
-  room('L015675', 'L015800', 'SWITCH ODASI 103', 'network');
-  room('L015675', 'L015801', 'SWITCH ODASI 113', 'network');
-  room('L015675', 'L015796', 'KAMERA IZLEME ODASI', 'room', 'Güvenlik izleme');
-  room('L015675', 'L015797', 'NETWORK DEPO 119', 'storage');
-  room('L015675', 'L015798', 'ODA 106', 'room');
-  room('L015675', 'L015795', 'GECICI DEPO 101', 'storage');
-  room('L015675', 'L015793', 'GECICI DEPO 120', 'storage');
-  room('L015675', 'L015794', 'GECICI DEPO 121', 'storage');
-
-  // FLOOR-2 / FLOOR-3 — SALOON-1 kilit izleme katlarıyla (T02/T03) aynı yerleşimde
-  function layoutHall(floorRid, hallRid, floorId, schemaId, podBase, label) {
-    const cabs = typeof D.getLockFloor === 'function' ? D.getLockFloor(floorId).map(c => c.cabinet) : [];
-    const rnd = rndFor(hallRid);
-    const total = Math.round(between(rnd, 205, 240));
-    add(floorRid, hallRid, 'SALOON-1', 'hall', {
-      desc: label, area: hallArea, schemaId,
-      sensors: { active: total - Math.floor(between(rnd, 0, 3)), total }
+  add(null, 'L200000', 'DCA', 'building', { desc: 'DCA — Ana Bina (3 kat)', extraArea: 520 });
+  const floorCabs = digit => {
+    if (digit === 1) return D.cabinets || [];
+    const f = (D.floors || []).find(x => x.digit === digit);
+    return f && typeof D.getLockFloor === 'function' ? D.getLockFloor(f.id).map(c => c.cabinet) : [];
+  };
+  LAYOUTS.forEach(lay => {
+    const f = lay.floor;
+    const floorRid = 'L20' + f + '000';
+    add('L200000', floorRid, 'KAT-' + f, 'floor', { desc: 'DCA ' + f + '. Kat', extraArea: r5(between(rndFor(floorRid), 180, 260)) });
+    const cabs = floorCabs(f);
+    lay.salons.forEach((s, k) => {
+      const hallRid = 'L20' + f + (k + 1) + '00';
+      const rnd = rndFor(hallRid);
+      const multi = lay.salons.length > 1;
+      const eq = f === 1 && k === 0 ? equipmentSensors() : null;
+      const total = Math.round(between(rnd, 150, 240));
+      add(floorRid, hallRid, 'SALON-' + (k + 1), 'hall', {
+        desc: f + '. Kat ' + s.name + ' Sistem Odası',
+        area: Math.round(s.w * s.h * UNIT_M * UNIT_M),
+        schemaId: lay.schId, schemaSalon: multi ? s.id : '',
+        sensors: eq ? eq.sensors : { active: total - Math.floor(between(rnd, 0, 3)), total },
+        status: eq ? eq.status : 'normal'
+      });
+      addLayoutPods(hallRid, cabs.filter(c => (c.salonId || 'S1') === s.id), 'L20' + f + (k + 1), lay.schId, f);
     });
-    addLayoutPods(hallRid, cabs, POD_ORDER.map((p, i) => 'L0159' + String(podBase + i).padStart(2, '0')), schemaId, 0);
-  }
+    room(floorRid, 'L20' + f + '901', 'SWITCH ODASI K' + f, 'network');
+    room(floorRid, 'L20' + f + '902', 'ELEKTRİK PANO ODASI K' + f, 'energy', 'Kat dağıtım panoları');
+    room(floorRid, 'L20' + f + '903', 'GEÇİCİ DEPO K' + f, 'storage');
+    if (f === 1) room(floorRid, 'L201904', 'GÜVENLİK İZLEME ODASI', 'room', 'Kamera izleme');
+  });
 
-  add('L015605', 'L015676', 'FLOOR-2', 'floor', { desc: '2. Kat', extraArea: 410 });
-  layoutHall('L015676', 'L015804', 'T02', 'LC0102010201000000', 1, '2. Kat 1. Salon Sistem Odası');
-  room('L015676', 'L015805', 'SALOON-2', 'hall', '2. Kat 2. Salon');
-  room('L015676', 'L015806', 'SALOON-3', 'hall', '2. Kat 3. Salon');
-  room('L015676', 'L015807', 'SALOON-4', 'hall', '2. Kat 4. Salon');
-  room('L015676', 'L015808', 'SALOON-5', 'hall', '2. Kat 5. Salon');
-  room('L015676', 'L015809', 'SWITCH ODASI 204', 'network');
-  room('L015676', 'L015810', 'SWITCH ODASI 212', 'network');
-  room('L015676', 'L015802', 'GECICI DEPO 210', 'storage');
-  room('L015676', 'L015803', 'GECICI DEPO 214', 'storage');
+  add('L200000', 'L200900', 'ZEMİN KAT', 'floor', { desc: 'DCA Zemin Kat — enerji altyapısı', extraArea: 210 });
+  room('L200900', 'L200901', 'UPS SALONU A', 'energy', 'KGK — kesintisiz güç kaynakları (A kolu)');
+  room('L200900', 'L200902', 'UPS SALONU B', 'energy', 'KGK — kesintisiz güç kaynakları (B kolu)');
+  room('L200900', 'L200903', 'AKÜ ODASI', 'energy', 'Akü grupları');
+  room('L200900', 'L200904', 'AG ANA DAĞITIM ODASI', 'energy', 'Ana dağıtım panoları (A / B kolu)');
+  room('L200900', 'L200905', 'MEKANİK ODA', 'room', 'Chiller pompaları / mekanik tesisat');
+  room('L200000', 'L200906', 'HURDA-DEPO', 'storage', 'Hizmet dışı cihazlar');
 
-  add('L015605', 'L015677', 'FLOOR-3', 'floor', { desc: '3. Kat', extraArea: 430 });
-  layoutHall('L015677', 'L015812', 'T03', 'LC0102010301000000', 21, '3. Kat 1. Salon Sistem Odası');
-  room('L015677', 'L015813', 'SALOON-2', 'hall', '3. Kat 2. Salon');
-  room('L015677', 'L015814', 'SALOON-3', 'hall', '3. Kat 3. Salon');
-  room('L015677', 'L015815', 'SALOON-4', 'hall', '3. Kat 4. Salon');
-  room('L015677', 'L015816', 'SALOON-5', 'hall', '3. Kat 5. Salon');
-  room('L015677', 'L015817', 'SALOON-6', 'hall', '3. Kat 6. Salon');
-  room('L015677', 'L015818', 'SWITCH ODASI 306', 'network');
-  room('L015677', 'L015819', 'SWITCH ODASI 321', 'network');
-  room('L015677', 'L015811', 'KABLO DEPO 311', 'storage');
-  room('L015677', 'L077207', 'GECICI DEPO 312', 'storage');
-
-  add('L015605', 'L015678', 'FLOOR-Z', 'floor', { desc: 'Zemin Kat — enerji altyapısı', extraArea: 260 });
-  room('L015678', 'L015820', 'B ENERJI ADP SALONU', 'energy', 'Ana dağıtım panoları (B hattı)');
-  room('L015678', 'L015821', 'B ENERJI KESICI-AYIRICI SALONU', 'energy', 'OG kesici / ayırıcı hücreleri');
-  room('L015678', 'L015822', 'B ENERJI KGK SALONU', 'energy', 'Kesintisiz güç kaynakları (B hattı)');
-  room('L015678', 'L015823', 'C KGK SALONU', 'energy', 'Kesintisiz güç kaynakları (C hattı)');
-  room('L015678', 'L015824', 'KAZAN DAIRESI', 'room', 'Mekanik tesisat');
-
-  // IDC4 (kampüs içi ek bina)
-  add('L015605', 'L015682', 'IDC4', 'building', { desc: 'IDC4 Ek Bina', extraArea: 320 });
-  add('L015682', 'L015831', 'FLOOR-1', 'floor', { desc: 'IDC4 1. Kat', extraArea: 150 });
+  // DCB (kampüs içi ek bina)
+  add(null, 'L300000', 'DCB', 'building', { desc: 'DCB — Ek Bina', extraArea: 260 });
+  add('L300000', 'L301000', 'KAT-1', 'floor', { desc: 'DCB 1. Kat', extraArea: 120 });
   (function () {
-    const rnd = rndFor('L015846');
+    const rnd = rndFor('L301100');
     const total = Math.round(between(rnd, 80, 110));
-    add('L015831', 'L015846', 'SALOON-1', 'hall', { desc: 'IDC4 1. Kat Salon', area: 520, schemaId: 'LC0102040101000000', sensors: { active: total, total } });
-    [['L015849', '1.POD'], ['L015850', '2.POD'], ['L015851', '3.POD'], ['L015852', '4.POD'], ['L015853', '5.POD'], ['L015854', '6.POD'],
-      ['L015855', 'NON STANDART 1'], ['L015856', 'NON STANDART 2']].forEach(([rid, name]) => {
+    add('L301000', 'L301100', 'SALON-1', 'hall', { desc: 'DCB 1. Kat Salon', area: 360, schemaId: 'LC-MOCK-DCB-00', sensors: { active: total, total } });
+    ['POD-B1', 'POD-B2', 'POD-B3', 'POD-B4', 'NW-B1'].forEach((name, i) => {
+      const rid = 'L3011' + String(i + 1).padStart(2, '0');
       const pr = rndFor(rid);
-      const ns = name.indexOf('NON') === 0;
-      const capacity = ns ? 10 : 14;
+      const nw = name.indexOf('NW') === 0;
+      const capacity = nw ? 8 : 14;
       const installed = Math.round(capacity * between(pr, 0.5, 1));
       const t = installed * CAB_SENSORS;
-      add('L015846', rid, name, 'pod', {
-        desc: ns ? 'Standart dışı kabin sırası' : 'Soğuk koridor muhafazalı pod',
-        area: Math.round(between(pr, 17, 22) * 10) / 10, capacity, installed,
-        sensors: { active: t, total: t }, schemaId: 'LC0102040101000000'
+      add('L301100', rid, name, 'pod', {
+        desc: nw ? 'Ağ (network) kabin sırası' : 'Soğuk koridor muhafazalı pod',
+        area: Math.round(between(pr, 14, 20) * 10) / 10, capacity, installed,
+        sensors: { active: t, total: t }, schemaId: 'LC-MOCK-DCB-00'
       });
     });
   })();
-  add('L015682', 'L015832', 'FLOOR-Z', 'floor', { desc: 'IDC4 Zemin Kat', extraArea: 90 });
-  room('L015832', 'L015847', 'AKÜ ODASI', 'energy', 'Akü grupları');
-  room('L015832', 'L015848', 'ENERJI DAGITIM ODASI', 'energy', 'Dağıtım panoları');
+  room('L301000', 'L301901', 'SWITCH ODASI DCB', 'network');
+  add('L300000', 'L300900', 'ZEMİN KAT', 'floor', { desc: 'DCB Zemin Kat', extraArea: 60 });
+  room('L300900', 'L300901', 'UPS / AKÜ ODASI', 'energy', 'DCB kesintisiz güç ve akü grupları');
+  room('L300900', 'L300902', 'ENERJİ DAĞITIM ODASI', 'energy', 'Dağıtım panoları');
 
-  // Açık alan / depo / sanal
-  add('L015605', 'L015679', 'GARDEN', 'outdoor', { desc: 'Bahçe — dış saha ekipmanları' });
-  room('L015679', 'L015825', 'A ENERJI', 'energy', 'Trafo / jeneratör sahası (A)');
-  room('L015679', 'L015826', 'B ENERJI', 'energy', 'Trafo / jeneratör sahası (B)');
-  ['L015827:BATI SWITCH DOLABI', 'L015828:DOGU SWITCH DOLABI', 'L015830:KUZEY SWITCH DOLABI'].forEach(s => {
-    const [rid, name] = s.split(':');
-    add('L015679', rid, name, 'network', { desc: 'Dış ortam switch dolabı', area: 1.2, capacity: 1, installed: 1, sensors: { active: 3, total: 3 } });
-  });
-  room('L015605', 'L015681', 'HURDA-DEPO', 'storage');
-  room('L015605', 'L015680', 'HURDA-DEPO-KONTEYNIR', 'storage');
-  add('L015605', 'L015683', 'VIRTUAL PLATFORM', 'virtual', { desc: 'Sanal kaynak lokasyonu', area: 0, capacity: 0, installed: 0 });
-  add('L015683', 'L015833', 'ANKARA (3)', 'virtual', { desc: 'Sanal platform', area: 0, capacity: 0, installed: 0 });
+  // Açık alan
+  add(null, 'L400000', 'AÇIK ALAN', 'outdoor', { desc: 'Kampüs dış saha ekipmanları' });
+  room('L400000', 'L400001', 'JENERATÖR SAHASI', 'energy', 'Jeneratör A / B kolu');
+  room('L400000', 'L400002', 'TRAFO SAHASI', 'energy', 'OG / AG trafo köşkleri');
+  add('L400000', 'L400003', 'DIŞ SAHA SWITCH DOLABI', 'network', { desc: 'Dış ortam switch dolabı', area: 1.2, capacity: 1, installed: 1, sensors: { active: 3, total: 3 } });
 
   D.locations = {
     root: ROOT,
     schemas: SCHEMAS,
     types: TYPES,
     nodes,
-    // Varsayılan açık düğümler: ÜMİTKÖY > FLOOR-1 > SALOON-1 (mevcut 2D/3D yerleşimi)
-    defaultExpanded: ['L015605', 'L015675', 'L015799']
+    // Varsayılan açık düğümler: DCA > KAT-1 > SALON-1 (2D/3D ikizin varsayılan katı)
+    defaultExpanded: ['L200000', 'L201000', 'L201100']
   };
   });
 })();
@@ -4145,8 +4127,8 @@
   setInstalled('Raritan', 'PX3-4104R-V2', Math.round(cabCount * 0.25));
   setInstalled('Raritan', 'DX2-T1H1', cabCount * 3);
   setInstalled('Vertiv', 'Liebert EXM2 80kVA', (D.ups || []).length);
-  setInstalled('Rittal', 'VX IT 42U 800x1200', (D.cabinets || []).filter(c => c.col !== '1AS' && c.col !== '1AV').length);
-  setInstalled('Schneider Electric', 'APC NetShelter SX 42U AR3350', (D.cabinets || []).filter(c => c.col === '1AS' || c.col === '1AV').length);
+  setInstalled('Rittal', 'VX IT 42U 800x1200', (D.cabinets || []).filter(c => !/^NW-/.test(c.pod || '')).length);
+  setInstalled('Schneider Electric', 'APC NetShelter SX 42U AR3350', (D.cabinets || []).filter(c => /^NW-/.test(c.pod || '')).length);
 
   // Nitelik (kategori) sözlüğü — ikon + sıra
   const NATURES = [
@@ -4200,544 +4182,7 @@
   CATS.forEach(c => { Object.defineProperty(c, '_tpl', { value: clone(c.jsn.ports), enumerable: false, writable: true }); });
 })();
 
-/* ==========================================================================
-   Etap 3 — connectivity.html verisi (eski js/mock/connectivity.data.js)
-   ========================================================================== */
-/* ==========================================================================
-   DCIM Sunum — SDP Kablolama Topolojisi mock verisi (connectivity.html)
-   api.CTD_Data(0,'…') (queryCableTopologyDiagramApi, where={src_pan}) çağrısının yerine geçer.
-   Satırlar gerçek CTD tablosundan alınmıştır: P24A01_S01/sql/CTD_sql.txt (848 kayıt,
-   id sırası korunur). flr/hal/wrk_dat/wrk_per tüm satırlarda aynı olduğu için bir kez tutulur.
-
-   Canlı ölçüm modeli (tohumlu, tick başına ±%1,5 dalgalanma):
-   - Sigorta devresi (CTD satırı): kabinin ilgili PDU tarafı akımı (DCIM.data.cabinets[].pduA/pduB)
-     o PDU'yu besleyen devrelere paylaştırılır. 3 devreli PDU → L1/L2/L3 (faz payları
-     failover rapor mock'undaki basePhases ile aynı tohumdan). Anma: tek devre 32 A, çok devre 16 A.
-   - RPP / Giriş barası (…G1 / …G2) ve SDP: DCIM.data.reports.sdp (SDP raporu, 160 A giriş şalteri)
-     değerleriyle aynı; rapor verisi yoksa devrelerin toplamı kullanılır.
-   - UPS: DCIM.data.ups (yük oranı, çalışma modu). Çıkış gücü = yük % × 80 kW (SDP rapor varsayımı).
-   - ADP ve Trafo: DCIM.data.reports.trafo (1600 kVA). ADP ↔ Trafo ↔ UPS eşlemesi sunum varsayımıdır
-     (A1–A4 → ADP-A1 / A TRAFO 3, A5–A7 → ADP-A2 / A TRAFO 4; B tarafı B TRAFO 1 / 2).
-   Senaryo: UPS A5 akü modunda (ADP → UPS A5 girişi yok) · 1AV42 PDU_B L2 faz kaybı (B2 SDP,
-   1B2G2 - 2F32 = 0 A / 0 V) ve L2 yükü PDU_A'ya aktarıldı (A2 SDP, yüksek yük) · 1CB52 yüksek akım
-   (C20 sigorta, A6/B6 SDP) · UPS B4 yük %82 · UPS B7 SNMP kaybı.
-   Bağımlılık: js/mock-data.js (DCIM.data: cabinets, ups, findCabinet, findEquipment, pdu, reports, rng, hash)
-   ========================================================================== */
-(function () {
-  'use strict';
-
-  const DCIM = (window.DCIM = window.DCIM || {});
-  const D = DCIM.data;
-  if (!D) return;
-
-  const SQRT3 = Math.sqrt(3);
-  const between = (rnd, min, max) => min + (max - min) * rnd();
-  const rngOf = key => D.rng(D.hash(String(key)));
-
-  // Yük eşikleri (%): ≥ WARN yüksek yük (turuncu), ≥ CRIT aşırı yük (kırmızı)
-  const LOAD_WARN = 80;
-  const LOAD_CRIT = 95;
-  const UPS_RATED_KW = 80;     // SDP raporundaki "yük % × 0,8 kW" varsayımı
-  const RPP_RATED_A = 160;     // SDP giriş şalteri (db_CMR_T00.xml dev_cap="160")
-  const SDP_RATED_A = 250;     // SDP ana bara (sunum varsayımı)
-  const ADP_RATED_A = 2500;    // ADP ana şalter (sunum varsayımı)
-  const TRAFO_RATED_KVA = 1600;
-
-  // ---------------------------------------------------------------------------
-  // CTD tablosu — [src_pan kodu, src_fus, tgt_cab, tgt_pdu]
-  // ---------------------------------------------------------------------------
-  const CTD_META = { flr: '1. KAT', hal: '1. SALON', wrk_dat: '2025-04-25', wrk_per: 'Gökhan DEMİREL' };
-  const CTD_ROWS = [
-    ['A1', '1A1G1 - 1F1', '1BG43 PMC', 'PDU_A'], ['A1', '1A1G1 - 1F2', '1BG43 PMC', 'PDU_A'], ['A1', '1A1G1 - 1F3', '1BG43 PMC', 'PDU_A'], ['A1', '1A1G1 - 1F28', '1AZ41', 'PDU_A'],
-    ['A1', '1A1G1 - 1F29', '1BC41', 'PDU_A'], ['A1', '1A1G1 - 1F30', '1BC37', 'PDU_A'], ['A1', '1A1G1 - 1F31', '1BG41', 'PDU_A'], ['A1', '1A1G1 - 1F32', '1BG40', 'PDU_A'],
-    ['A1', '1A1G1 - 1F33', '1BG39', 'PDU_A'], ['A1', '1A1G1 - 1F34', '1BG38', 'PDU_A'], ['A1', '1A1G1 - 1F35', '1BG37', 'PDU_A'], ['A1', '1A1G1 - 1F36', '1BG36', 'PDU_A'],
-    ['A1', '1A1G1 - 1F37', '1BJ41', 'PDU_A'], ['A1', '1A1G1 - 1F38', '1BJ40', 'PDU_A'], ['A1', '1A1G1 - 1F39', '1BJ39', 'PDU_A'], ['A1', '1A1G1 - 1F40', '1BJ38', 'PDU_A'],
-    ['A1', '1A1G1 - 1F41', '1BN41', 'PDU_A'], ['A1', '1A1G1 - 1F42', '1BN40', 'PDU_A'], ['A1', '1A1G1 - 1F43', '1BN39', 'PDU_A'], ['A1', '1A1G1 - 1F44', '1BN38', 'PDU_A'],
-    ['A1', '1A1G1 - 1F45', '1BN37', 'PDU_A'], ['A1', '1A1G1 - 1F46', '1BN36', 'PDU_A'], ['A1', '1A1G1 - 1F47', '1BC43', 'PDU_A'], ['A1', '1A1G2 - 2F27', '1BQ36', 'PDU_A'],
-    ['A1', '1A1G2 - 2F28', '1AV38', 'PDU_A'], ['A1', '1A1G2 - 2F29', '1AV37', 'PDU_A'], ['A1', '1A1G2 - 2F30', '1AZ37', 'PDU_A'], ['A1', '1A1G2 - 2F31', '1AV39', 'PDU_A'],
-    ['A1', '1A1G2 - 2F32', '1BG36', 'PDU_A'], ['A1', '1A1G2 - 2F33', '1BG37', 'PDU_A'], ['A1', '1A1G2 - 2F34', '1BG37', 'PDU_A'], ['A1', '1A1G2 - 2F35', '1BN42', 'PDU_A'],
-    ['A1', '1A1G2 - 2F36', '1BN41', 'PDU_A'], ['A1', '1A1G2 - 2F37', '1BN40', 'PDU_A'], ['A1', '1A1G2 - 2F38', '1BN39', 'PDU_A'], ['A1', '1A1G2 - 2F39', '1BN38', 'PDU_A'],
-    ['A1', '1A1G2 - 2F40', '1BN37', 'PDU_A'], ['A1', '1A1G2 - 2F41', '1BN36', 'PDU_A'], ['A1', '1A1G2 - 2F42', '1BQ42', 'PDU_A'], ['A1', '1A1G2 - 2F43', '1BQ41', 'PDU_A'],
-    ['A1', '1A1G2 - 2F44', '1BQ40', 'PDU_A'], ['A1', '1A1G2 - 2F45', '1BQ39', 'PDU_A'], ['A1', '1A1G2 - 2F46', '1BQ38', 'PDU_A'], ['A1', '1A1G2 - 2F47', '1BQ37', 'PDU_A'],
-    ['A1', '1A1G2 - 2F55', '1BJ41', 'PDU_A'], ['A1', '1A1G2 - 2F56', '1BJ41', 'PDU_A'], ['A1', '1A1G2 - 2F57', '1BJ41', 'PDU_A'], ['A1', '1A1G2 - 2F58', '1BC38', 'PDU_A1'],
-    ['A1', '1A1G2 - 2F59', '1BC38', 'PDU_A1'], ['A1', '1A1G2 - 2F60', '1BC38', 'PDU_A1'], ['A2', '1A2G1 - 1F19', '1AS39 - G', 'PDU_A'], ['A2', '1A2G1 - 1F20', '1AS39 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F21', '1AS39 - G', 'PDU_A'], ['A2', '1A2G1 - 1F22', '1AS39 - G', 'PDU_A'], ['A2', '1A2G1 - 1F23', '1AS39 - G', 'PDU_A'], ['A2', '1A2G1 - 1F24', '1AS39 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F28', '1AS37', 'PDU_A'], ['A2', '1A2G1 - 1F29', '1AV37 - G', 'PDU_A'], ['A2', '1A2G1 - 1F30', '1AV37 - G', 'PDU_A'], ['A2', '1A2G1 - 1F31', '1AV37 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F32', '1AV38 - G', 'PDU_A'], ['A2', '1A2G1 - 1F33', '1AV38 - G', 'PDU_A'], ['A2', '1A2G1 - 1F34', '1AV38 - G', 'PDU_A'], ['A2', '1A2G1 - 1F35', '1AS37', 'PDU_A'],
-    ['A2', '1A2G1 - 1F36', '1AS37', 'PDU_A'], ['A2', '1A2G1 - 1F37', '1AS37', 'PDU_A'], ['A2', '1A2G1 - 1F38', '1AS38', 'PDU_A'], ['A2', '1A2G1 - 1F39', '1AS38', 'PDU_A'],
-    ['A2', '1A2G1 - 1F40', '1AS38', 'PDU_A'], ['A2', '1A2G1 - 1F49', '1AV35 - G', 'PDU_A'], ['A2', '1A2G1 - 1F50', '1AV35 - G', 'PDU_A'], ['A2', '1A2G1 - 1F51', '1AV35 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F52', '1AV35 - G', 'PDU_A'], ['A2', '1A2G1 - 1F53', '1AV35 - G', 'PDU_A'], ['A2', '1A2G1 - 1F54', '1AV35 - G', 'PDU_A'], ['A2', '1A2G1 - 1F55', '1AS39 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F56', '1AS39 - G', 'PDU_A'], ['A2', '1A2G1 - 1F57', '1AS39 - G', 'PDU_A'], ['A2', '1A2G1 - 1F58', '1AS41 - G', 'PDU_A'], ['A2', '1A2G1 - 1F59', '1AS41 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F60', '1AS41 - G', 'PDU_A'], ['A2', '1A2G1 - 1F61', '1AS42 - G', 'PDU_A'], ['A2', '1A2G1 - 1F62', '1AS42 - G', 'PDU_A'], ['A2', '1A2G1 - 1F63', '1AS42 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F67', '1AR42 - G', 'PDU_A'], ['A2', '1A2G1 - 1F68', '1AR42 - G', 'PDU_A'], ['A2', '1A2G1 - 1F69', '1AR42 - G', 'PDU_A'], ['A2', '1A2G1 - 1F70', '1AT42 - G', 'PDU_A'],
-    ['A2', '1A2G1 - 1F71', '1AT42 - G', 'PDU_A'], ['A2', '1A2G1 - 1F72', '1AT42 - G', 'PDU_A'], ['A2', '1A2G2 - 2F1', '1AZ39', 'PDU_A'], ['A2', '1A2G2 - 2F2', '1AS40', 'PDU_A'],
-    ['A2', '1A2G2 - 2F28', '1AV43', 'PDU_A'], ['A2', '1A2G2 - 2F29', '1AV43', 'PDU_A'], ['A2', '1A2G2 - 2F30', '1AV43', 'PDU_A'], ['A2', '1A2G2 - 2F31', '1AV42', 'PDU_A'],
-    ['A2', '1A2G2 - 2F32', '1AV42', 'PDU_A'], ['A2', '1A2G2 - 2F33', '1AV42', 'PDU_A'], ['A2', '1A2G2 - 2F34', '1AV41', 'PDU_A'], ['A2', '1A2G2 - 2F35', '1AV41', 'PDU_A'],
-    ['A2', '1A2G2 - 2F49', '1AV36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F50', '1AV36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F51', '1AV36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F52', '1AV36 - G', 'PDU_A'],
-    ['A2', '1A2G2 - 2F53', '1AV36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F54', '1AV36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F55', '1AS35 - G', 'PDU_A'], ['A2', '1A2G2 - 2F56', '1AS35 - G', 'PDU_A'],
-    ['A2', '1A2G2 - 2F57', '1AS35 - G', 'PDU_A'], ['A2', '1A2G2 - 2F58', '1AS36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F59', '1AS36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F60', '1AS36 - G', 'PDU_A'],
-    ['A2', '1A2G2 - 2F61', '1AS36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F62', '1AS36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F63', '1AS36 - G', 'PDU_A'], ['A2', '1A2G2 - 2F64', '1AV40 - G', 'PDU_A'],
-    ['A2', '1A2G2 - 2F65', '1AV40 - G', 'PDU_A'], ['A2', '1A2G2 - 2F66', '1AV40 - G', 'PDU_A'], ['A2', '1A2G2 - 2F67', '1AU42 - G', 'PDU_A'], ['A2', '1A2G2 - 2F68', '1AU42 - G', 'PDU_A'],
-    ['A2', '1A2G2 - 2F69', '1AU42 - G', 'PDU_A'], ['A2', '1A2G2 - 2F70', '1AW42 - G', 'PDU_A'], ['A2', '1A2G2 - 2F71', '1AW42 - G', 'PDU_A'], ['A2', '1A2G2 - 2F72', '1AW42 - G', 'PDU_A'],
-    ['A3', '1A3G1 - 1F28', '1AZ57', 'PDU_A'], ['A3', '1A3G1 - 1F29', '1AZ56', 'PDU_A'], ['A3', '1A3G1 - 1F30', '1AZ55', 'PDU_A'], ['A3', '1A3G1 - 1F31', '1AZ54', 'PDU_A'],
-    ['A3', '1A3G1 - 1F32', '1AZ53', 'PDU_A'], ['A3', '1A3G1 - 1F33', '1AZ52', 'PDU_A'], ['A3', '1A3G1 - 1F34', '1AZ51', 'PDU_A'], ['A3', '1A3G1 - 1F35', '1AZ50 - G', 'PDU_A'],
-    ['A3', '1A3G1 - 1F36', '1AZ50 - G', 'PDU_A'], ['A3', '1A3G1 - 1F37', '1AZ50 - G', 'PDU_A'], ['A3', '1A3G1 - 1F38', '1BC50 - G', 'PDU_A'], ['A3', '1A3G1 - 1F39', '1BC50 - G', 'PDU_A'],
-    ['A3', '1A3G1 - 1F40', '1BC50 - G', 'PDU_A'], ['A3', '1A3G1 - 1F41', '1AS50 - G', 'PDU_A'], ['A3', '1A3G1 - 1F42', '1AS50 - G', 'PDU_A'], ['A3', '1A3G1 - 1F43', '1AS50 - G', 'PDU_A'],
-    ['A3', '1A3G1 - 1F44', '1AS51 - G', 'PDU_A'], ['A3', '1A3G1 - 1F45', '1AS51 - G', 'PDU_A'], ['A3', '1A3G1 - 1F46', '1AS51 - G', 'PDU_A'], ['A3', '1A3G1 - 1F55', '1AZ54 - G', 'PDU_A1'],
-    ['A3', '1A3G1 - 1F56', '1AZ54 - G', 'PDU_A1'], ['A3', '1A3G1 - 1F57', '1AZ54 - G', 'PDU_A1'], ['A3', '1A3G1 - 1F58', '1AZ55 - G', 'PDU_A1'], ['A3', '1A3G1 - 1F59', '1AZ55 - G', 'PDU_A1'],
-    ['A3', '1A3G1 - 1F60', '1AZ55 - G', 'PDU_A1'], ['A3', '1A3G1 - 1F61', '1AZ56 - G', 'PDU_A1'], ['A3', '1A3G1 - 1F62', '1AZ56 - G', 'PDU_A1'], ['A3', '1A3G1 - 1F63', '1AZ56 - G', 'PDU_A1'],
-    ['A3', '1A3G1 - 1F64', '1AV54 - G', 'PDU_A'], ['A3', '1A3G1 - 1F65', '1AV54 - G', 'PDU_A'], ['A3', '1A3G1 - 1F66', '1AV54 - G', 'PDU_A'], ['A3', '1A3G2 - 2F28', '1AS49', 'PDU_A'],
-    ['A3', '1A3G2 - 2F29', '1AS49', 'PDU_A'], ['A3', '1A3G2 - 2F30', '1AS49', 'PDU_A'], ['A3', '1A3G2 - 2F31', '1AV51', 'PDU_A'], ['A3', '1A3G2 - 2F32', '1AV51', 'PDU_A'],
-    ['A3', '1A3G2 - 2F33', '1AV51', 'PDU_A'], ['A3', '1A3G2 - 2F34', '1AV49', 'PDU_A'], ['A3', '1A3G2 - 2F35', '1AV49', 'PDU_A'], ['A3', '1A3G2 - 2F36', '1AV50', 'PDU_A'],
-    ['A3', '1A3G2 - 2F37', '1AV50', 'PDU_A'], ['A3', '1A3G2 - 2F38', '1AS54', 'PDU_A'], ['A3', '1A3G2 - 2F39', '1AS54', 'PDU_A'], ['A3', '1A3G2 - 2F40', '1AS54', 'PDU_A'],
-    ['A3', '1A3G2 - 2F41', '1AS55', 'PDU_A'], ['A3', '1A3G2 - 2F42', '1AS55', 'PDU_A'], ['A3', '1A3G2 - 2F43', '1AS55', 'PDU_A'], ['A3', '1A3G2 - 2F44', '1AV53', 'PDU_A'],
-    ['A3', '1A3G2 - 2F45', '1AV53', 'PDU_A'], ['A3', '1A3G2 - 2F46', '1AS57', 'PDU_A'], ['A3', '1A3G2 - 2F47', '1AV56', 'PDU_A'], ['A3', '1A3G2 - 2F48', '1AV56', 'PDU_A'],
-    ['A3', '1A3G2 - 2F55', '1AS56 - G', 'PDU_A'], ['A3', '1A3G2 - 2F56', '1AS56 - G', 'PDU_A'], ['A3', '1A3G2 - 2F57', '1AS56 - G', 'PDU_A'], ['A3', '1A3G2 - 2F58', '1AS57 - G', 'PDU_A'],
-    ['A3', '1A3G2 - 2F59', '1AS57 - G', 'PDU_A'], ['A3', '1A3G2 - 2F60', '1AS57 - G', 'PDU_A'], ['A3', '1A3G2 - 2F61', '1AS52 - G', 'PDU_A'], ['A3', '1A3G2 - 2F62', '1AS52 - G', 'PDU_A'],
-    ['A3', '1A3G2 - 2F63', '1AS52 - G', 'PDU_A'], ['A3', '1A3G2 - 2F64', '1AS53 - G', 'PDU_A'], ['A3', '1A3G2 - 2F65', '1AS53 - G', 'PDU_A'], ['A3', '1A3G2 - 2F66', '1AS53 - G', 'PDU_A'],
-    ['A4', '1A4G1 - 1F28', '1BN51', 'PDU_A'], ['A4', '1A4G1 - 1F29', '1BN52', 'PDU_A'], ['A4', '1A4G1 - 1F30', '1BN53', 'PDU_A'], ['A4', '1A4G1 - 1F31', '1BN54', 'PDU_A'],
-    ['A4', '1A4G1 - 1F32', '1BN55', 'PDU_A'], ['A4', '1A4G1 - 1F33', '1BN56', 'PDU_A'], ['A4', '1A4G1 - 1F34', '1BN57', 'PDU_A'], ['A4', '1A4G1 - 1F35', '1BJ51', 'PDU_A'],
-    ['A4', '1A4G1 - 1F36', '1BJ52', 'PDU_A'], ['A4', '1A4G1 - 1F37', '1BJ53', 'PDU_A'], ['A4', '1A4G1 - 1F38', '1BJ54', 'PDU_A'], ['A4', '1A4G1 - 1F39', '1BJ55', 'PDU_A'],
-    ['A4', '1A4G1 - 1F40', '1BJ56', 'PDU_A'], ['A4', '1A4G1 - 1F41', '1BJ57', 'PDU_A'], ['A4', '1A4G1 - 1F42', '1BG51', 'PDU_A'], ['A4', '1A4G1 - 1F43', '1BG52', 'PDU_A'],
-    ['A4', '1A4G1 - 1F44', '1BG53', 'PDU_A'], ['A4', '1A4G1 - 1F45', '1BG54', 'PDU_A'], ['A4', '1A4G1 - 1F46', '1BG55', 'PDU_A'], ['A4', '1A4G1 - 1F47', '1BG56', 'PDU_A'],
-    ['A4', '1A4G1 - 1F48', '2BG57', 'PDU_A'], ['A4', '1A4G1 - 1F55', '1AV57', 'PDU_A'], ['A4', '1A4G1 - 1F56', '1AV57', 'PDU_A'], ['A4', '1A4G1 - 1F57', '1AV57', 'PDU_A'],
-    ['A4', '1A4G1 - 1F58', '1AV58', 'PDU_A'], ['A4', '1A4G1 - 1F59', '1AV58', 'PDU_A'], ['A4', '1A4G1 - 1F60', '1AV58', 'PDU_A'], ['A4', '1A4G2 - 2F28', '1BC51', 'PDU_A'],
-    ['A4', '1A4G2 - 2F29', '1BC52', 'PDU_A'], ['A4', '1A4G2 - 2F30', '1BC53', 'PDU_A'], ['A4', '1A4G2 - 2F31', '1BC54', 'PDU_A'], ['A4', '1A4G2 - 2F32', '1BC55', 'PDU_A'],
-    ['A4', '1A4G2 - 2F33', '1BC56', 'PDU_A'], ['A4', '1A4G2 - 2F34', '1BC57', 'PDU_A'], ['A4', '1A4G2 - 2F35', '1AV55', 'PDU_A'], ['A4', '1A4G2 - 2F36', '1BC54', 'PDU_A'],
-    ['A4', '1A4G2 - 2F37', '1AV55', 'PDU_A'], ['A4', '1A4G2 - 2F38', '1BG53', 'PDU_A'], ['A4', '1A4G2 - 2F39', '1BG54', 'PDU_A'], ['A4', '1A4G2 - 2F40', '1BG55', 'PDU_A'],
-    ['A4', '1A4G2 - 2F41', '1BG56', 'PDU_A'], ['A4', '1A4G2 - 2F42', '1BG57', 'PDU_A'], ['A4', '1A4G2 - 2F43', '1BJ43', 'PDU_A'], ['A4', '1A4G2 - 2F44', '1BC54', 'PDU_A1'],
-    ['A4', '1A4G2 - 2F45', '1BC54', 'PDU_A1'], ['A4', '1A4G2 - 2F46', '1BC54', 'PDU_A1'], ['A4', '1A4G2 - 2F55', '1BJ51 - G', 'PDU_A'], ['A4', '1A4G2 - 2F56', '1BJ51 - G', 'PDU_A'],
-    ['A4', '1A4G2 - 2F57', '1BJ51 - G', 'PDU_A'], ['A4', '1A4G2 - 2F58', '1BJ52 - G', 'PDU_A'], ['A4', '1A4G2 - 2F59', '1BJ52 - G', 'PDU_A'], ['A4', '1A4G2 - 2F60', '1BJ52 - G', 'PDU_A'],
-    ['A4', '1A4G2 - 2F61', '1BC52 - G', 'PDU_A1'], ['A4', '1A4G2 - 2F62', '1BC52 - G', 'PDU_A1'], ['A4', '1A4G2 - 2F63', '1BC52 - G', 'PDU_A1'], ['A4', '1A4G2 - 2F64', '1BC53 - G', 'PDU_A1'],
-    ['A4', '1A4G2 - 2F65', '1BC53 - G', 'PDU_A1'], ['A4', '1A4G2 - 2F66', '1BC53 - G', 'PDU_A1'], ['A5', '1A5G1 - 1F28', '1BQ51', 'PDU_A'], ['A5', '1A5G1 - 1F29', '1BQ51', 'PDU_A'],
-    ['A5', '1A5G1 - 1F30', '1BQ53', 'PDU_A'], ['A5', '1A5G1 - 1F31', '1BQ55', 'PDU_A'], ['A5', '1A5G1 - 1F32', '1BQ55', 'PDU_A'], ['A5', '1A5G1 - 1F33', '1BQ56', 'PDU_A'],
-    ['A5', '1A5G1 - 1F34', '1BQ57', 'PDU_A'], ['A5', '1A5G1 - 1F35', '1BQ57', 'PDU_A'], ['A5', '1A5G1 - 1F38', '1BX40 - G', 'PDU_A'], ['A5', '1A5G1 - 1F39', '1BX40 - G', 'PDU_A'],
-    ['A5', '1A5G1 - 1F40', '1BX40 - G', 'PDU_A'], ['A5', '1A5G1 - 1F41', '1BG43', 'PDU_A'], ['A5', '1A5G1 - 1F42', '1BG50', 'PDU_A'], ['A5', '1A5G1 - 1F55', '1BQ52 - G', 'PDU_A'],
-    ['A5', '1A5G1 - 1F56', '1BQ52 - G', 'PDU_A'], ['A5', '1A5G1 - 1F57', '1BQ52 - G', 'PDU_A'], ['A5', '1A5G2 - 2F28', '1BX50', 'PDU_A'], ['A5', '1A5G2 - 2F29', '1BX51', 'PDU_A'],
-    ['A5', '1A5G2 - 2F30', '1BX52', 'PDU_A'], ['A5', '1A5G2 - 2F31', '1BX53', 'PDU_A'], ['A5', '1A5G2 - 2F32', '1BX54', 'PDU_A'], ['A5', '1A5G2 - 2F33', '1BQ50', 'PDU_A'],
-    ['A5', '1A5G2 - 2F34', '1BN50', 'PDU_A'], ['A5', '1A5G2 - 2F35', '1BJ50', 'PDU_A'], ['A5', '1A5G2 - 2F36', '1BG50', 'PDU_A'], ['A5', '1A5G2 - 2F37', '1BX41 - G', 'PDU_A1'],
-    ['A5', '1A5G2 - 2F38', '1BX41 - G', 'PDU_A1'], ['A5', '1A5G2 - 2F39', '1BX41 - G', 'PDU_A1'], ['A5', '1A5G2 - 2F40', '1BX42 - G', 'PDU_A1'], ['A5', '1A5G2 - 2F41', '1BX42 - G', 'PDU_A1'],
-    ['A5', '1A5G2 - 2F42', '1BX42 - G', 'PDU_A1'], ['A5', '1A5G2 - 2F43', '1AZ43', 'PDU_A'], ['A5', '1A5G2 - 2F55', '1BQ54 - G', 'PDU_A'], ['A5', '1A5G2 - 2F56', '1BQ54 - G', 'PDU_A'],
-    ['A5', '1A5G2 - 2F57', '1BQ54 - G', 'PDU_A'], ['A5', '1A5G2 - 2F58', '1BN54 - G', 'PDU_A'], ['A5', '1A5G2 - 2F59', '1BN54 - G', 'PDU_A'], ['A5', '1A5G2 - 2F60', '1BN54 - G', 'PDU_A'],
-    ['A6', '1A6G1 - 1F25', '1CE50', 'PDU_A'], ['A6', '1A6G1 - 1F26', '1CB50', 'PDU_A'], ['A6', '1A6G1 - 1F27', '1BQ43', 'PDU_A'], ['A6', '1A6G1 - 1F28', '1CB57', 'PDU_A'],
-    ['A6', '1A6G1 - 1F29', '1CB56', 'PDU_A'], ['A6', '1A6G1 - 1F30', '1CB55', 'PDU_A'], ['A6', '1A6G1 - 1F31', '1CB54', 'PDU_A'], ['A6', '1A6G1 - 1F32', '1CB53', 'PDU_A'],
-    ['A6', '1A6G1 - 1F33', '1CB52', 'PDU_A'], ['A6', '1A6G1 - 1F34', '1CB51', 'PDU_A'], ['A6', '1A6G1 - 1F35', '1CE51', 'PDU_A'], ['A6', '1A6G1 - 1F36', '1CE52', 'PDU_A'],
-    ['A6', '1A6G1 - 1F37', '1CE53', 'PDU_A'], ['A6', '1A6G1 - 1F38', '1CE54', 'PDU_A'], ['A6', '1A6G1 - 1F39', '1CE55', 'PDU_A'], ['A6', '1A6G1 - 1F40', '1CE56', 'PDU_A'],
-    ['A6', '1A6G1 - 1F41', '1CE57', 'PDU_A'], ['A6', '1A6G1 - 1F42', '1CB50', 'PDU_A'], ['A6', '1A6G1 - 1F43', '1CE51', 'PDU_A'], ['A6', '1A6G1 - 1F44', '1CB43 - G', 'PDU_A1'],
-    ['A6', '1A6G1 - 1F45', '1CB43 - G', 'PDU_A1'], ['A6', '1A6G1 - 1F46', '1CB43 - G', 'PDU_A1'], ['A6', '1A6G1 - 1F47', '1BU43', 'PDU_A'], ['A6', '1A6G1 - 1F48', '1BX43', 'PDU_A'],
-    ['A6', '1A6G2 - 2F1', '1CE50', 'PDU_A'], ['A6', '1A6G2 - 2F2', '1BU50', 'PDU_A'], ['A6', '1A6G2 - 2F3', '1BQ50', 'PDU_A'], ['A6', '1A6G2 - 2F4', '1BN50', 'PDU_A'],
-    ['A6', '1A6G2 - 2F5', '1BJ50', 'PDU_A'], ['A6', '1A6G2 - 2F6', '1BG50', 'PDU_A'], ['A6', '1A6G2 - 2F7', '1BC50', 'PDU_A'], ['A6', '1A6G2 - 2F8', '1AZ50', 'PDU_A'],
-    ['A6', '1A6G2 - 2F28', '1BX51', 'PDU_A'], ['A6', '1A6G2 - 2F29', '1BX52', 'PDU_A'], ['A6', '1A6G2 - 2F30', '1BX53', 'PDU_A'], ['A6', '1A6G2 - 2F31', '1BX54', 'PDU_A'],
-    ['A6', '1A6G2 - 2F32', '1BX55', 'PDU_A'], ['A6', '1A6G2 - 2F33', '1BX56', 'PDU_A'], ['A6', '1A6G2 - 2F34', '1BX57', 'PDU_A'], ['A6', '1A6G2 - 2F35', '1BU51', 'PDU_A'],
-    ['A6', '1A6G2 - 2F36', '1BU52', 'PDU_A'], ['A6', '1A6G2 - 2F37', '1BU53', 'PDU_A'], ['A6', '1A6G2 - 2F38', '1BU54', 'PDU_A'], ['A6', '1A6G2 - 2F39', '1BU55', 'PDU_A'],
-    ['A6', '1A6G2 - 2F40', '1BU56', 'PDU_A'], ['A6', '1A6G2 - 2F41', '1BU57', 'PDU_A'], ['A6', '1A6G2 - 2F42', '1BJ50', 'PDU_A'], ['A6', '1A6G2 - 2F43', '1AZ50', 'PDU_A1'],
-    ['A6', '1A6G2 - 2F55', '1BN51 - G', 'PDU_A1'], ['A6', '1A6G2 - 2F56', '1BN51 - G', 'PDU_A1'], ['A6', '1A6G2 - 2F57', '1BN51 - G', 'PDU_A1'], ['A6', '1A6G2 - 2F58', '1BN52 - G', 'PDU_A1'],
-    ['A6', '1A6G2 - 2F59', '1BN52 - G', 'PDU_A1'], ['A6', '1A6G2 - 2F60', '1BN52 - G', 'PDU_A1'], ['A6', '1A6G2 - 2F61', '1BN53 - G', 'PDU_A'], ['A6', '1A6G2 - 2F62', '1BN53 - G', 'PDU_A'],
-    ['A6', '1A6G2 - 2F63', '1BN53 - G', 'PDU_A'], ['A7', '1A7G1 - 1F22', '1CE37 - G', 'PDU_A'], ['A7', '1A7G1 - 1F23', '1CE37 - G', 'PDU_A'], ['A7', '1A7G1 - 1F24', '1CE37 - G', 'PDU_A'],
-    ['A7', '1A7G1 - 1F25', '1CE36 - G', 'PDU_A'], ['A7', '1A7G1 - 1F26', '1CE36 - G', 'PDU_A'], ['A7', '1A7G1 - 1F27', '1CE36 - G', 'PDU_A'], ['A7', '1A7G1 - 1F28', '1BJ37', 'PDU_A'],
-    ['A7', '1A7G1 - 1F29', '1BJ36', 'PDU_A'], ['A7', '1A7G1 - 1F30', '1BJ42', 'PDU_A'], ['A7', '1A7G1 - 1F31', '1AZ38', 'PDU_A'], ['A7', '1A7G1 - 1F32', '1BC39', 'PDU_A'],
-    ['A7', '1A7G1 - 1F33', '1BC38', 'PDU_A'], ['A7', '1A7G1 - 1F34', '1BG42', 'PDU_A'], ['A7', '1A7G1 - 1F35', '1BN42', 'PDU_A'], ['A7', '1A7G1 - 1F36', '1BQ42', 'PDU_A'],
-    ['A7', '1A7G1 - 1F37', '1BU42', 'PDU_A'], ['A7', '1A7G1 - 1F38', '1BX42', 'PDU_A'], ['A7', '1A7G1 - 1F39', '1BQ41', 'PDU_A'], ['A7', '1A7G1 - 1F40', '1BQ40', 'PDU_A'],
-    ['A7', '1A7G1 - 1F41', '1BQ39', 'PDU_A'], ['A7', '1A7G1 - 1F42', '1BQ38', 'PDU_A'], ['A7', '1A7G1 - 1F43', '1BQ37', 'PDU_A'], ['A7', '1A7G1 - 1F44', '1BQ36', 'PDU_A'],
-    ['A7', '1A7G1 - 1F45', '1BU41', 'PDU_A'], ['A7', '1A7G1 - 1F46', '1BU40', 'PDU_A'], ['A7', '1A7G1 - 1F47', '1BU39', 'PDU_A'], ['A7', '1A7G1 - 1F48', '1BU38', 'PDU_A'],
-    ['A7', '1A7G1 - 1F55', '1CE41 - G', 'PDU_A'], ['A7', '1A7G1 - 1F56', '1CE41 - G', 'PDU_A'], ['A7', '1A7G1 - 1F57', '1CE41 - G', 'PDU_A'], ['A7', '1A7G1 - 1F58', '1BN43 - G', 'PDU_A'],
-    ['A7', '1A7G1 - 1F59', '1BN43 - G', 'PDU_A'], ['A7', '1A7G1 - 1F60', '1BN43 - G', 'PDU_A'], ['A7', '1A7G1 - 1F61', '1CE40 - G', 'PDU_A'], ['A7', '1A7G1 - 1F62', '1CE40 - G', 'PDU_A'],
-    ['A7', '1A7G1 - 1F63', '1CE40 - G', 'PDU_A'], ['A7', '1A7G1 - 1F64', '1CE40 - G', 'PDU_A'], ['A7', '1A7G1 - 1F65', '1CE40 - G', 'PDU_A'], ['A7', '1A7G1 - 1F66', '1CE40 - G', 'PDU_A'],
-    ['A7', '1A7G2 - 2F1', '1CB43', 'PDU_A'], ['A7', '1A7G2 - 2F2', '1BX43', 'PDU_A'], ['A7', '1A7G2 - 2F3', '1CE43', 'PDU_A'], ['A7', '1A7G2 - 2F5', '1BQ43', 'PDU_A'],
-    ['A7', '1A7G2 - 2F6', '1BU43', 'PDU_A'], ['A7', '1A7G2 - 2F7', '1BJ43', 'PDU_A'], ['A7', '1A7G2 - 2F8', '1BG43', 'PDU_A'], ['A7', '1A7G2 - 2F9', '1BC43', 'PDU_A'],
-    ['A7', '1A7G2 - 2F10', '1AZ43', 'PDU_A'], ['A7', '1A7G2 - 2F21', '1CB36', 'PDU_A'], ['A7', '1A7G2 - 2F22', '1BU42 - G', 'PDU_A1'], ['A7', '1A7G2 - 2F23', '1BU42 - G', 'PDU_A1'],
-    ['A7', '1A7G2 - 2F24', '1BU42 - G', 'PDU_A1'], ['A7', '1A7G2 - 2F27', '1BU37', 'PDU_A'], ['A7', '1A7G2 - 2F28', '1BU36', 'PDU_A'], ['A7', '1A7G2 - 2F29', '1BX41', 'PDU_A'],
-    ['A7', '1A7G2 - 2F30', '1CB42', 'PDU_A'], ['A7', '1A7G2 - 2F31', '1BX39', 'PDU_A'], ['A7', '1A7G2 - 2F32', '1BX38', 'PDU_A'], ['A7', '1A7G2 - 2F33', '1BX37', 'PDU_A'],
-    ['A7', '1A7G2 - 2F34', '1BX36', 'PDU_A'], ['A7', '1A7G2 - 2F35', '1CB42', 'PDU_A1'], ['A7', '1A7G2 - 2F36', '1CB41', 'PDU_A'], ['A7', '1A7G2 - 2F37', '1CB40', 'PDU_A'],
-    ['A7', '1A7G2 - 2F38', '1CB39', 'PDU_A'], ['A7', '1A7G2 - 2F39', '1CB38', 'PDU_A'], ['A7', '1A7G2 - 2F40', '1CB37', 'PDU_A'], ['A7', '1A7G2 - 2F41', '1CB36', 'PDU_A'],
-    ['A7', '1A7G2 - 2F42', '1CE42', 'PDU_A'], ['A7', '1A7G2 - 2F43', '1CE43', 'PDU_A'], ['A7', '1A7G2 - 2F44', '1CE43', 'PDU_A'], ['A7', '1A7G2 - 2F45', '1CB43', 'PDU_A'],
-    ['A7', '1A7G2 - 2F46', '1CB41', 'PDU_A'], ['A7', '1A7G2 - 2F47', '1CB40', 'PDU_A'], ['A7', '1A7G2 - 2F48', '1CB39', 'PDU_A'], ['A7', '1A7G2 - 2F55', '1CE39 - G', 'PDU_A'],
-    ['A7', '1A7G2 - 2F56', '1CE39 - G', 'PDU_A'], ['A7', '1A7G2 - 2F57', '1CE39 - G', 'PDU_A'], ['A7', '1A7G2 - 2F58', '1CE39 - G1', 'PDU_A'], ['A7', '1A7G2 - 2F59', '1CE39 - G1', 'PDU_A'],
-    ['A7', '1A7G2 - 2F60', '1CE39 - G1', 'PDU_A'], ['A7', '1A7G2 - 2F61', '1CE38 - G', 'PDU_A'], ['A7', '1A7G2 - 2F62', '1CE38 - G', 'PDU_A'], ['A7', '1A7G2 - 2F63', '1CE38 - G', 'PDU_A'],
-    ['A7', '1A7G2 - 2F64', '1BU43 - G', 'PDU_A1'], ['A7', '1A7G2 - 2F65', '1BU43 - G', 'PDU_A1'], ['A7', '1A7G2 - 2F66', '1BU43 - G', 'PDU_A1'], ['B1', '1B1G1 - 1F28', '1AZ41', 'PDU_B'],
-    ['B1', '1B1G1 - 1F29', '1BC41', 'PDU_B'], ['B1', '1B1G1 - 1F30', '1BC37', 'PDU_B'], ['B1', '1B1G1 - 1F31', '1BG41', 'PDU_B'], ['B1', '1B1G1 - 1F32', '1BG40', 'PDU_B'],
-    ['B1', '1B1G1 - 1F33', '1BG39', 'PDU_B'], ['B1', '1B1G1 - 1F34', '1BG38', 'PDU_B'], ['B1', '1B1G1 - 1F35', '1BG37', 'PDU_B'], ['B1', '1B1G1 - 1F36', '1BG36', 'PDU_B'],
-    ['B1', '1B1G1 - 1F37', '1BJ41', 'PDU_B'], ['B1', '1B1G1 - 1F38', '1BJ40', 'PDU_B'], ['B1', '1B1G1 - 1F39', '1BJ39', 'PDU_B'], ['B1', '1B1G1 - 1F40', '1BJ38', 'PDU_B'],
-    ['B1', '1B1G1 - 1F41', '1BN41', 'PDU_B'], ['B1', '1B1G1 - 1F42', '1BN40', 'PDU_B'], ['B1', '1B1G1 - 1F43', '1BN39', 'PDU_B'], ['B1', '1B1G1 - 1F44', '1BN38', 'PDU_B'],
-    ['B1', '1B1G1 - 1F45', '1BN37', 'PDU_B'], ['B1', '1B1G1 - 1F46', '1BN36', 'PDU_B'], ['B1', '1B1G1 - 1F47', '1BC43', 'PDU_B'], ['B1', '1B1G2 - 2F27', '1BQ36', 'PDU_B'],
-    ['B1', '1B1G2 - 2F28', '1AV38', 'PDU_B'], ['B1', '1B1G2 - 2F29', '1AV37', 'PDU_B'], ['B1', '1B1G2 - 2F30', '1AZ37', 'PDU_B'], ['B1', '1B1G2 - 2F31', '1AV39', 'PDU_B'],
-    ['B1', '1B1G2 - 2F32', '1BG36', 'PDU_B'], ['B1', '1B1G2 - 2F33', '1BG37', 'PDU_B'], ['B1', '1B1G2 - 2F34', '1BG37', 'PDU_B'], ['B1', '1B1G2 - 2F35', '1BN42', 'PDU_B'],
-    ['B1', '1B1G2 - 2F36', '1BN41', 'PDU_B'], ['B1', '1B1G2 - 2F37', '1BN40', 'PDU_B'], ['B1', '1B1G2 - 2F38', '1BN39', 'PDU_B'], ['B1', '1B1G2 - 2F39', '1BN38', 'PDU_B'],
-    ['B1', '1B1G2 - 2F40', '1BN37', 'PDU_B'], ['B1', '1B1G2 - 2F41', '1BN36', 'PDU_B'], ['B1', '1B1G2 - 2F42', '1BQ42', 'PDU_B'], ['B1', '1B1G2 - 2F43', '1BQ41', 'PDU_B'],
-    ['B1', '1B1G2 - 2F44', '1BQ40', 'PDU_B'], ['B1', '1B1G2 - 2F45', '1BQ39', 'PDU_B'], ['B1', '1B1G2 - 2F46', '1BQ38', 'PDU_B'], ['B1', '1B1G2 - 2F47', '1BQ37', 'PDU_B'],
-    ['B1', '1B1G2 - 2F55', '1BJ41', 'PDU_B'], ['B1', '1B1G2 - 2F56', '1BJ41', 'PDU_B'], ['B1', '1B1G2 - 2F57', '1BJ41', 'PDU_B'], ['B1', '1B1G2 - 2F58', '1BC38', 'PDU_B1'],
-    ['B1', '1B1G2 - 2F59', '1BC38', 'PDU_B1'], ['B1', '1B1G2 - 2F60', '1BC38', 'PDU_B1'], ['B2', '1B2G1 - 1F19', '1AS39 - G', 'PDU_B'], ['B2', '1B2G1 - 1F20', '1AS39 - G', 'PDU_B'],
-    ['B2', '1B2G1 - 1F21', '1AS39 - G', 'PDU_B'], ['B2', '1B2G1 - 1F22', '1AS39 - G', 'PDU_B'], ['B2', '1B2G1 - 1F23', '1AS39 - G', 'PDU_B'], ['B2', '1B2G1 - 1F24', '1AS39 - G', 'PDU_B'],
-    ['B2', '1B2G1 - 1F28', '1AS37', 'PDU_B'], ['B2', '1B2G1 - 1F29', '1AV37 - G', 'PDU_B'], ['B2', '1B2G1 - 1F30', '1AV37 - G', 'PDU_B'], ['B2', '1B2G1 - 1F31', '1AV37 - G', 'PDU_B'],
-    ['B2', '1B2G1 - 1F32', '1AV38 - G', 'PDU_B'], ['B2', '1B2G1 - 1F33', '1AV38 - G', 'PDU_B'], ['B2', '1B2G1 - 1F34', '1AV38 - G', 'PDU_B'], ['B2', '1B2G1 - 1F35', '1AS37', 'PDU_B'],
-    ['B2', '1B2G1 - 1F36', '1AS37', 'PDU_B'], ['B2', '1B2G1 - 1F37', '1AS37', 'PDU_B'], ['B2', '1B2G1 - 1F38', '1AS38', 'PDU_B'], ['B2', '1B2G1 - 1F39', '1AS38', 'PDU_B'],
-    ['B2', '1B2G1 - 1F40', '1AS38', 'PDU_B'], ['B2', '1B2G1 - 1F49', '1AV35 - G', 'PDU_B'], ['B2', '1B2G1 - 1F50', '1AV35 - G', 'PDU_B'], ['B2', '1B2G1 - 1F51', '1AV35 - G', 'PDU_B'],
-    ['B2', '1B2G1 - 1F52', '1AV35 - G', 'PDU_B'], ['B2', '1B2G1 - 1F53', '1AV35 - G', 'PDU_B'], ['B2', '1B2G1 - 1F54', '1AV35 - G', 'PDU_B'], ['B2', '1B2G1 - 1F55', '1AS39 - G', 'PDU_B'],
-    ['B2', '1B2G1 - 1F56', '1AS39 - G', 'PDU_B'], ['B2', '1B2G1 - 1F57', '1AS39 - G', 'PDU_B'], ['B2', '1B2G1 - 1F58', '1AS41 - G', 'PDU_B'], ['B2', '1B2G1 - 1F59', '1AS41 - G', 'PDU_B'],
-    ['B2', '1B2G1 - 1F60', '1AS41 - G', 'PDU_B'], ['B2', '1B2G1 - 1F61', '1AS42 - G', 'PDU_B'], ['B2', '1B2G1 - 1F62', '1AS42 - G', 'PDU_B'], ['B2', '1B2G1 - 1F63', '1AS42 - G', 'PDU_B'],
-    ['B2', '1B2G1 - 1F70', '1AT42 - G', 'PDU_B'], ['B2', '1B2G1 - 1F71', '1AT42 - G', 'PDU_B'], ['B2', '1B2G1 - 1F72', '1AT42 - G', 'PDU_B'], ['B2', '1B2G2 - 2F1', '1AZ39', 'PDU_B'],
-    ['B2', '1B2G2 - 2F2', '1AS40', 'PDU_B'], ['B2', '1B2G2 - 2F28', '1AV43', 'PDU_B'], ['B2', '1B2G2 - 2F29', '1AV43', 'PDU_B'], ['B2', '1B2G2 - 2F30', '1AV43', 'PDU_B'],
-    ['B2', '1B2G2 - 2F31', '1AV42', 'PDU_B'], ['B2', '1B2G2 - 2F32', '1AV42', 'PDU_B'], ['B2', '1B2G2 - 2F33', '1AV42', 'PDU_B'], ['B2', '1B2G2 - 2F34', '1AV41', 'PDU_B'],
-    ['B2', '1B2G2 - 2F35', '1AV41', 'PDU_B'], ['B2', '1B2G2 - 2F49', '1AV36 - G', 'PDU_B'], ['B2', '1B2G2 - 2F50', '1AV36 - G', 'PDU_B'], ['B2', '1B2G2 - 2F51', '1AV36 - G', 'PDU_B'],
-    ['B2', '1B2G2 - 2F52', '1AV36 - G2', 'PDU_B'], ['B2', '1B2G2 - 2F53', '1AV36 - G3', 'PDU_B'], ['B2', '1B2G2 - 2F54', '1AV36 - G4', 'PDU_B'], ['B2', '1B2G2 - 2F55', '1AS35 - G', 'PDU_B'],
-    ['B2', '1B2G2 - 2F56', '1AS35 - G', 'PDU_B'], ['B2', '1B2G2 - 2F57', '1AS35 - G', 'PDU_B'], ['B2', '1B2G2 - 2F58', '1AS36 - G', 'PDU_B'], ['B2', '1B2G2 - 2F59', '1AS36 - G', 'PDU_B'],
-    ['B2', '1B2G2 - 2F60', '1AS36 - G', 'PDU_B'], ['B2', '1B2G2 - 2F61', '1AS36 - G2', 'PDU_B'], ['B2', '1B2G2 - 2F62', '1AS36 - G3', 'PDU_B'], ['B2', '1B2G2 - 2F63', '1AS36 - G4', 'PDU_B'],
-    ['B2', '1B2G2 - 2F64', '1AV40 - G', 'PDU_B'], ['B2', '1B2G2 - 2F65', '1AV40 - G', 'PDU_B'], ['B2', '1B2G2 - 2F66', '1AV40 - G', 'PDU_B'], ['B2', '1B2G2 - 2F67', '1AU42 - G', 'PDU_B'],
-    ['B2', '1B2G2 - 2F68', '1AU42 - G', 'PDU_B'], ['B2', '1B2G2 - 2F69', '1AU42 - G', 'PDU_B'], ['B2', '1B2G2 - 2F70', '1AW42 - G', 'PDU_B'], ['B2', '1B2G2 - 2F71', '1AW42 - G', 'PDU_B'],
-    ['B2', '1B2G2 - 2F72', '1AW42 - G', 'PDU_B'], ['B3', '1B3G1 - 1F28', '1AZ57', 'PDU_B'], ['B3', '1B3G1 - 1F29', '1AZ56', 'PDU_B'], ['B3', '1B3G1 - 1F30', '1AZ55', 'PDU_B'],
-    ['B3', '1B3G1 - 1F31', '1AZ54', 'PDU_B'], ['B3', '1B3G1 - 1F32', '1AZ53', 'PDU_B'], ['B3', '1B3G1 - 1F33', '1AZ52', 'PDU_B'], ['B3', '1B3G1 - 1F34', '1AZ51', 'PDU_B'],
-    ['B3', '1B3G1 - 1F35', '1AZ50 - G', 'PDU_B'], ['B3', '1B3G1 - 1F36', '1AZ50 - G', 'PDU_B'], ['B3', '1B3G1 - 1F37', '1AZ50 - G', 'PDU_B'], ['B3', '1B3G1 - 1F38', '1BC50 - G', 'PDU_B'],
-    ['B3', '1B3G1 - 1F39', '1BC50 - G', 'PDU_B'], ['B3', '1B3G1 - 1F40', '1BC50 - G', 'PDU_B'], ['B3', '1B3G1 - 1F41', '1AS50 - G', 'PDU_B'], ['B3', '1B3G1 - 1F42', '1AS50 - G', 'PDU_B'],
-    ['B3', '1B3G1 - 1F43', '1AS50 - G', 'PDU_B'], ['B3', '1B3G1 - 1F44', '1AS51 - G', 'PDU_B'], ['B3', '1B3G1 - 1F45', '1AS51 - G', 'PDU_B'], ['B3', '1B3G1 - 1F46', '1AS51 - G', 'PDU_B'],
-    ['B3', '1B3G1 - 1F55', '1AZ54 - G', 'PDU_B1'], ['B3', '1B3G1 - 1F56', '1AZ54 - G', 'PDU_B1'], ['B3', '1B3G1 - 1F57', '1AZ54 - G', 'PDU_B1'], ['B3', '1B3G1 - 1F58', '1AZ55 - G', 'PDU_B1'],
-    ['B3', '1B3G1 - 1F59', '1AZ55 - G', 'PDU_B1'], ['B3', '1B3G1 - 1F60', '1AZ55 - G', 'PDU_B1'], ['B3', '1B3G1 - 1F61', '1AZ56 - G', 'PDU_B1'], ['B3', '1B3G1 - 1F62', '1AZ56 - G', 'PDU_B1'],
-    ['B3', '1B3G1 - 1F63', '1AZ56 - G', 'PDU_B1'], ['B3', '1B3G1 - 1F64', '1AV54 - G', 'PDU_B'], ['B3', '1B3G1 - 1F65', '1AV54 - G', 'PDU_B'], ['B3', '1B3G1 - 1F66', '1AV54 - G', 'PDU_B'],
-    ['B3', '1B3G2 - 2F28', '1AS49', 'PDU_B'], ['B3', '1B3G2 - 2F29', '1AS49', 'PDU_B'], ['B3', '1B3G2 - 2F30', '1AS49', 'PDU_B'], ['B3', '1B3G2 - 2F31', '1AV51', 'PDU_B'],
-    ['B3', '1B3G2 - 2F32', '1AV51', 'PDU_B'], ['B3', '1B3G2 - 2F33', '1AV51', 'PDU_B'], ['B3', '1B3G2 - 2F34', '1AV49', 'PDU_B'], ['B3', '1B3G2 - 2F35', '1AV49', 'PDU_B'],
-    ['B3', '1B3G2 - 2F36', '1AV50', 'PDU_B'], ['B3', '1B3G2 - 2F37', '1AV50', 'PDU_B'], ['B3', '1B3G2 - 2F38', '1AS54', 'PDU_B'], ['B3', '1B3G2 - 2F39', '1AS54', 'PDU_B'],
-    ['B3', '1B3G2 - 2F40', '1AS54', 'PDU_B'], ['B3', '1B3G2 - 2F41', '1AS55', 'PDU_B'], ['B3', '1B3G2 - 2F42', '1AS55', 'PDU_B'], ['B3', '1B3G2 - 2F43', '1AS55', 'PDU_B'],
-    ['B3', '1B3G2 - 2F44', '1AV53', 'PDU_B'], ['B3', '1B3G2 - 2F45', '1AV53', 'PDU_B'], ['B3', '1B3G2 - 2F46', '1AS57', 'PDU_B'], ['B3', '1B3G2 - 2F47', '1AV56', 'PDU_B'],
-    ['B3', '1B3G2 - 2F48', '1AV56', 'PDU_B'], ['B3', '1B3G2 - 2F55', '1AS56 - G', 'PDU_B'], ['B3', '1B3G2 - 2F56', '1AS56 - G', 'PDU_B'], ['B3', '1B3G2 - 2F57', '1AS56 - G', 'PDU_B'],
-    ['B3', '1B3G2 - 2F58', '1AS57 - G', 'PDU_B'], ['B3', '1B3G2 - 2F59', '1AS57 - G', 'PDU_B'], ['B3', '1B3G2 - 2F60', '1AS57 - G', 'PDU_B'], ['B3', '1B3G2 - 2F61', '1AS52 - G', 'PDU_B'],
-    ['B3', '1B3G2 - 2F62', '1AS52 - G', 'PDU_B'], ['B3', '1B3G2 - 2F63', '1AS52 - G', 'PDU_B'], ['B3', '1B3G2 - 2F64', '1AS53 - G', 'PDU_B'], ['B3', '1B3G2 - 2F65', '1AS53 - G', 'PDU_B'],
-    ['B3', '1B3G2 - 2F66', '1AS53 - G', 'PDU_B'], ['B4', '1B4G1 - 1F28', '1BN51', 'PDU_B'], ['B4', '1B4G1 - 1F29', '1BN52', 'PDU_B'], ['B4', '1B4G1 - 1F30', '1BN53', 'PDU_B'],
-    ['B4', '1B4G1 - 1F31', '1BN54', 'PDU_B'], ['B4', '1B4G1 - 1F32', '1BN55', 'PDU_B'], ['B4', '1B4G1 - 1F33', '1BN56', 'PDU_B'], ['B4', '1B4G1 - 1F34', '1BN57', 'PDU_B'],
-    ['B4', '1B4G1 - 1F35', '1BJ51', 'PDU_B'], ['B4', '1B4G1 - 1F36', '1BJ52', 'PDU_B'], ['B4', '1B4G1 - 1F37', '1BJ53', 'PDU_B'], ['B4', '1B4G1 - 1F38', '1BJ54', 'PDU_B'],
-    ['B4', '1B4G1 - 1F39', '1BJ55', 'PDU_B'], ['B4', '1B4G1 - 1F40', '1BJ56', 'PDU_B'], ['B4', '1B4G1 - 1F41', '1BJ57', 'PDU_B'], ['B4', '1B4G1 - 1F42', '1BG51', 'PDU_B'],
-    ['B4', '1B4G1 - 1F43', '1BG52', 'PDU_B'], ['B4', '1B4G1 - 1F44', '1BG53', 'PDU_B'], ['B4', '1B4G1 - 1F45', '1BG54', 'PDU_B'], ['B4', '1B4G1 - 1F46', '1BG55', 'PDU_B'],
-    ['B4', '1B4G1 - 1F47', '1BG56', 'PDU_B'], ['B4', '1B4G1 - 1F48', '1BG57', 'PDU_B'], ['B4', '1B4G1 - 1F55', '1AV57', 'PDU_B'], ['B4', '1B4G1 - 1F56', '1AV57', 'PDU_B'],
-    ['B4', '1B4G1 - 1F57', '1AV57', 'PDU_B'], ['B4', '1B4G1 - 1F58', '1AV58', 'PDU_B'], ['B4', '1B4G1 - 1F59', '1AV58', 'PDU_B'], ['B4', '1B4G1 - 1F60', '1AV58', 'PDU_B'],
-    ['B4', '1B4G2 - 2F28', '1BC51', 'PDU_B'], ['B4', '1B4G2 - 2F29', '1BC52', 'PDU_B'], ['B4', '1B4G2 - 2F30', '1BC53', 'PDU_B'], ['B4', '1B4G2 - 2F31', '1BC54', 'PDU_B'],
-    ['B4', '1B4G2 - 2F32', '1BC55', 'PDU_B'], ['B4', '1B4G2 - 2F33', '1BC56', 'PDU_B'], ['B4', '1B4G2 - 2F34', '1BC57', 'PDU_B'], ['B4', '1B4G2 - 2F35', '1AV55', 'PDU_B'],
-    ['B4', '1B4G2 - 2F36', '1BC54', 'PDU_B'], ['B4', '1B4G2 - 2F37', '1AV55', 'PDU_B'], ['B4', '1B4G2 - 2F38', '1BG53', 'PDU_B'], ['B4', '1B4G2 - 2F39', '1BG54', 'PDU_B'],
-    ['B4', '1B4G2 - 2F40', '1BG55', 'PDU_B'], ['B4', '1B4G2 - 2F41', '1BG56', 'PDU_B'], ['B4', '1B4G2 - 2F42', '1BG57', 'PDU_B'], ['B4', '1B4G2 - 2F43', '1BJ43', 'PDU_B'],
-    ['B4', '1B4G2 - 2F44', '1BC54', 'PDU_B1'], ['B4', '1B4G2 - 2F45', '1BC54', 'PDU_B1'], ['B4', '1B4G2 - 2F46', '1BC54', 'PDU_B1'], ['B4', '1B4G2 - 2F55', '1BJ51 - G', 'PDU_B'],
-    ['B4', '1B4G2 - 2F56', '1BJ51 - G', 'PDU_B'], ['B4', '1B4G2 - 2F57', '1BJ51 - G', 'PDU_B'], ['B4', '1B4G2 - 2F58', '1BJ52 - G', 'PDU_B'], ['B4', '1B4G2 - 2F59', '1BJ52 - G', 'PDU_B'],
-    ['B4', '1B4G2 - 2F60', '1BJ52 - G', 'PDU_B'], ['B4', '1B4G2 - 2F61', '1BC52 - G', 'PDU_B1'], ['B4', '1B4G2 - 2F62', '1BC52 - G', 'PDU_B1'], ['B4', '1B4G2 - 2F63', '1BC52 - G', 'PDU_B1'],
-    ['B4', '1B4G2 - 2F64', '1BC53 - G', 'PDU_B1'], ['B4', '1B4G2 - 2F65', '1BC53 - G', 'PDU_B1'], ['B4', '1B4G2 - 2F66', '1BC53 - G', 'PDU_B1'], ['B5', '1B5G1 - 1F28', '1BQ51', 'PDU_B'],
-    ['B5', '1B5G1 - 1F29', '1BQ51', 'PDU_B'], ['B5', '1B5G1 - 1F30', '1BQ53', 'PDU_B'], ['B5', '1B5G1 - 1F31', '1BQ55', 'PDU_B'], ['B5', '1B5G1 - 1F32', '1BQ55', 'PDU_B'],
-    ['B5', '1B5G1 - 1F33', '1BQ56', 'PDU_B'], ['B5', '1B5G1 - 1F34', '1BQ57', 'PDU_B'], ['B5', '1B5G1 - 1F35', '1BQ57', 'PDU_B'], ['B5', '1B5G1 - 1F38', '1BX40 - G', 'PDU_B'],
-    ['B5', '1B5G1 - 1F39', '1BX40 - G', 'PDU_B'], ['B5', '1B5G1 - 1F40', '1BX40 - G', 'PDU_B'], ['B5', '1B5G1 - 1F41', '1BG43', 'PDU_B'], ['B5', '1B5G1 - 1F42', '1BG50', 'PDU_B'],
-    ['B5', '1B5G1 - 1F55', '1BQ52 - G', 'PDU_B'], ['B5', '1B5G1 - 1F56', '1BQ52 - G', 'PDU_B'], ['B5', '1B5G1 - 1F57', '1BQ52 - G', 'PDU_B'], ['B5', '1B5G2 - 2F28', '1BX50', 'PDU_B'],
-    ['B5', '1B5G2 - 2F29', '1BX51', 'PDU_B'], ['B5', '1B5G2 - 2F30', '1BX52', 'PDU_B'], ['B5', '1B5G2 - 2F31', '1BX53', 'PDU_B'], ['B5', '1B5G2 - 2F32', '1BX54', 'PDU_B'],
-    ['B5', '1B5G2 - 2F33', '1BQ50', 'PDU_B'], ['B5', '1B5G2 - 2F34', '1BN50', 'PDU_B'], ['B5', '1B5G2 - 2F35', '1BJ50', 'PDU_B'], ['B5', '1B5G2 - 2F36', '1BG50', 'PDU_B'],
-    ['B5', '1B5G2 - 2F37', '1BX41 - G', 'PDU_B1'], ['B5', '1B5G2 - 2F38', '1BX41 - G', 'PDU_B1'], ['B5', '1B5G2 - 2F39', '1BX41 - G', 'PDU_B1'], ['B5', '1B5G2 - 2F40', '1BX42 - G', 'PDU_B1'],
-    ['B5', '1B5G2 - 2F41', '1BX42 - G', 'PDU_B1'], ['B5', '1B5G2 - 2F42', '1BX42 - G', 'PDU_B1'], ['B5', '1B5G2 - 2F43', '1AZ43', 'PDU_B'], ['B5', '1B5G2 - 2F55', '1BQ54 - G', 'PDU_B'],
-    ['B5', '1B5G2 - 2F56', '1BQ54 - G', 'PDU_B'], ['B5', '1B5G2 - 2F57', '1BQ54 - G', 'PDU_B'], ['B5', '1B5G2 - 2F58', '1BN54 - G', 'PDU_B'], ['B5', '1B5G2 - 2F59', '1BN54 - G', 'PDU_B'],
-    ['B5', '1B5G2 - 2F60', '1BN54 - G', 'PDU_B'], ['B6', '1B6G1 - 1F25', '1CE50', 'PDU_B'], ['B6', '1B6G1 - 1F26', '1CB50', 'PDU_B'], ['B6', '1B6G1 - 1F27', '1BQ43', 'PDU_B'],
-    ['B6', '1B6G1 - 1F28', '1CB57', 'PDU_B'], ['B6', '1B6G1 - 1F29', '1CB56', 'PDU_B'], ['B6', '1B6G1 - 1F30', '1CB55', 'PDU_B'], ['B6', '1B6G1 - 1F31', '1CB54', 'PDU_B'],
-    ['B6', '1B6G1 - 1F32', '1CB53', 'PDU_B'], ['B6', '1B6G1 - 1F33', '1CB52', 'PDU_B'], ['B6', '1B6G1 - 1F34', '1CB51', 'PDU_B'], ['B6', '1B6G1 - 1F35', '1CE51', 'PDU_B'],
-    ['B6', '1B6G1 - 1F36', '1CE52', 'PDU_B'], ['B6', '1B6G1 - 1F37', '1CE53', 'PDU_B'], ['B6', '1B6G1 - 1F38', '1CE54', 'PDU_B'], ['B6', '1B6G1 - 1F39', '1CE55', 'PDU_B'],
-    ['B6', '1B6G1 - 1F40', '1CE56', 'PDU_B'], ['B6', '1B6G1 - 1F41', '1CE57', 'PDU_B'], ['B6', '1B6G1 - 1F42', '1CE51', 'PDU_B'], ['B6', '1B6G1 - 1F43', '1CB50', 'PDU_B'],
-    ['B6', '1B6G1 - 1F44', '1CB43-G', 'PDU_B1'], ['B6', '1B6G1 - 1F45', '1CB43-G', 'PDU_B1'], ['B6', '1B6G1 - 1F46', '1CB43-G', 'PDU_B1'], ['B6', '1B6G1 - 1F47', '1BU43', 'PDU_B'],
-    ['B6', '1B6G1 - 1F48', '1BX43', 'PDU_B'], ['B6', '1B6G2 - 2F1', '1CE50', 'PDU_B'], ['B6', '1B6G2 - 2F2', '1BU50', 'PDU_B'], ['B6', '1B6G2 - 2F3', '1BQ50', 'PDU_B'],
-    ['B6', '1B6G2 - 2F4', '1BN50', 'PDU_B'], ['B6', '1B6G2 - 2F5', '1BJ50', 'PDU_B'], ['B6', '1B6G2 - 2F6', '1BG50', 'PDU_B'], ['B6', '1B6G2 - 2F7', '1BC50', 'PDU_B'],
-    ['B6', '1B6G2 - 2F8', '1AZ50', 'PDU_B'], ['B6', '1B6G2 - 2F28', '1BX51', 'PDU_B'], ['B6', '1B6G2 - 2F29', '1BX52', 'PDU_B'], ['B6', '1B6G2 - 2F30', '1BX53', 'PDU_B'],
-    ['B6', '1B6G2 - 2F31', '1BX54', 'PDU_B'], ['B6', '1B6G2 - 2F32', '1BX55', 'PDU_B'], ['B6', '1B6G2 - 2F33', '1BX56', 'PDU_B'], ['B6', '1B6G2 - 2F34', '1BX57', 'PDU_B'],
-    ['B6', '1B6G2 - 2F35', '1BU51', 'PDU_B'], ['B6', '1B6G2 - 2F36', '1BU52', 'PDU_B'], ['B6', '1B6G2 - 2F37', '1BU53', 'PDU_B'], ['B6', '1B6G2 - 2F38', '1BU54', 'PDU_B'],
-    ['B6', '1B6G2 - 2F39', '1BU55', 'PDU_B'], ['B6', '1B6G2 - 2F40', '1BU56', 'PDU_B'], ['B6', '1B6G2 - 2F41', '1BU57', 'PDU_B'], ['B6', '1B6G2 - 2F42', '1BJ50', 'PDU_B'],
-    ['B6', '1B6G2 - 2F43', '1AZ50', 'PDU_B1'], ['B6', '1B6G2 - 2F55', '1BN51 - G', 'PDU_B1'], ['B6', '1B6G2 - 2F56', '1BN51 - G', 'PDU_B1'], ['B6', '1B6G2 - 2F57', '1BN51 - G', 'PDU_B1'],
-    ['B6', '1B6G2 - 2F58', '1BN52 - G', 'PDU_B1'], ['B6', '1B6G2 - 2F59', '1BN52 - G', 'PDU_B1'], ['B6', '1B6G2 - 2F60', '1BN52 - G', 'PDU_B1'], ['B6', '1B6G2 - 2F61', '1BN53 - G', 'PDU_B'],
-    ['B6', '1B6G2 - 2F62', '1BN53 - G', 'PDU_B'], ['B6', '1B6G2 - 2F63', '1BN53 - G', 'PDU_B'], ['B7', '1B7G1 - 1F22', '1CE37 - G', 'PDU_B'], ['B7', '1B7G1 - 1F23', '1CE37 - G', 'PDU_B'],
-    ['B7', '1B7G1 - 1F24', '1CE37 - G', 'PDU_B'], ['B7', '1B7G1 - 1F25', '1CE36 - G', 'PDU_B'], ['B7', '1B7G1 - 1F26', '1CE36 - G', 'PDU_B'], ['B7', '1B7G1 - 1F27', '1CE36 - G', 'PDU_B'],
-    ['B7', '1B7G1 - 1F28', '1BJ37', 'PDU_B'], ['B7', '1B7G1 - 1F29', '1BJ36', 'PDU_B'], ['B7', '1B7G1 - 1F30', '1BJ42', 'PDU_B'], ['B7', '1B7G1 - 1F31', '1AZ38', 'PDU_B'],
-    ['B7', '1B7G1 - 1F32', '1BC39', 'PDU_B'], ['B7', '1B7G1 - 1F33', '1BC38', 'PDU_B'], ['B7', '1B7G1 - 1F34', '1BG42', 'PDU_B'], ['B7', '1B7G1 - 1F35', '1BN42', 'PDU_B'],
-    ['B7', '1B7G1 - 1F36', '1BQ42', 'PDU_B'], ['B7', '1B7G1 - 1F37', '1BU42', 'PDU_B'], ['B7', '1B7G1 - 1F38', '1BX42', 'PDU_B'], ['B7', '1B7G1 - 1F39', '1BQ41', 'PDU_B'],
-    ['B7', '1B7G1 - 1F40', '1BQ40', 'PDU_B'], ['B7', '1B7G1 - 1F41', '1BQ39', 'PDU_B'], ['B7', '1B7G1 - 1F42', '1BQ38', 'PDU_B'], ['B7', '1B7G1 - 1F43', '1BQ37', 'PDU_B'],
-    ['B7', '1B7G1 - 1F44', '1BQ36', 'PDU_B'], ['B7', '1B7G1 - 1F45', '1BU41', 'PDU_B'], ['B7', '1B7G1 - 1F46', '1BU40', 'PDU_B'], ['B7', '1B7G1 - 1F47', '1BU39', 'PDU_B'],
-    ['B7', '1B7G1 - 1F48', '1BU38', 'PDU_B'], ['B7', '1B7G1 - 1F55', '1CE41 - G', 'PDU_B'], ['B7', '1B7G1 - 1F56', '1CE41 - G', 'PDU_B'], ['B7', '1B7G1 - 1F57', '1CE41 - G', 'PDU_B'],
-    ['B7', '1B7G1 - 1F58', '1BN43 - G', 'PDU_B'], ['B7', '1B7G1 - 1F59', '1BN43 - G', 'PDU_B'], ['B7', '1B7G1 - 1F60', '1BN43 - G', 'PDU_B'], ['B7', '1B7G1 - 1F61', '1CE40 - G', 'PDU_B'],
-    ['B7', '1B7G1 - 1F62', '1CE40 - G', 'PDU_B'], ['B7', '1B7G1 - 1F63', '1CE40 - G', 'PDU_B'], ['B7', '1B7G1 - 1F64', '1CE40 - G1', 'PDU_B'], ['B7', '1B7G1 - 1F65', '1CE40 - G1', 'PDU_B'],
-    ['B7', '1B7G1 - 1F66', '1CE40 - G1', 'PDU_B'], ['B7', '1B7G2 - 2F1', '1CB43', 'PDU_B'], ['B7', '1B7G2 - 2F2', '1BX43', 'PDU_B'], ['B7', '1B7G2 - 2F3', '1CE43', 'PDU_B'],
-    ['B7', '1B7G2 - 2F5', '1BQ43', 'PDU_B'], ['B7', '1B7G2 - 2F6', '1BU43', 'PDU_B'], ['B7', '1B7G2 - 2F7', '1BJ43', 'PDU_B'], ['B7', '1B7G2 - 2F8', '1BG43', 'PDU_B'],
-    ['B7', '1B7G2 - 2F9', '1BC43', 'PDU_B'], ['B7', '1B7G2 - 2F10', '1AZ43', 'PDU_B'], ['B7', '1B7G2 - 2F21', '1CB36', 'PDU_B'], ['B7', '1B7G2 - 2F22', '1BU42 - G', 'PDU_B1'],
-    ['B7', '1B7G2 - 2F23', '1BU42 - G', 'PDU_B1'], ['B7', '1B7G2 - 2F24', '1BU42 - G', 'PDU_B1'], ['B7', '1B7G2 - 2F27', '1BU37', 'PDU_B'], ['B7', '1B7G2 - 2F28', '1BU36', 'PDU_B'],
-    ['B7', '1B7G2 - 2F29', '1BX41', 'PDU_B'], ['B7', '1B7G2 - 2F30', '1CB42', 'PDU_B'], ['B7', '1B7G2 - 2F31', '1BX39', 'PDU_B'], ['B7', '1B7G2 - 2F32', '1BX38', 'PDU_B'],
-    ['B7', '1B7G2 - 2F33', '1BX37', 'PDU_B'], ['B7', '1B7G2 - 2F34', '1BX36', 'PDU_B'], ['B7', '1B7G2 - 2F35', '1CB42', 'PDU_B1'], ['B7', '1B7G2 - 2F36', '1CB41', 'PDU_B'],
-    ['B7', '1B7G2 - 2F37', '1CB40', 'PDU_B'], ['B7', '1B7G2 - 2F38', '1CB39', 'PDU_B'], ['B7', '1B7G2 - 2F39', '1CB38', 'PDU_B'], ['B7', '1B7G2 - 2F40', '1CB37', 'PDU_B'],
-    ['B7', '1B7G2 - 2F41', '1CB36', 'PDU_B'], ['B7', '1B7G2 - 2F42', '1CE42', 'PDU_B'], ['B7', '1B7G2 - 2F43', '1CE43', 'PDU_B'], ['B7', '1B7G2 - 2F44', '1CE43', 'PDU_B'],
-    ['B7', '1B7G2 - 2F45', '1CB43', 'PDU_B'], ['B7', '1B7G2 - 2F46', '1CB41', 'PDU_B'], ['B7', '1B7G2 - 2F47', '1CB40', 'PDU_B'], ['B7', '1B7G2 - 2F48', '1CB39', 'PDU_B'],
-    ['B7', '1B7G2 - 2F55', '1CE39 - G', 'PDU_B'], ['B7', '1B7G2 - 2F56', '1CE39 - G', 'PDU_B'], ['B7', '1B7G2 - 2F57', '1CE39 - G', 'PDU_B'], ['B7', '1B7G2 - 2F58', '1CE39 - G1', 'PDU_B'],
-    ['B7', '1B7G2 - 2F59', '1CE39 - G1', 'PDU_B'], ['B7', '1B7G2 - 2F60', '1CE39 - G', 'PDU_B'], ['B7', '1B7G2 - 2F61', '1CE38 - G', 'PDU_B'], ['B7', '1B7G2 - 2F62', '1CE38 - G', 'PDU_B'],
-    ['B7', '1B7G2 - 2F63', '1CE38 - G', 'PDU_B'], ['B7', '1B7G2 - 2F64', '1BU43 - G', 'PDU_B1'], ['B7', '1B7G2 - 2F65', '1BU43 - G', 'PDU_B1'], ['B7', '1B7G2 - 2F66', '1BU43 - G', 'PDU_B1']
-  ];
-
-  const ROWS = CTD_ROWS.map((r, i) => ({
-    id: i + 1, flr: CTD_META.flr, hal: CTD_META.hal,
-    src_pan: r[0] + ' SDP PANOSU', src_fus: r[1], tgt_cab: r[2], tgt_pdu: r[3],
-    wrk_dat: CTD_META.wrk_dat, wrk_per: CTD_META.wrk_per
-  }));
-  const cabCode = tgt => String(tgt || '').split(' ')[0];
-  const sdpCode = pan => String(pan || '').split(' ')[0];
-  const sideOfPdu = pdu => String(pdu || '').replace(/^PDU_?/i, '').charAt(0).toUpperCase() || 'A';
-
-  // Kabin|PDU → besleyen devreler (tüm SDP'ler)
-  const byPdu = {};
-  ROWS.forEach(r => { const k = cabCode(r.tgt_cab) + '|' + r.tgt_pdu; (byPdu[k] = byPdu[k] || []).push(r); });
-  const pdusOf = (code, side) => Object.keys(byPdu).filter(k => k.split('|')[0] === code && sideOfPdu(k.split('|')[1]) === side).map(k => k.split('|')[1]).sort();
-
-  // Tohumlu dalgalanma çarpanı
-  function jit(key, tick, amp) {
-    return 1 + (rngOf(key + '#' + tick)() - 0.5) * 2 * (amp == null ? 0.015 : amp);
-  }
-  function loadStatus(load, lost) {
-    if (lost) return { status: 'alarm', reason: 'Faz kaybı' };
-    if (load >= LOAD_CRIT) return { status: 'alarm', reason: 'Aşırı yük' };
-    if (load >= LOAD_WARN) return { status: 'warning', reason: 'Yüksek yük' };
-    return { status: 'normal', reason: 'Normal' };
-  }
-  const RANK = { normal: 0, unknown: 1, lost: 1, warning: 2, alarm: 3 };
-  const worst = list => list.reduce((w, s) => (RANK[s] > RANK[w] ? s : w), 'normal');
-
-  // ---------------------------------------------------------------------------
-  // Sigorta devresi (CTD satırı) — statik taban değerler
-  // ---------------------------------------------------------------------------
-  const circuitCache = {};
-  function circuitBase(row) {
-    if (circuitCache[row.id]) return circuitCache[row.id];
-    const code = cabCode(row.tgt_cab);
-    const side = sideOfPdu(row.tgt_pdu);
-    const list = byPdu[code + '|' + row.tgt_pdu] || [row];
-    const idx = list.indexOf(row);
-    const n = list.length;
-    const cab = D.findCabinet(code);
-    const pduCount = Math.max(1, pdusOf(code, side).length);
-    const rnd = rngOf('ctd-' + row.id);
-
-    // PDU tarafı toplam akımı (A). Yerleşimde olmayan kabinler (1AR42 vb.) için tohumlu değer.
-    let S = cab ? (side === 'A' ? cab.pduA : cab.pduB) : between(rngOf('ctd-cab-' + code + side), 7.5, 15.5);
-    if (cab && cab.pduFault) S = cab.currentA / 2; // failover mock: faz kaybında taban her iki taraf yarı yük
-    S /= pduCount;
-
-    // Devre payları: 3 devre → faz payları (failover basePhases ile aynı tohum)
-    let sh;
-    if (n === 3) {
-      const pr = rngOf(code + '-phase');
-      sh = [between(pr, 0.3, 0.37), between(pr, 0.3, 0.37), between(pr, 0.3, 0.37)];
-      if (code === '1CB52') sh = [0.38, 0.32, 0.30];
-    } else {
-      const pr = rngOf(code + '|' + row.tgt_pdu + '-share');
-      sh = list.map(() => between(pr, 0.85, 1.15));
-    }
-    const tot = sh.reduce((a, b) => a + b, 0);
-    sh = sh.map(x => x / tot);
-
-    let I = S * sh[idx];
-    let lost = false;
-    let note = '';
-    if (cab && cab.pduFault && n === 3 && idx === 1) {
-      // Senaryo 1AV42: PDU-B L2 faz kaybı → L2 yükü PDU-A'ya biner
-      if (side === 'B') { I = 0; lost = true; note = 'PDU-B L2 faz kaybı (0 V)'; }
-      else { I += S * sh[1] * 1.12; note = 'L2 yükü B yolundan aktarıldı'; }
-    }
-    const fno = parseInt((String(row.src_fus).match(/F(\d+)$/) || [])[1] || '1', 10);
-    const phase = n === 3 ? idx + 1 : ((fno - 1) % 3) + 1;
-    let rating = n === 1 ? 32 : 16;
-    if (code === '1CB52') { rating = 20; note = 'Yüksek akım (C20 sigorta)'; }
-
-    const base = {
-      row, code, side, pdu: row.tgt_pdu, idx, n, phase, rating, lost, note,
-      I, V: between(rnd, 228.6, 231.4), pf: between(rnd, 0.95, 0.985),
-      gir: parseInt((String(row.src_fus).match(/G(\d)/) || [])[1] || '1', 10)
-    };
-    circuitCache[row.id] = base;
-    return base;
-  }
-
-  function circuit(row, tick) {
-    const b = circuitBase(row);
-    const I = b.lost ? 0 : b.I * jit('c' + row.id, tick);
-    const V = b.lost ? 0 : b.V * jit('v' + row.id, tick, 0.002);
-    const load = (I / b.rating) * 100;
-    const st = loadStatus(load, b.lost);
-    return {
-      kind: 'circuit', phases: 1, phase: 'L' + b.phase, I: [I], V: [V], Iavg: I, Imax: I, Vavg: V,
-      P: (V * I * b.pf) / 1000, pf: b.pf, rating: b.rating, load, status: st.status, reason: b.lost ? 'Faz kaybı' : st.reason,
-      lost: b.lost, note: b.note, code: b.code, side: b.side, pdu: b.pdu, gir: b.gir, row
-    };
-  }
-
-  // PDU (kabin + tgt_pdu) — besleyen tüm devrelerin toplamı
-  function pdu(code, pduName, tick) {
-    const list = byPdu[code + '|' + pduName] || [];
-    const cs = list.map(r => circuit(r, tick));
-    const I = cs.reduce((s, c) => s + c.Iavg, 0);
-    const live = cs.filter(c => !c.lost);
-    const V = live.length ? live.reduce((s, c) => s + c.Vavg, 0) / live.length : 0;
-    const P = cs.reduce((s, c) => s + c.P, 0);
-    const load = cs.reduce((m, c) => Math.max(m, c.load), 0);
-    const side = sideOfPdu(pduName);
-    const sc = D.pdu && D.pdu.scenario ? D.pdu.scenario[code + '_' + side] : null;
-    const lost = cs.some(c => c.lost);
-    const status = worst(cs.map(c => c.status));
-    return {
-      kind: 'pdu', phases: cs.length, circuits: cs, I: cs.map(c => c.Iavg), V: cs.map(c => c.Vavg),
-      Iavg: I, Imax: cs.reduce((m, c) => Math.max(m, c.Iavg), 0), Vavg: V, P, pf: cs.length ? cs[0].pf : 0.97,
-      rating: cs.length ? cs[0].rating : 32, load, status, lost,
-      reason: lost ? 'Faz kaybı' : loadStatus(load, false).reason,
-      note: (sc && sc.note) || (cs.find(c => c.note) || {}).note || '', code, side, pdu: pduName
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Üç fazlı toplayıcılar (RPP / SDP / UPS / ADP / Trafo)
-  // ---------------------------------------------------------------------------
-  function threePhase(kind, I, V, pf, rating, extra) {
-    const Iavg = (I[0] + I[1] + I[2]) / 3;
-    const Imax = Math.max(I[0], I[1], I[2]);
-    const Vavg = (V[0] + V[1] + V[2]) / 3;
-    const load = rating ? (Imax / rating) * 100 : 0;
-    const st = loadStatus(load, false);
-    return Object.assign({ kind, phases: 3, I, V, Iavg, Imax, Vavg, pf, P: (Vavg * (I[0] + I[1] + I[2]) * pf) / 1000, rating, load, status: st.status, reason: st.reason, lost: false, note: '' }, extra || {});
-  }
-
-  function sdpReportUnit(code, gir) {
-    const R = D.reports && D.reports.sdp;
-    if (!R || !R.units) return null;
-    return R.units('CMR/T00').find(u => u.id === code + '_UPS_GIR' + gir) || null;
-  }
-  const rowsOfSdp = code => ROWS.filter(r => sdpCode(r.src_pan) === code);
-
-  // RPP / Giriş barası: sdp = 'A1', gir = 1|2
-  function rpp(code, gir, tick) {
-    const u = sdpReportUnit(code, gir);
-    let I, V, pf;
-    if (u) {
-      I = u.I.map((x, i) => x * jit('rpp' + code + gir + i, tick));
-      V = u.V.map((x, i) => x * jit('rppv' + code + gir + i, tick, 0.002));
-      pf = u.pf;
-    } else {
-      // Yedek: devrelerin faz toplamları
-      I = [0, 0, 0]; V = [230, 230, 230]; pf = 0.97;
-      rowsOfSdp(code).forEach(r => { const c = circuit(r, tick); if (c.gir === gir) I[parseInt(c.phase.slice(1), 10) - 1] += c.Iavg; });
-    }
-    return threePhase('rpp', I, V, pf, RPP_RATED_A, { code, gir });
-  }
-
-  function sdp(code, tick) {
-    const a = rpp(code, 1, tick);
-    const b = rpp(code, 2, tick);
-    const I = [0, 1, 2].map(i => a.I[i] + b.I[i]);
-    const V = [0, 1, 2].map(i => (a.V[i] + b.V[i]) / 2);
-    return threePhase('sdp', I, V, (a.pf + b.pf) / 2, SDP_RATED_A, { code });
-  }
-
-  const pointVal = (eq, label) => { const p = eq && eq.points ? eq.points.find(x => x.label === label) : null; return p ? p.value : null; };
-
-  function ups(code, tick) {
-    const eq = D.findEquipment('UPS ' + code);
-    const lostCom = !!eq && eq.status === 'lost';
-    const battery = pointVal(eq, 'Çalışma Modu') === 'AKÜ';
-    const baseLoad = eq && eq.load != null ? eq.load : 50;
-    const load = baseLoad * jit('ups' + code, tick, 0.01);
-    const outKw = (load / 100) * UPS_RATED_KW;
-    const pf = 0.96;
-    const Iout = (outKw * 1000) / (SQRT3 * 400 * pf);
-    const shares = [0, 1, 2].map(i => between(rngOf('ups-ph-' + code + i), 0.97, 1.03));
-    const I = shares.map((s, i) => Iout * s * jit('upsI' + code + i, tick, 0.006));
-    const vOut = pointVal(eq, 'Çıkış Gerilimi (L1)') || 230;
-    const V = [0, 1, 2].map(i => vOut * jit('upsV' + code + i, tick, 0.002));
-    const vIn = battery ? 0 : (pointVal(eq, 'Giriş Gerilimi (L1)') || 229);
-    const Iin = battery ? [0, 0, 0] : I.map(x => x * 1.045); // verim ≈ %95,7
-    // Kapasite oranı UPS yük oranıdır (anma çıkış akımına göre)
-    const res = threePhase('ups', I, V, pf, 0, { code });
-    res.load = load;
-    const st = loadStatus(load, false);
-    res.status = lostCom ? 'lost' : eq ? (eq.status === 'normal' ? st.status : eq.status) : st.status;
-    res.reason = lostCom ? 'Haberleşme kaybı' : battery ? 'Akü modunda' : eq && eq.note ? eq.note : st.reason;
-    res.note = eq ? eq.note : '';
-    res.lostCom = lostCom;
-    res.battery = battery;
-    res.mode = lostCom ? '—' : battery ? 'AKÜ' : 'ONLINE (ŞEBEKE)';
-    res.inputV = vIn * (battery ? 0 : jit('upsVin' + code, tick, 0.002));
-    res.inputI = Iin;
-    res.batteryPct = pointVal(eq, 'Akü Kapasitesi');
-    res.batteryMin = pointVal(eq, 'Kalan Akü Süresi');
-    res.batteryTemp = pointVal(eq, 'Akü Sıcaklığı');
-    res.ratedKw = UPS_RATED_KW;
-    // ADP → UPS giriş hattının durumu
-    res.input = battery ? { status: 'alarm', reason: 'Giriş yok — akü modu', lost: true }
-      : lostCom ? { status: 'unknown', reason: 'Veri alınamıyor', lost: false }
-        : { status: st.status, reason: st.reason, lost: false };
-    if (lostCom) { res.I = [0, 0, 0]; res.Iavg = res.Imax = 0; res.P = 0; }
-    return res;
-  }
-
-  // ADP / Trafo eşlemesi (sunum varsayımı)
-  const UPSTREAM = [
-    { side: 'A', adp: 'ADP-A1', trafo: 'A_TRAFO3_Q1', ups: ['A1', 'A2', 'A3', 'A4'] },
-    { side: 'A', adp: 'ADP-A2', trafo: 'A_TRAFO4_Q2', ups: ['A5', 'A6', 'A7'] },
-    { side: 'B', adp: 'ADP-B1', trafo: 'B_TRAFO1_Q3', ups: ['B1', 'B2', 'B3', 'B4'] },
-    { side: 'B', adp: 'ADP-B2', trafo: 'B_TRAFO2_Q4', ups: ['B5', 'B6', 'B7'] }
-  ];
-  const upstreamOf = code => UPSTREAM.find(u => u.ups.indexOf(code) >= 0) || UPSTREAM[0];
-  function trafoUnit(id) {
-    const R = D.reports && D.reports.trafo;
-    const u = R && R.units ? R.units.find(t => t.id === id) : null;
-    if (u) return u;
-    const rnd = rngOf('cv-trafo-' + id);
-    const a = between(rnd, 820, 910);
-    return { id, I: [a, a * 0.99, a * 1.01], V: [233.6, 233.9, 234.1], pf: 0.965 };
-  }
-  function trafo(id, tick) {
-    const u = trafoUnit(id);
-    const I = u.I.map((x, i) => x * jit('tr' + id + i, tick, 0.008));
-    const V = u.V.map((x, i) => x * jit('trv' + id + i, tick, 0.002));
-    const res = threePhase('trafo', I, V, u.pf, (TRAFO_RATED_KVA * 1000) / (SQRT3 * 400), { id });
-    res.S = ((V[0] + V[1] + V[2]) / 3) * (I[0] + I[1] + I[2]) / 1000;
-    res.ratedKva = TRAFO_RATED_KVA;
-    return res;
-  }
-  function adp(id, tick) {
-    const up = UPSTREAM.find(u => u.adp === id) || UPSTREAM[0];
-    const t = trafo(up.trafo, tick); // ADP ana barası trafo Q çıkışıyla aynı akımı taşır
-    return threePhase('adp', t.I, t.V, t.pf, ADP_RATED_A, { id, trafo: up.trafo });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Sorgular
-  // ---------------------------------------------------------------------------
-  // api.CTD_Data karşılığı: where = { src_pan }
-  function query(where) {
-    const w = where || {};
-    if (w.src_pan) return ROWS.filter(r => r.src_pan === w.src_pan);
-    if (w.id) return ROWS.filter(r => r.id === Number(w.id));
-    return ROWS.slice();
-  }
-  // Bir kabinin A/B beslemeleri (çift besleme)
-  function feedsOf(code) {
-    const out = { A: [], B: [] };
-    ROWS.forEach(r => { if (cabCode(r.tgt_cab) === code) out[sideOfPdu(r.tgt_pdu)].push(r); });
-    return out;
-  }
-  // Normal dışı hatlar (tüm SDP'ler) + UPS olayları
-  function abnormal(tick) {
-    const out = [];
-    const seen = {};
-    ROWS.forEach(r => {
-      const c = circuit(r, tick);
-      if (c.status === 'normal') return;
-      const key = c.code + '|' + c.pdu + '|' + sdpCode(r.src_pan);
-      if (seen[key] && RANK[seen[key].status] >= RANK[c.status]) return;
-      const item = { kind: 'circuit', status: c.status, code: c.code, pdu: c.pdu, side: c.side, sdp: sdpCode(r.src_pan), row: r, phase: c.phase, load: c.load, reason: c.lost ? 'Faz kaybı' : c.reason, note: c.note };
-      if (seen[key]) out.splice(out.indexOf(seen[key]), 1, item); else out.push(item);
-      seen[key] = item;
-    });
-    UPSTREAM.forEach(g => g.ups.forEach(code => {
-      const u = ups(code, tick);
-      if (u.status !== 'normal') out.push({ kind: 'ups', status: u.status, code, sdp: code, load: u.load, reason: u.reason, battery: u.battery });
-    }));
-    return out.sort((a, b) => RANK[b.status] - RANK[a.status] || (a.kind === 'ups' ? -1 : 1) - (b.kind === 'ups' ? -1 : 1));
-  }
-
-  D.connectivity = {
-    meta: CTD_META,
-    thresholds: { warn: LOAD_WARN, crit: LOAD_CRIT },
-    rated: { ups: UPS_RATED_KW, rpp: RPP_RATED_A, sdp: SDP_RATED_A, adp: ADP_RATED_A, trafo: TRAFO_RATED_KVA },
-    query, feedsOf, pdusOf, cabCode, sdpCode, sideOfPdu, upstreamOf, upstream: UPSTREAM,
-    circuit, pdu, rpp, sdp, ups, adp, trafo, abnormal, worst, rank: RANK
-  };
-})();
+/* Etap 3 — connectivity.html verisi: js/mock/connectivity.data.js (kurgusal SDP tablosu) */
 
 /* ==========================================================================
    Etap 3 — events.html verisi (eski js/mock/events.data.js)
@@ -4807,33 +4252,33 @@
   // ---------------------------------------------------------------------------
   const SCENARIO = [
     [0.4, 'user', 'Kullanıcı', 'admin', 'Oturum', 'admin giriş yaptı (10.10.1.24 · Chrome)', 'info', 4],
-    [2.1, 'system', 'Sistem', 'thr_notify', 'Sistem', 'Alarm bildirimi gönderildi: Kabin 1BJ53 yüksek sıcaklık → NOC e-posta / SMS', 'info', 4],
-    [4, 'sensor', 'Kabin 1BJ53', podPfx('1BJ53') + '_TEMP_MID', 'Soğutma', 'Kabin 1BJ53 Orta Sıcaklık Üst Limiti Aştı: 32.4 °C (Limit 27.0 °C)', 'critical', 0xB],
+    [2.1, 'system', 'Sistem', 'thr_notify', 'Sistem', 'Alarm bildirimi gönderildi: Kabin 1DU06 yüksek sıcaklık → NOC e-posta / SMS', 'info', 4],
+    [4, 'sensor', 'Kabin 1DU06', podPfx('1DU06') + '_TEMP_MID', 'Soğutma', 'Kabin 1DU06 Orta Sıcaklık Üst Limiti Aştı: 32.4 °C (Limit 27.0 °C)', 'critical', 0xB],
     [6.5, 'system', 'Sistem', 'thr_pue', 'Enerji', 'Otonom senaryo başlatıldı: UPS A5 akü modu → yük devri ön kontrolü', 'warning', 3],
     [7, 'ups', 'UPS A5', upsTag('UPS A5', 'MODE'), 'Enerji', 'Şebekeden Aküye Geçildi — Kalan süre 18 dk', 'critical', 0xB],
     [7.1, 'ups', 'UPS A5', upsTag('UPS A5', 'IN_VOLT_L1'), 'Enerji', 'UPS A5 giriş gerilimi kayboldu: 0 V (L1)', 'critical', 4],
-    [11, 'locks', 'Kapak Kilitleri', podPfx('1AZ39') + '_FDOOR', 'Güvenlik', 'Kabin 1AZ39 Ön Kapak Açıldı — kart okutulmadan (yetkisiz)', 'critical', 1],
-    [11.2, 'system', 'Sistem', 'thr_alarm_eval', 'Güvenlik', 'Kamera kaydı işaretlendi: POD-1 / Kabin 1AZ39 (±5 dk)', 'info', 4],
-    [16, 'climate', 'KLIMA 109', 'IDC1_KLIMA109_HP', 'Soğutma', 'KLIMA 109 Kompresör 1 Yüksek Basınç: 27.8 bar (Limit 26.0 bar)', 'critical', 0xA],
+    [11, 'locks', 'Kapak Kilitleri', podPfx('1DA03') + '_FDOOR', 'Güvenlik', 'Kabin 1DA03 Ön Kapak Açıldı — kart okutulmadan (yetkisiz)', 'critical', 1],
+    [11.2, 'system', 'Sistem', 'thr_alarm_eval', 'Güvenlik', 'Kamera kaydı işaretlendi: POD-1 / Kabin 1DA03 (±5 dk)', 'info', 4],
+    [16, 'climate', 'KLIMA 109', 'DCA_KLIMA109_HP', 'Soğutma', 'KLIMA 109 Kompresör 1 Yüksek Basınç: 27.8 bar (Limit 26.0 bar)', 'critical', 0xA],
     [18.4, 'user', 'Kullanıcı', 'ayse.demir', 'Operatör', 'ayse.demir KLIMA 109 için iş emri oluşturdu (İE-2026-0947)', 'info', 4],
-    [23, 'pdu', 'Kabin 1AV42 PDU-B', 'K1AV42_PDU_B_IN2_VOLT_FN', 'Enerji', 'Kabin 1AV42 PDU-B L2 Faz Kaybı: 0 V (Alt Limit 207 V)', 'critical', 0xB],
-    [29, 'sensor', 'Kabin 1BC37', podPfx('1BC37') + '_TEMP_TOP', 'Soğutma', 'Kabin 1BC37 Üst Sıcaklık Kritik: 33.0 °C — otonom soğutma artırımı', 'critical', 0xF],
-    [34, 'sensor', 'Kabin 1CE51', podPfx('1CE51') + '_TEMP_MID', 'Haberleşme', 'Kabin 1CE51 sensör modülü haberleşme kaybı (Modbus TCP zaman aşımı)', 'warning', 5],
+    [23, 'pdu', 'Kabin 1NA06 PDU-B', 'K1NA06_PDU_B_IN2_VOLT_FN', 'Enerji', 'Kabin 1NA06 PDU-B L2 Faz Kaybı: 0 V (Alt Limit 207 V)', 'critical', 0xB],
+    [29, 'sensor', 'Kabin 1DA07', podPfx('1DA07') + '_TEMP_TOP', 'Soğutma', 'Kabin 1DA07 Üst Sıcaklık Kritik: 33.0 °C — otonom soğutma artırımı', 'critical', 0xF],
+    [34, 'sensor', 'Kabin 1DM03', podPfx('1DM03') + '_TEMP_MID', 'Haberleşme', 'Kabin 1DM03 sensör modülü haberleşme kaybı (Modbus TCP zaman aşımı)', 'warning', 5],
     [41, 'ups', 'UPS B7', upsTag('UPS B7', 'MODE'), 'Haberleşme', 'UPS B7 SNMP haberleşme kaybı (3 ardışık sorgu yanıtsız)', 'warning', 5],
     [44.5, 'user', 'Kullanıcı', 'operator', 'Oturum', 'operator oturumu kapattı', 'info', 4],
-    [52, 'sensor', 'Kabin 1BQ55', podPfx('1BQ55') + '_TEMP_MID', 'Soğutma', 'Kabin 1BQ55 Sıcaklık Uyarısı: 27.9 °C (Uyarı Limiti 27.0 °C)', 'warning', 7],
-    [58, 'pdu', 'Kabin 1CB52 PDU-A', 'K1CB52_PDU_A_IN1_CURR', 'Enerji', 'Kabin 1CB52 Yüksek Akım: 34.3 A (Uyarı Limiti 32.0 A)', 'warning', 7],
-    [64, 'sensor', 'Kabin 1BU54', podPfx('1BU54') + '_HUM_MID', 'Soğutma', 'Kabin 1BU54 Yüksek Nem: %62 (Uyarı Limiti %60)', 'warning', 6],
-    [73, 'climate', 'KLIMA 104', 'IDC1_KLIMA104_FLT', 'Soğutma', 'KLIMA 104 filtre kirli — bakım gerekli (Δp 182 Pa)', 'warning', 6],
-    [81, 'sensor', 'Kabin 1BX50', podPfx('1BX50') + '_TEMP_MID', 'Soğutma', 'Kabin 1BX50 Düşük Sıcaklık: 17.2 °C (Alt Limit 18.0 °C)', 'warning', 7],
-    [88, 'climate', 'KLIMA 112', 'IDC1_KLIMA112_RET', 'Soğutma', 'KLIMA 112 dönüş havası yüksek: 29.4 °C (Limit 28.0 °C)', 'warning', 7],
-    [96, 'sensor', 'Kabin 1CE56', podPfx('1CE56') + '_TEMP_MID', 'Soğutma', 'Kabin 1CE56 Sıcaklık Uyarısı: 28.3 °C (Uyarı Limiti 27.0 °C)', 'warning', 7],
-    [104, 'locks', 'Kapak Kilitleri', podPfx('1BN52') + '_RDOOR', 'Güvenlik', 'Kabin 1BN52 Arka Kapak 5 dakikadan uzun süredir açık', 'warning', 6],
-    [109, 'locks', 'Kapak Kilitleri', podPfx('1BN52') + '_RDOOR', 'Güvenlik', 'Kabin 1BN52 Arka Kapak Açıldı (Kart: Burak Şahin)', 'info', 4],
-    [112, 'locks', 'Kapak Kilitleri', podPfx('1BG41') + '_FDOOR', 'Güvenlik', 'Kabin 1BG41 Ön Kapak Açıldı — yetkili bakım (Kart: Mehmet Kaya · İE-2026-0931)', 'info', 4],
+    [52, 'sensor', 'Kabin 1DS07', podPfx('1DS07') + '_TEMP_MID', 'Soğutma', 'Kabin 1DS07 Sıcaklık Uyarısı: 27.9 °C (Uyarı Limiti 27.0 °C)', 'warning', 7],
+    [58, 'pdu', 'Kabin 1DL03 PDU-A', 'K1DL03_PDU_A_IN1_CURR', 'Enerji', 'Kabin 1DL03 Yüksek Akım: 34.3 A (Uyarı Limiti 32.0 A)', 'warning', 7],
+    [64, 'sensor', 'Kabin 1DN05', podPfx('1DN05') + '_HUM_MID', 'Soğutma', 'Kabin 1DN05 Yüksek Nem: %62 (Uyarı Limiti %60)', 'warning', 6],
+    [73, 'climate', 'KLIMA 104', 'DCA_KLIMA104_FLT', 'Soğutma', 'KLIMA 104 filtre kirli — bakım gerekli (Δp 182 Pa)', 'warning', 6],
+    [81, 'sensor', 'Kabin 1DP02', podPfx('1DP02') + '_TEMP_MID', 'Soğutma', 'Kabin 1DP02 Düşük Sıcaklık: 17.2 °C (Alt Limit 18.0 °C)', 'warning', 7],
+    [88, 'climate', 'KLIMA 112', 'DCA_KLIMA112_RET', 'Soğutma', 'KLIMA 112 dönüş havası yüksek: 29.4 °C (Limit 28.0 °C)', 'warning', 7],
+    [96, 'sensor', 'Kabin 1DL01', podPfx('1DL01') + '_TEMP_MID', 'Soğutma', 'Kabin 1DL01 Sıcaklık Uyarısı: 28.3 °C (Uyarı Limiti 27.0 °C)', 'warning', 7],
+    [104, 'locks', 'Kapak Kilitleri', podPfx('1DR03') + '_RDOOR', 'Güvenlik', 'Kabin 1DR03 Arka Kapak 5 dakikadan uzun süredir açık', 'warning', 6],
+    [109, 'locks', 'Kapak Kilitleri', podPfx('1DR03') + '_RDOOR', 'Güvenlik', 'Kabin 1DR03 Arka Kapak Açıldı (Kart: Burak Şahin)', 'info', 4],
+    [112, 'locks', 'Kapak Kilitleri', podPfx('1DC06') + '_FDOOR', 'Güvenlik', 'Kabin 1DC06 Ön Kapak Açıldı — yetkili bakım (Kart: Mehmet Kaya · İE-2026-0931)', 'info', 4],
     [118, 'user', 'Kullanıcı', 'mehmet.kaya', 'Operatör', 'mehmet.kaya İE-2026-0931 iş emrini "İşlemde" durumuna aldı', 'info', 4],
-    [131, 'locks', 'Kapak Kilitleri', podPfx('1BX54') + '_FDOOR', 'Güvenlik', 'Kabin 1BX54 kilit motoru arızası — kilit yanıt vermiyor', 'warning', 9],
-    [167, 'locks', 'Kapak Kilitleri', podPfx('1BU50') + '_FDOOR', 'Güvenlik', 'Kabin 1BU50 yetkisiz kart denemesi (3x) — Kart 04:9C:11:7E', 'warning', 4],
+    [131, 'locks', 'Kapak Kilitleri', podPfx('1DP06') + '_FDOOR', 'Güvenlik', 'Kabin 1DP06 kilit motoru arızası — kilit yanıt vermiyor', 'warning', 9],
+    [167, 'locks', 'Kapak Kilitleri', podPfx('1DN01') + '_FDOOR', 'Güvenlik', 'Kabin 1DN01 yetkisiz kart denemesi (3x) — Kart 04:9C:11:7E', 'warning', 4],
     [178, 'user', 'Kullanıcı', 'noc.vardiya', 'Oturum', 'noc.vardiya giriş yaptı (vardiya devri 08:00)', 'info', 4]
   ];
   SCENARIO.forEach(s => add.apply(null, s));
@@ -4865,12 +4310,12 @@
     { w: 4, f: () => ['system', 'Sistem', 'thr_qry', 'Sistem', 'XDB senkronizasyonu tamamlandı (' + pick(['CMR/T01', 'CMR/T02', 'CMR/T03', 'CMR/T04']) + ', ' + (0.6 + rnd() * 1.4).toFixed(1) + ' sn)', 'info', 4] },
     { w: 4, f: () => { const u = pick(UPS); return ['ups', u, upsTag(u, 'BAT_CAP'), 'Enerji', u + ' periyodik akü testi tamamlandı — kapasite %' + (96 + Math.floor(rnd() * 5)), 'info', 4]; } },
     { w: 1, f: () => ['ups', 'UPS A5', upsTag('UPS A5', 'MODE'), 'Enerji', 'UPS A5 şebekeye geri döndü (akü modu ' + (2 + Math.floor(rnd() * 6)) + ' dk sürdü)', 'warning', 4] },
-    { w: 4, f: () => { const k = pick(KLIMA); return ['climate', k, 'IDC1_' + k.replace(/\s+/g, '') + '_MODE', 'Soğutma', k + ' ' + pick(['çalışma moduna geçti (SOĞUTMA)', 'fan hızı %' + (60 + Math.floor(rnd() * 25)) + ' olarak ayarlandı', 'bekleme moduna alındı (yedeklilik rotasyonu)']), 'info', 4]; } },
+    { w: 4, f: () => { const k = pick(KLIMA); return ['climate', k, 'DCA_' + k.replace(/\s+/g, '') + '_MODE', 'Soğutma', k + ' ' + pick(['çalışma moduna geçti (SOĞUTMA)', 'fan hızı %' + (60 + Math.floor(rnd() * 25)) + ' olarak ayarlandı', 'bekleme moduna alındı (yedeklilik rotasyonu)']), 'info', 4]; } },
     { w: 3, f: () => { const c = pick(CODES); return ['sensor', 'Kabin ' + c, podPfx(c) + '_TEMP_MID', 'Soğutma', 'Kabin ' + c + ' Orta Sıcaklık normale döndü: ' + (22 + rnd() * 3).toFixed(1) + ' °C', 'info', 4]; } },
     { w: 2, f: () => { const c = pick(CODES); return ['sensor', 'Kabin ' + c, podPfx(c) + '_TEMP_MID', 'Soğutma', 'Kabin ' + c + ' Sıcaklık Uyarısı: ' + (27 + rnd()).toFixed(1) + ' °C (Uyarı Limiti 27.0 °C)', 'warning', 4]; } },
     { w: 2, f: () => { const c = pick(CODES); const s = rnd() < 0.5 ? 'A' : 'B'; return ['pdu', 'Kabin ' + c + ' PDU-' + s, 'K' + c + '_PDU_' + s + '_IN1_CURR', 'Enerji', 'Kabin ' + c + ' PDU-' + s + ' akım uyarısı: ' + (12.9 + rnd()).toFixed(1) + ' A (Uyarı 12.8 A)', 'warning', 4]; } },
     { w: 1, f: () => { const c = pick(CODES); return ['locks', 'Kapak Kilitleri', podPfx(c) + '_FDOOR', 'Güvenlik', 'Kabin ' + c + ' Ön Kapak Açıldı — kart okutulmadan (yetkisiz)', 'critical', 4]; } },
-    { w: 1, f: () => { const k = pick(KLIMA); return ['climate', k, 'IDC1_' + k.replace(/\s+/g, '') + '_HP', 'Soğutma', k + ' Kompresör Yüksek Basınç: ' + (26.2 + rnd()).toFixed(1) + ' bar', 'critical', 4]; } }
+    { w: 1, f: () => { const k = pick(KLIMA); return ['climate', k, 'DCA_' + k.replace(/\s+/g, '') + '_HP', 'Soğutma', k + ' Kompresör Yüksek Basınç: ' + (26.2 + rnd()).toFixed(1) + ' bar', 'critical', 4]; } }
   ];
   const TOTAL_W = BACKGROUND.reduce((s, b) => s + b.w, 0);
   const pickTemplate = r => {
@@ -4900,10 +4345,10 @@
     { w: 6, f: (r, n) => ['system', 'Sistem', 'thr_qry', 'Sistem', 'XDB senkronizasyonu tamamlandı (CMR/T0' + (1 + Math.floor(r() * 4)) + ', ' + (0.6 + r() * 1.4).toFixed(1) + ' sn)', 'info', 4] },
     { w: 4, f: (r, n) => ['system', 'Sistem', 'thr_pue', 'Enerji', 'PUE hesaplandı: ' + (1.40 + r() * 0.05).toFixed(2) + ' (anlık)', 'info', 4] },
     { w: 5, f: (r, n) => ['ups', 'UPS A5', upsTag('UPS A5', 'BAT_TIME'), 'Enerji', 'UPS A5 akü modunda — kalan süre ' + Math.max(6, 18 - Math.floor(n / 3)) + ' dk, akü %' + Math.max(40, 64 - Math.floor(n / 2)), 'critical', 0xB] },
-    { w: 4, f: (r, n) => ['sensor', 'Kabin 1BJ53', podPfx('1BJ53') + '_TEMP_MID', 'Soğutma', 'Kabin 1BJ53 Orta Sıcaklık hâlâ limit üstünde: ' + (32.2 + r() * 0.5).toFixed(1) + ' °C', 'critical', 1] },
-    { w: 3, f: (r, n) => ['climate', 'KLIMA 109', 'IDC1_KLIMA109_HP', 'Soğutma', 'KLIMA 109 kompresör basıncı ' + (27.6 + r() * 0.5).toFixed(1) + ' bar — otonom yük azaltma bekliyor', 'critical', 0xA] },
+    { w: 4, f: (r, n) => ['sensor', 'Kabin 1DU06', podPfx('1DU06') + '_TEMP_MID', 'Soğutma', 'Kabin 1DU06 Orta Sıcaklık hâlâ limit üstünde: ' + (32.2 + r() * 0.5).toFixed(1) + ' °C', 'critical', 1] },
+    { w: 3, f: (r, n) => ['climate', 'KLIMA 109', 'DCA_KLIMA109_HP', 'Soğutma', 'KLIMA 109 kompresör basıncı ' + (27.6 + r() * 0.5).toFixed(1) + ' bar — otonom yük azaltma bekliyor', 'critical', 0xA] },
     { w: 4, f: (r, n) => ['ups', 'UPS B7', upsTag('UPS B7', 'MODE'), 'Haberleşme', 'UPS B7 SNMP yeniden bağlanma denemesi başarısız (deneme #' + (4 + n) + ')', 'warning', 5] },
-    { w: 3, f: (r, n) => ['sensor', 'Kabin 1CE51', podPfx('1CE51') + '_TEMP_MID', 'Haberleşme', 'Kabin 1CE51 sensör modülü yanıt vermiyor (Modbus TCP zaman aşımı, 3000 ms)', 'warning', 5] },
+    { w: 3, f: (r, n) => ['sensor', 'Kabin 1DM03', podPfx('1DM03') + '_TEMP_MID', 'Haberleşme', 'Kabin 1DM03 sensör modülü yanıt vermiyor (Modbus TCP zaman aşımı, 3000 ms)', 'warning', 5] },
     { w: 3, f: (r, n) => { const c = CODES[Math.floor(r() * CODES.length)]; return ['sensor', 'Kabin ' + c, podPfx(c) + '_TEMP_MID', 'Soğutma', 'Kabin ' + c + ' Orta Sıcaklık normal: ' + (22 + r() * 2.5).toFixed(1) + ' °C', 'info', 4]; } }
   ];
   const LIVE_W = LIVE.reduce((s, b) => s + b.w, 0);
@@ -4941,8 +4386,8 @@
    Ekler (sunum): pid (Nokta ID), dev (bağlı cihaz), proto (protokol), tim (son güncelleme).
    Kabin sensör / PDU değerleri cabinetMgr.sensorIos / pduDevs'ten alınır (cabinet-detail.html ile
    aynı değerler); UPS / klima / pano değerleri DCIM.data.ups / climates / panels noktalarıdır.
-   Senaryo: 1CE51 sensör modülü ve UPS B7 haberleşme kaybı (VERİ ALINAMIYOR, Offline),
-   PMM-7 planlı devre dışı, UPS A5 akü modu, KLIMA 109 yüksek basınç, 1AV42 PDU-B L2 faz kaybı.
+   Senaryo: 1DM03 sensör modülü ve UPS B7 haberleşme kaybı (VERİ ALINAMIYOR, Offline),
+   PMM-7 planlı devre dışı, UPS A5 akü modu, KLIMA 109 yüksek basınç, 1NA06 PDU-B L2 faz kaybı.
    STA bitleri: 0x0003 motor (0 devre dışı, 1 durmuş, 2 bekliyor, 3 çalışıyor),
                 0x000C değer (4 uyarı, 8 alarm, C acil), 0x0030 çıkış noktası (yazılabilir).
    Bağımlılık: js/mock-data.js → DCIM.data (cabinets, ups, climates, panels, cabinetMgr, rng, hash)
@@ -5102,7 +4547,7 @@
     'Oda Nemi': ['HUM', 'ODA NEMİ'], 'Fan Hızı': ['FAN', 'FAN HIZI'], 'Kompresör 1 Basınç': ['HP', 'KOMPRESÖR 1 BASINÇ'], 'Filtre Durumu': ['FLT', 'FİLTRE DURUMU']
   };
   (D.climates || []).slice().sort(byLabel).forEach((k, i) => {
-    const id = 'IDC1_' + k.label.replace(/\s+/g, '');
+    const id = 'DCA_' + k.label.replace(/\s+/g, '');
     const host = '10.10.25.' + (31 + i);
     (k.points || []).forEach(pt => {
       const m = KLM_SFX[pt.label];
@@ -5133,14 +4578,14 @@
   // ---------------------------------------------------------------------------
   const M = D.cabinetMgr;
   const PDU_IO = /_IN\d?_CURR$|_IN\d?_VOLT_FN$|_IN_VOLT$|_IN_TOT_POW$|_IN_POW$/;
-  const lostSeen = new Date(NOW - 34 * 60000 - 27000); // alarm: 1CE51 haberleşme kaybı 34 dk önce
+  const lostSeen = new Date(NOW - 34 * 60000 - 27000); // alarm: 1DM03 haberleşme kaybı 34 dk önce
   (D.cabinets || []).forEach(c => {
     if (!M) return;
     const lost = c.status === 'lost';
     M.sensorIos(c.code).forEach(io => {
       const door = io.xdb_cls === 'DOOR';
       let sta = parseInt(io.sta, 16);
-      if (c.code === '1BC37' && /_TEMP_TOP$/.test(io.rid)) sta = RUN | EMERG; // 33.0 °C — acil eşiği
+      if (c.code === '1DA07' && /_TEMP_TOP$/.test(io.rid)) sta = RUN | EMERG; // 33.0 °C — acil eşiği
       add({
         doc: door ? 'CMR/T04' : 'CMR/T01', rid: io.rid,
         dev: door ? 'Kilit ' + c.code + (/_FDOOR$/.test(io.rid) ? ' (Ön)' : ' (Arka)') : 'Kabin ' + c.code + ' Sensör Modülü',
@@ -5410,7 +4855,7 @@
    (OTURUM, ALARM_ACK, İŞ EMRİ, RAPOR, MÜŞTERİ, USER, YETKİ, AYAR, INFO, PDU LAUNCH).
    SUNUM EKLENTİSİ: evt_prm içinde "asset" (etkilenen varlık) ve "res" (success|denied|failed);
    "KAPAK KİLİDİ" ve "ENERJİ KONTROL" kategorileri senaryo için eklenmiştir.
-   Kullanıcı adları kurgusaldır; IP'ler özel ağ aralıklarındandır (10.130.x / 172.16.x).
+   Kullanıcı adları kurgusaldır; IP'ler kurgusal özel ağ aralıklarındandır (10.24.x kurum içi / 192.168.x müşteri-yüklenici).
    ========================================================================== */
 (function () {
   'use strict';
@@ -5424,18 +4869,18 @@
 
   // Kullanıcılar (usr = oturum kullanıcı adı, nam = das.usr_fullname) — permission-settings.data.js ile aynı kişiler
   const U = {
-    zeynep: { usr: 'zeynep.arslan', nam: 'Zeynep Arslan', ip: '10.130.1.45' },
-    murat: { usr: 'murat.aksoy', nam: 'Murat Aksoy', ip: '10.130.1.52' },
-    emre: { usr: 'emre.celik', nam: 'Emre Çelik', ip: '10.130.7.33' },
-    burak: { usr: 'burak.sahin', nam: 'Burak Şahin', ip: '10.130.6.14' },
-    hakan: { usr: 'hakan.yildiz', nam: 'Hakan Yıldız', ip: '10.130.7.41' },
-    mehmet: { usr: 'mehmet.kaya', nam: 'Mehmet Kaya', ip: '10.130.4.21' },
-    ayse: { usr: 'ayse.demir', nam: 'Ayşe Demir', ip: '10.130.4.22' },
-    deniz: { usr: 'deniz.koc', nam: 'Deniz Koç', ip: '10.130.9.5' },
-    selin: { usr: 'selin.aydin', nam: 'Selin Aydın', ip: '172.16.20.14' },
-    elif: { usr: 'elif.kaplan', nam: 'Elif Kaplan', ip: '172.16.20.37' },
-    can: { usr: 'can.ozturk', nam: 'Can Öztürk', ip: '172.16.40.9' },
-    system: { usr: 'system', nam: 'Sistem', ip: '10.130.1.111' }
+    zeynep: { usr: 'zeynep.arslan', nam: 'Zeynep Arslan', ip: '10.24.1.45' },
+    murat: { usr: 'murat.aksoy', nam: 'Murat Aksoy', ip: '10.24.1.52' },
+    emre: { usr: 'emre.celik', nam: 'Emre Çelik', ip: '10.24.7.33' },
+    burak: { usr: 'burak.sahin', nam: 'Burak Şahin', ip: '10.24.6.14' },
+    hakan: { usr: 'hakan.yildiz', nam: 'Hakan Yıldız', ip: '10.24.7.41' },
+    mehmet: { usr: 'mehmet.kaya', nam: 'Mehmet Kaya', ip: '10.24.4.21' },
+    ayse: { usr: 'ayse.demir', nam: 'Ayşe Demir', ip: '10.24.4.22' },
+    deniz: { usr: 'deniz.koc', nam: 'Deniz Koç', ip: '10.24.9.5' },
+    selin: { usr: 'selin.aydin', nam: 'Selin Aydın', ip: '192.168.50.14' },
+    elif: { usr: 'elif.kaplan', nam: 'Elif Kaplan', ip: '192.168.50.37' },
+    can: { usr: 'can.ozturk', nam: 'Can Öztürk', ip: '192.168.60.9' },
+    system: { usr: 'system', nam: 'Sistem', ip: '10.24.1.10' }
   };
   const BY_NAME = {};
   Object.keys(U).forEach(k => { BY_NAME[U[k].nam] = U[k]; });
@@ -5445,7 +4890,7 @@
   const CUSTOMERS = [U.selin, U.elif];
   const STAFF = OPERATORS.concat(ENGINEERS, ADMINS);
 
-  const HOST = 'http://10.130.1.111';
+  const HOST = 'https://dcim.dca.local';
   const R = {
     login: HOST + '/',
     d2: HOST + '/k/dcim/operations/digital-twin-2d',
@@ -5464,13 +4909,13 @@
   };
 
   const CABS = (D.cabinets || []).map(c => c.code).filter(Boolean);
-  const cab = () => (CABS.length ? pick(CABS) : '1AS49');
+  const cab = () => (CABS.length ? pick(CABS) : '1NB01');
   const WORK_ORDERS = [
-    { id: 'İE-2026-0931', name: '1BG41 PDU-A modül değişimi' },
+    { id: 'İE-2026-0931', name: '1DC06 PDU-A modül değişimi' },
     { id: 'İE-2026-0928', name: 'KLIMA 109 kompresör basınç kontrolü' },
     { id: 'İE-2026-0925', name: 'UPS A5 akü grubu kapasite testi' },
-    { id: 'İE-2026-0919', name: '1AV42 PDU-B faz onarımı' },
-    { id: 'İE-2026-0914', name: '1BX54 kilit motoru değişimi' },
+    { id: 'İE-2026-0919', name: '1NA06 PDU-B faz onarımı' },
+    { id: 'İE-2026-0914', name: '1DP06 kilit motoru değişimi' },
     { id: 'İE-2026-0907', name: 'KLIMA 104 filtre değişimi' },
     { id: 'İE-2026-0902', name: 'POD-6 kablo tavası düzenlemesi' }
   ];
@@ -5507,25 +4952,25 @@
   // ---------------------------------------------------------------------------
   // Senaryo olayları (diğer sayfalarla tutarlı; dakika cinsinden "önce")
   // ---------------------------------------------------------------------------
-  add(ago(6), U.deniz, 4, 'KAPAK KİLİDİ', 'Kabin 1AZ39 kilidi açıldı (ön kapak) — güvenlik yerinde kontrol', { asset: 'Kabin 1AZ39', url: R.locks, doc: 'CMR', rid: 'NS2_1AZ39_FDOOR' });
-  add(ago(9), U.selin, 4, 'KAPAK KİLİDİ', 'Kabin 1AZ39 kilit açma talebi reddedildi — LCK yetkisi yok', { asset: 'Kabin 1AZ39', url: R.customerApp, res: 'denied', doc: 'CMR', rid: 'NS2_1AZ39_FDOOR' });
-  add(ago(11), U.system, 1, 'KAPAK KİLİDİ', 'Kabin 1AZ39 ön kapak kart okutulmadan açıldı (zorlama şüphesi)', { asset: 'Kabin 1AZ39', res: 'denied', doc: 'CMR', rid: 'NS2_1AZ39_FDOOR' });
+  add(ago(6), U.deniz, 4, 'KAPAK KİLİDİ', 'Kabin 1DA03 kilidi açıldı (ön kapak) — güvenlik yerinde kontrol', { asset: 'Kabin 1DA03', url: R.locks, doc: 'CMR', rid: 'POD1_1DA03_FDOOR' });
+  add(ago(9), U.selin, 4, 'KAPAK KİLİDİ', 'Kabin 1DA03 kilit açma talebi reddedildi — LCK yetkisi yok', { asset: 'Kabin 1DA03', url: R.customerApp, res: 'denied', doc: 'CMR', rid: 'POD1_1DA03_FDOOR' });
+  add(ago(11), U.system, 1, 'KAPAK KİLİDİ', 'Kabin 1DA03 ön kapak kart okutulmadan açıldı (zorlama şüphesi)', { asset: 'Kabin 1DA03', res: 'denied', doc: 'CMR', rid: 'POD1_1DA03_FDOOR' });
   add(ago(18), U.hakan, 6, 'İŞ EMRİ', 'İş Emri Planlanıyora Alındı: İE-2026-0947 - UPS A5 akü modu incelemesi', { asset: 'İE-2026-0947', url: R.wo, doc: 'WOR' });
   add(ago(25), U.zeynep, 4, 'YETKİ', 'Yetki Değişimi: 00552604 ACL: +RTS,+RTSN,+RTSA,+RTSE,+RTS_ENGR,+RTS_ENG2D,+RTS_ENGCR,+RTS_ENG3D,+RPS,+RPSE,+RPSBA,+RPSSO,+RPSHA,+RPSDL,+RPSUL,+ASMR,+ASMCABR,+ASMDR,+MNTR,+LCK,+TCKR,+WORR,+WORU,+ENRR,+ENRPDUR', { asset: 'Kullanıcı Deniz Koç (00552604)', url: R.perms });
   add(ago(33), U.selin, 6, 'OTURUM', 'selin.aydin login oldu', { asset: 'Müşteri Portalı', url: R.customerApp });
   add(ago(38), U.mehmet, 4, 'YETKİ', 'Yetkisiz sayfa erişim denemesi: /dcim/permission-settings (ASP yetkisi yok)', { asset: 'İzin Ayarları', url: R.perms, res: 'denied' });
-  add(ago(45), U.emre, 3, 'KAPAK KİLİDİ', 'Kabin 1BX54 kilit açma komutu uygulanamadı (kilit motoru geri bildirimi yok)', { asset: 'Kabin 1BX54', url: R.locks, res: 'failed', doc: 'CMR', rid: 'POD5_1BX54_LOCK' });
-  add(ago(47), U.emre, 6, 'İŞ EMRİ', 'İş Emri Planlanıyora Alındı: İE-2026-0914 - 1BX54 kilit motoru değişimi', { asset: 'İE-2026-0914', url: R.wo, doc: 'WOR' });
-  add(ago(71), U.burak, 6, 'ENERJİ KONTROL', '1CB52 PDU-A Outlet 14 kapatıldı (yük dengeleme)', { asset: 'PDU 1CB52-A / Outlet 14', url: R.pdu, doc: 'ASM' });
-  add(ago(74), U.ayse, 4, 'ENERJİ KONTROL', '1CB52 PDU-A Outlet 14 kontrol talebi reddedildi — ENRK yetkisi yok', { asset: 'PDU 1CB52-A / Outlet 14', url: R.pdu, res: 'denied', doc: 'ASM' });
-  add(ago(118), U.emre, 6, 'KAPAK KİLİDİ', 'Kabin 1BG41 kilidi açıldı (ön kapak) — İE-2026-0931', { asset: 'Kabin 1BG41', url: R.locks, doc: 'CMR', rid: 'POD8_1BG41_FDOOR' });
-  add(ago(121), U.emre, 6, 'İŞ EMRİ', 'İş Emri İşleye Alındı: İE-2026-0931 - 1BG41 PDU-A modül değişimi', { asset: 'İE-2026-0931', url: R.wo, doc: 'WOR' });
-  add(ago(109), U.system, 6, 'KAPAK KİLİDİ', 'Kabin 1BN52 arka kapak kart ile açıldı (Can Öztürk · 04:0E:B4:59)', { asset: 'Kabin 1BN52', doc: 'CMR', rid: 'POD9_1BN52_RDOOR' });
-  [167, 168, 169].forEach(m => add(ago(m), U.system, 3, 'KAPAK KİLİDİ', 'Kabin 1BU50 yetkisiz kart denemesi (Kart 04:9C:11:7E)', { asset: 'Kabin 1BU50', res: 'denied', doc: 'CMR', rid: 'POD4_1BU50_FDOOR_AUTH' }));
+  add(ago(45), U.emre, 3, 'KAPAK KİLİDİ', 'Kabin 1DP06 kilit açma komutu uygulanamadı (kilit motoru geri bildirimi yok)', { asset: 'Kabin 1DP06', url: R.locks, res: 'failed', doc: 'CMR', rid: 'POD7_1DP06_LOCK' });
+  add(ago(47), U.emre, 6, 'İŞ EMRİ', 'İş Emri Planlanıyora Alındı: İE-2026-0914 - 1DP06 kilit motoru değişimi', { asset: 'İE-2026-0914', url: R.wo, doc: 'WOR' });
+  add(ago(71), U.burak, 6, 'ENERJİ KONTROL', '1DL03 PDU-A Outlet 14 kapatıldı (yük dengeleme)', { asset: 'PDU 1DL03-A / Outlet 14', url: R.pdu, doc: 'ASM' });
+  add(ago(74), U.ayse, 4, 'ENERJİ KONTROL', '1DL03 PDU-A Outlet 14 kontrol talebi reddedildi — ENRK yetkisi yok', { asset: 'PDU 1DL03-A / Outlet 14', url: R.pdu, res: 'denied', doc: 'ASM' });
+  add(ago(118), U.emre, 6, 'KAPAK KİLİDİ', 'Kabin 1DC06 kilidi açıldı (ön kapak) — İE-2026-0931', { asset: 'Kabin 1DC06', url: R.locks, doc: 'CMR', rid: 'POD2_1DC06_FDOOR' });
+  add(ago(121), U.emre, 6, 'İŞ EMRİ', 'İş Emri İşleye Alındı: İE-2026-0931 - 1DC06 PDU-A modül değişimi', { asset: 'İE-2026-0931', url: R.wo, doc: 'WOR' });
+  add(ago(109), U.system, 6, 'KAPAK KİLİDİ', 'Kabin 1DR03 arka kapak kart ile açıldı (Can Öztürk · 04:0E:B4:59)', { asset: 'Kabin 1DR03', doc: 'CMR', rid: 'POD8_1DR03_RDOOR' });
+  [167, 168, 169].forEach(m => add(ago(m), U.system, 3, 'KAPAK KİLİDİ', 'Kabin 1DN01 yetkisiz kart denemesi (Kart 04:9C:11:7E)', { asset: 'Kabin 1DN01', res: 'denied', doc: 'CMR', rid: 'POD7_1DN01_FDOOR_AUTH' }));
   // Kaba kuvvet giriş denemesi (misafir Wi-Fi segmenti)
-  [200, 201, 201.5, 202].forEach(m => add(ago(m), { usr: 'admin', nam: 'admin', ip: '172.16.99.23' }, 4, 'OTURUM', "'admin' şifre hatalı IP:'172.16.99.23'", { asset: 'Oturum', url: R.login, res: 'denied' }));
-  add(ago(203), { usr: 'administrator', nam: 'administrator', ip: '172.16.99.23' }, 4, 'OTURUM', "'administrator' kullanıcı adı hatalı IP:'172.16.99.23'", { asset: 'Oturum', url: R.login, res: 'denied' });
-  add(ago(204), U.system, 1, 'OTURUM', "172.16.99.23 adresinden 5 başarısız giriş — IP 15 dk engellendi", { asset: 'Oturum', res: 'denied', doc: 'DAS' });
+  [200, 201, 201.5, 202].forEach(m => add(ago(m), { usr: 'admin', nam: 'admin', ip: '192.168.99.23' }, 4, 'OTURUM', "'admin' şifre hatalı IP:'192.168.99.23'", { asset: 'Oturum', url: R.login, res: 'denied' }));
+  add(ago(203), { usr: 'administrator', nam: 'administrator', ip: '192.168.99.23' }, 4, 'OTURUM', "'administrator' kullanıcı adı hatalı IP:'192.168.99.23'", { asset: 'Oturum', url: R.login, res: 'denied' });
+  add(ago(204), U.system, 1, 'OTURUM', "192.168.99.23 adresinden 5 başarısız giriş — IP 15 dk engellendi", { asset: 'Oturum', res: 'denied', doc: 'DAS' });
   add(ago(26 * 60 + 12), U.murat, 6, 'USER', 'Kullanıcı Güncellendi: Elif Kaplan', { asset: 'Kullanıcı Elif Kaplan', url: R.accounts });
   add(ago(26 * 60 + 18), U.murat, 6, 'MÜŞTERİ', 'Anadolu Finans A.Ş. Müşterisinin Eşleştirmesi Güncellendi', { asset: 'Müşteri Anadolu Finans A.Ş.', url: R.cust, doc: 'CDB' });
   add(ago(3 * 1440 + 95), U.zeynep, 4, 'YETKİ', 'Yetki Sıfırlama: 00561190', { asset: 'Kullanıcı Can Öztürk (00561190)', url: R.perms });
@@ -5570,13 +5015,13 @@
     { w: 3, f: t => { const u = pick(STAFF); const c = cab(); add(t, u, 6, 'RAPOR', u.nam + ' Kişisi ' + c + '-PDU-A PDU Detay Raporunu PDF olarak indirdi.', { asset: 'PDU ' + c + '-A', url: R.pdu }); } },
     { w: 1, f: t => { const u = pick(STAFF); add(t, u, 4, 'RAPOR', u.nam + ' Kişisi Trafo Raporunu Oluşturamadı (Eksik Filtre).', { asset: 'Trafo Raporu', url: R.reports, res: 'failed' }); } },
     { w: 2, f: t => { const u = pick(CUSTOMERS.concat([U.can])); add(t, u, 4, 'RAPOR', u.nam + ' Kişisi Enerji Raporu indirme talebi reddedildi — RPSDL yetkisi yok', { asset: 'Enerji Raporu', url: u === U.can ? R.reports : R.customerApp, res: 'denied' }); } },
-    { w: 3, f: t => { const u = pick(ENGINEERS); const c = cab(); add(t, u, 6, 'PDU LAUNCH', u.nam + ' tarafından ' + c + '-PDU-B PDU\'su açıldı - Adres: http://10.130.12.' + (20 + Math.floor(rnd() * 200)), { asset: 'PDU ' + c + '-B', url: R.pdu }); } },
+    { w: 3, f: t => { const u = pick(ENGINEERS); const c = cab(); add(t, u, 6, 'PDU LAUNCH', u.nam + ' tarafından ' + c + '-PDU-B PDU\'su açıldı - Adres: http://10.24.12.' + (20 + Math.floor(rnd() * 200)), { asset: 'PDU ' + c + '-B', url: R.pdu }); } },
     { w: 3, f: t => { const u = pick(ENGINEERS); const c = cab(); add(t, u, 6, 'AYAR', u.nam + ' tarafindan ' + c + ' kabini icin sıcaklık üst eşiği güncellendi (27 °C)', { asset: 'Kabin ' + c, url: R.cab }); } },
     { w: 4, f: t => { const u = pick(ENGINEERS); const d = pick(DEVICES); add(t, u, 6, 'INFO', u.nam + ' kullanıcısı "' + d.label + '" (' + d.id + ') cihazını düzenlemeye başladı.', { asset: d.label + ' (' + d.id + ')', url: R.cab, doc: 'ASM' }); } },
     { w: 2, f: t => { const u = pick(ENGINEERS); const d = pick(DEVICES); add(t, u, 6, 'INFO', u.nam + ' Kişisi tarafından ' + d.label + ' Cihazının port bilgisini güncelledi.', { asset: d.label + ' (' + d.id + ')', url: R.cab, doc: 'ASM' }); } },
     { w: 2, f: t => { const u = pick(ADMINS.concat([U.mehmet])); add(t, u, 6, 'MÜŞTERİ', pick(CUSTOMER_NAMES) + ' Müşterisinin Eşleştirmesi Güncellendi', { asset: 'Müşteri Eşleştirme', url: R.cust, doc: 'CDB' }); } },
     { w: 6, f: t => { const u = pick(ENGINEERS.concat([U.deniz])); const c = cab(); add(t, u, 6, 'KAPAK KİLİDİ', 'Kabin ' + c + ' kilidi açıldı (' + pick(['ön', 'arka']) + ' kapak)', { asset: 'Kabin ' + c, url: R.locks, doc: 'CMR' }); } },
-    { w: 2, f: t => { const u = pick(CUSTOMERS.concat([U.can, U.ayse])); const c = cab(); add(t, u, 4, 'KAPAK KİLİDİ', 'Kabin ' + c + ' kilit açma talebi reddedildi — LCK yetkisi yok', { asset: 'Kabin ' + c, url: u.ip.indexOf('172.16.20.') === 0 ? R.customerApp : R.locks, res: 'denied', doc: 'CMR' }); } },
+    { w: 2, f: t => { const u = pick(CUSTOMERS.concat([U.can, U.ayse])); const c = cab(); add(t, u, 4, 'KAPAK KİLİDİ', 'Kabin ' + c + ' kilit açma talebi reddedildi — LCK yetkisi yok', { asset: 'Kabin ' + c, url: u.ip.indexOf('192.168.50.') === 0 ? R.customerApp : R.locks, res: 'denied', doc: 'CMR' }); } },
     { w: 2, f: t => { const u = pick(ENGINEERS); const c = cab(); add(t, u, 6, 'ENERJİ KONTROL', c + ' PDU-' + pick(['A', 'B']) + ' Outlet ' + (1 + Math.floor(rnd() * 24)) + ' ' + pick(['kapatıldı (planlı bakım)', 'açıldı (bakım sonrası)', 'yeniden başlatıldı']), { asset: 'PDU ' + c, url: R.pdu, doc: 'ASM' }); } },
     { w: 1, f: t => { const u = pick([U.mehmet, U.ayse, U.selin]); const c = cab(); add(t, u, 4, 'ENERJİ KONTROL', c + ' PDU-A Outlet kontrol talebi reddedildi — ENRK yetkisi yok', { asset: 'PDU ' + c, url: R.pdu, res: 'denied', doc: 'ASM' }); } },
     { w: 2, f: t => { const u = pick([U.mehmet, U.ayse, U.selin, U.elif, U.can]); const pg = pick([['/dcim/permission-settings', 'ASP', 'İzin Ayarları'], ['/dcim/account-settings', 'ASU', 'Kullanıcı Ayarları'], ['/report-user-logs', 'RPSUL', 'Kullanıcı Logları'], ['/dcim/engineering', 'Mühendislik', 'Mühendislik']]); add(t, u, 4, 'YETKİ', 'Yetkisiz sayfa erişim denemesi: ' + pg[0] + ' (' + pg[1] + ' yetkisi yok)', { asset: pg[2], url: HOST + '/k' + pg[0], res: 'denied' }); } },
@@ -5899,21 +5344,20 @@
     },
     {
       title: 'A Blok — Analizörler', meters: [
-        { id: 'T00_A_SYNC', name: 'SYNC. Analizor', kind: 'sum', of: ['A'], aggregate: true },
-        { id: 'T00_AD_AN1', name: 'AD. Analizor-1 (UPS A1–A4 Giriş)', kind: 'ups', ups: ['A1', 'A2', 'A3', 'A4'], side: 'A' },
-        { id: 'T00_AD_AN2', name: 'AD. Analizor-2 (UPS A5–A7 Giriş)', kind: 'ups', ups: ['A5', 'A6', 'A7'], side: 'A' },
-        { id: 'T00_AD_AN3', name: 'AD. Analizor-3 (A1 KLIMA PANOSU)', kind: 'panel', panel: 'A1 KLIMA PANOSU', side: 'A' },
-        { id: 'T00_A1_KLM', name: 'A1 Klima Panosu PMM', kind: 'panel', panel: 'A1 Klima Panosu', side: 'A' },
+        { id: 'T00_A_SYNC', name: 'A Hattı Toplam Analizör', kind: 'sum', of: ['A'], aggregate: true },
+        { id: 'T00_AD_AN1', name: 'A Analizör-1 (UPS A1–A4 Giriş)', kind: 'ups', ups: ['A1', 'A2', 'A3', 'A4'], side: 'A' },
+        { id: 'T00_AD_AN2', name: 'A Analizör-2 (UPS A5–A7 Giriş)', kind: 'ups', ups: ['A5', 'A6', 'A7'], side: 'A' },
+        { id: 'T00_AD_AN3', name: 'A Analizör-3 (A1 KLIMA PANOSU)', kind: 'panel', panel: 'A1 KLIMA PANOSU', side: 'A' },
         { id: 'T00_A2_KLM', name: 'A2 Klima Panosu PMM', kind: 'panel', panel: 'A2 Klima Panosu', side: 'A' },
-        { id: 'T00_A3_KLM', name: 'A3 Klima Panosu (113 114) PMM', kind: 'panel', panel: 'A3 Klima Panosu (113 114)', side: 'A' }
+        { id: 'T00_A3_KLM', name: 'A3 Klima Panosu PMM', kind: 'panel', panel: 'A3 Klima Panosu', side: 'A' }
       ]
     },
     {
       title: 'B Blok — Analizörler', meters: [
-        { id: 'T00_BD_AN', name: 'BD. Analizor', kind: 'sum', of: ['B'], aggregate: true },
-        { id: 'T00_B_AN2', name: 'Analizor-2 (UPS B1–B4 Giriş)', kind: 'ups', ups: ['B1', 'B2', 'B3', 'B4'], side: 'B' },
-        { id: 'T00_B_AN3', name: 'Analizor-3 (UPS B5–B7 Giriş)', kind: 'ups', ups: ['B5', 'B6', 'B7'], side: 'B' },
-        { id: 'T00_B_AN4', name: 'Analizor-4 (Aydınlatma / Yardımcı)', kind: 'aux', side: 'B' },
+        { id: 'T00_BD_AN', name: 'B Hattı Toplam Analizör', kind: 'sum', of: ['B'], aggregate: true },
+        { id: 'T00_B_AN2', name: 'B Analizör-1 (UPS B1–B4 Giriş)', kind: 'ups', ups: ['B1', 'B2', 'B3', 'B4'], side: 'B' },
+        { id: 'T00_B_AN3', name: 'B Analizör-2 (UPS B5–B7 Giriş)', kind: 'ups', ups: ['B5', 'B6', 'B7'], side: 'B' },
+        { id: 'T00_B_AN4', name: 'B Analizör-3 (Aydınlatma / Yardımcı)', kind: 'aux', side: 'B' },
         { id: 'T00_B1_KLM', name: 'B1 Klima Panosu PMM', kind: 'panel', panel: 'B1 Klima Panosu', side: 'B' },
         { id: 'T00_B2_KLM', name: 'B2 Klima Panosu PMM', kind: 'panel', panel: 'B2 Klima Panosu', side: 'B' },
         { id: 'T00_KLM_KONTROL', name: 'Klimalar Kontrol Panosu PMM', kind: 'panel', panel: 'Klimalar Kontrol Panosu', side: 'B' }
@@ -6086,27 +5530,27 @@
         {
           id: 'EN01010000000000', title: 'ANKARA', children: [
             {
-              id: 'EN01010100000000', title: 'ÜMİTKÖY', children: [
-                { id: 'EN01010101000000', title: 'IDC4', go: { unavailable: true } },
+              id: 'EN01010100000000', title: 'VERİ MERKEZİ', children: [
+                { id: 'EN01010101000000', title: 'DCB', go: { unavailable: true } },
                 {
-                  id: 'EN01010102000000', title: 'IDC1', children: [
+                  id: 'EN01010102000000', title: 'DCA', children: [
                     { id: 'EN01010102010000', title: 'Genel', go: { tab: 'overview' } },
                     {
                       id: 'EN01010102020000', title: 'A Blok', go: { tab: 'meters', q: 'A Blok' }, children: [
                         { id: 'EN0101010202000000', title: 'Tek Hat', go: { tab: 'overview' } },
-                        { id: 'EN0101010202000000b', title: 'Sync Analizör', go: { tab: 'meters', q: 'SYNC' } },
-                        { id: 'EN0101010202000000c', title: 'AD. Analizör-1', go: { tab: 'meters', q: 'AD. Analizor-1' } },
-                        { id: 'EN0101010202000000d', title: 'AD. Analizör-2', go: { tab: 'meters', q: 'AD. Analizor-2' } },
-                        { id: 'EN0101010202000000e', title: 'AD. Analizör-3', go: { tab: 'meters', q: 'AD. Analizor-3' } }
+                        { id: 'EN0101010202000000b', title: 'A Hattı Toplam Analizör', go: { tab: 'meters', q: 'A Hattı Toplam' } },
+                        { id: 'EN0101010202000000c', title: 'A Analizör-1', go: { tab: 'meters', q: 'A Analizör-1' } },
+                        { id: 'EN0101010202000000d', title: 'A Analizör-2', go: { tab: 'meters', q: 'A Analizör-2' } },
+                        { id: 'EN0101010202000000e', title: 'A Analizör-3', go: { tab: 'meters', q: 'A Analizör-3' } }
                       ]
                     },
                     {
                       id: 'EN01010102030000', title: 'B Blok', go: { tab: 'meters', q: 'B Blok' }, children: [
                         { id: 'EN0101010203000000', title: 'Tek Hat', go: { tab: 'overview' } },
-                        { id: 'EN0101010203000000b', title: 'BD. Analizör', go: { tab: 'meters', q: 'BD. Analizor' } },
-                        { id: 'EN0101010203000000c', title: 'Analizör 2', go: { tab: 'meters', q: 'Analizor-2 (UPS B' } },
-                        { id: 'EN0101010203000000d', title: 'Analizör 3', go: { tab: 'meters', q: 'Analizor-3 (UPS B' } },
-                        { id: 'EN0101010203000000e', title: 'Analizör 4', go: { tab: 'meters', q: 'Analizor-4' } }
+                        { id: 'EN0101010203000000b', title: 'B Hattı Toplam Analizör', go: { tab: 'meters', q: 'B Hattı Toplam' } },
+                        { id: 'EN0101010203000000c', title: 'B Analizör-1', go: { tab: 'meters', q: 'B Analizör-1' } },
+                        { id: 'EN0101010203000000d', title: 'B Analizör-2', go: { tab: 'meters', q: 'B Analizör-2' } },
+                        { id: 'EN0101010203000000e', title: 'B Analizör-3', go: { tab: 'meters', q: 'B Analizör-3' } }
                       ]
                     },
                     { id: 'EN01010103000000', title: 'Kompanzasyon', go: { tab: 'meters', q: 'Kompanzasyon' } },

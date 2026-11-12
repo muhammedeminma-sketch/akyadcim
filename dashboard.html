@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="utf-8">
+  <title>DCIM TT — Genel Bakış</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="assets/img/Turk-Telekom-Symbol.png">
+  <script>try{var m=localStorage.getItem('akya_theme_mode');if(m==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}var s=parseInt(localStorage.getItem('akya_ui_scale')||'100',10);document.documentElement.style.fontSize=([75,90,100,115,130].indexOf(s)>=0?s:100)+'%';}catch(e){document.documentElement.style.fontSize='100%';}</script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/tailwind-extra.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body class="dark">
+  <div class="h-screen flex flex-col font-sans bg-slate-100 dark:bg-surface-base text-slate-900 dark:text-slate-100 transition-colors duration-150 overflow-hidden">
+    <header id="app-header" class="h-13 shrink-0 bg-white dark:bg-surface-base border-b border-slate-200 dark:border-border-subtle sticky top-0 z-40 flex items-center justify-between px-3 md:px-4 shadow-2xs select-none" data-report-hide></header>
+
+    <main class="flex-1 min-h-0 overflow-hidden bg-slate-100 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 p-2.5 sm:p-3 flex flex-col">
+      <!-- Tek ekran yerleşimi: başlık + KPI satırı + kalan yüksekliği dolduran ızgara; taşan içerik kart içinde kayar -->
+      <div class="flex flex-col flex-1 min-h-0 w-full">
+        <div class="flex flex-col flex-1 min-h-0 gap-3 overflow-y-auto">
+
+          <!-- Sayfa başlığı (app-page-header, compact): canlı durum, Dashboard Yönetimi ve 2D kısayolu -->
+          <div class="shrink-0 mb-1 pb-1 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800/80 select-none">
+            <div class="flex items-center gap-3">
+              <div>
+                <nav class="max-lg:hidden flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 mb-0.5 font-medium">
+                  <a href="dashboard.html" class="hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"><i class="pi pi-home text-[10px]"></i></a>
+                  <i class="pi pi-chevron-right text-[8px] text-slate-400"></i>
+                  <span class="text-slate-700 dark:text-slate-300 font-bold">Operasyon Merkezi</span>
+                </nav>
+                <div class="flex items-center gap-2">
+                  <h1 class="text-sm md:text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100">Operasyon Merkezi</h1>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5 shrink-0 ml-auto">
+              <div data-report-hide class="flex flex-wrap items-center gap-2" id="dash-actions"></div>
+            </div>
+          </div>
+
+          <!-- 1. KPI kartları -->
+          <section id="dash-kpis" class="shrink-0 grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-3"></section>
+
+          <!-- 2. Ana ızgara -->
+          <section id="dash-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:flex-1 lg:min-h-[22rem]"></section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/layout-data.js"></script>
+  <script src="js/mock-data.js"></script>
+  <script src="js/mock/alarms.data.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/report-kit.js"></script>
+  <script src="js/mock/eng-ticket-management.data.js"></script>
+  <script src="js/mock/dashboard.data.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

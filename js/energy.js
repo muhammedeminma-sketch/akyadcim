@@ -153,7 +153,7 @@
     const go = target.go;
     if (!go) { state.collapsed.delete(n.id); renderSidebar(); return; }
     if (go.unavailable) {
-      toast(target.title + ' şeması bu sunumda yer almıyor; IDC1 (Kat 1 / Salon 1) verileri gösteriliyor.', 'info', 'Enerji Genel Görünüm');
+      toast(target.title + ' şeması bu sunumda yer almıyor; DCA (Kat 1 / Salon 1) verileri gösteriliyor.', 'info', 'Enerji Genel Görünüm');
       return;
     }
     state.activeNodeId = target.id;
@@ -358,7 +358,7 @@
               '<div class="flex items-center justify-between mb-2 border-b border-slate-100 dark:border-slate-800/80 pb-2">' +
                 '<div class="flex items-center gap-2"><i class="pi pi-share-alt text-sky-600 dark:text-sky-400 text-sm"></i>' +
                   '<div><h3 class="text-xs font-extrabold text-slate-900 dark:text-slate-100 leading-none">Enerji Akış Özeti</h3>' +
-                  '<p class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">IDC1 · Kat 1 Enerji Tek Hat (özet) — şebeke → trafo → ATS → dağıtım → UPS → BT</p></div></div>' +
+                  '<p class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">DCA · Kat 1 Enerji Tek Hat (özet) — şebeke → trafo → ATS → dağıtım → UPS → BT</p></div></div>' +
                 '<div class="flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">' +
                   '<span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-emerald-500"></span>Enerji akışı</span>' +
                   '<span class="flex items-center gap-1"><span class="w-3 h-0.5 border-t border-dashed border-slate-400"></span>Beklemede</span>' +
@@ -419,7 +419,7 @@
         setN(s + '-grid', fnum(g.voltage, 0) + ' V', fnum(g.freq, 2) + ' Hz · ŞEBEKEDE');
         setN(s + '-tr', fnum(g.kw, 0) + ' kW', 'Aktif güç');
         setN(s + '-ats', 'ŞEBEKE', 'Jeneratör: ' + (gen.running ? 'test' : 'hazır'));
-        setN(s + '-dist', fnum(g.kw, 0) + ' kW', side === 'A' ? 'SYNC. Analizor' : 'BD. Analizor');
+        setN(s + '-dist', fnum(g.kw, 0) + ' kW', side === 'A' ? 'A Hattı Toplam Analizör' : 'B Hattı Toplam Analizör');
         const subU = grp.battery.length ? grp.battery.map(x => x.replace('UPS ', '')).join(', ') + ' akü modunda'
           : grp.lost ? grp.lost + ' SNMP kaybı · ' + grp.warning + ' uyarı' : grp.warning ? grp.warning + ' uyarı' : grp.count + ' UPS normal';
         setN(s + '-ups', fnum(itSide.reduce((x, u) => x + (u.mode === 'battery' ? 0 : (u.load || 0) * 0.8 / 0.955), 0), 0) + ' kW', subU, upsSt, upsSt === 'alarm' ? 't-alarm' : upsSt === 'normal' ? '' : 't-warning');
@@ -431,7 +431,7 @@
         setL(s + '-gen', 'idle');
         setL(s + '-cool', coolWarn ? 'warn' : 'flow');
       });
-      setN('aux', fnum(o.auxKw, 1) + ' kW', 'Analizor-4');
+      setN('aux', fnum(o.auxKw, 1) + ' kW', 'B Analizör-3');
       setL('aux-l', 'flow');
 
       // Şebeke / Jeneratör durum kartları

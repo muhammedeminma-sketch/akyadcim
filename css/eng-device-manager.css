@@ -1,0 +1,6 @@
+/* ==========================================================================
+   Mühendislik / Cihaz Ekle (Model Kütüphanesi) — engineering.html#device-manager
+   device-manager.component.html: app-card [fill] karşılığı (.eng-dm-card) — içerik kendi içinde kayar.
+   ========================================================================== */
+.eng-dm table th { font-weight: 700; }
+.eng-dm [data-dm-liblist] thead th { white-space: nowrap; }

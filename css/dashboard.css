@@ -1,0 +1,7 @@
+/* ==========================================================================
+   Genel Bakış (dashboard.html) — sayfaya özgü küçük ayarlar
+   Bileşenin kendi stil dosyası yoktur; görünüm tamamen Tailwind sınıflarıyla (dashboard.component.html).
+   ========================================================================== */
+
+/* Kart içi listeler kayarken özet şeridi (sticky) kartın gövde rengini korusun */
+[data-card] [data-card-body] { scrollbar-width: thin; }

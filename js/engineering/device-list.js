@@ -18,8 +18,8 @@
    - Silme onayı window.confirm yerine app-dialog (DCIM.ui.dialog) ile; kaydet/sil sonrası SysLog metni toast olarak gösterilir.
    - Kaydet orijinalde cihazı durdurup (sta 0x0000) yeniden başlatır (0x0303); sunumda cihaz durumu korunur.
    Derin bağlantılar (engineering.html#device-list?...):
-     ?q=<metin>                         tablo araması (ör. q=UPS, q=1BJ53)
-     ?cabinet=<kod> | ?loc=<metin> | ?pdu=<metin>   filtre çubuğunu açık ve dolu başlat (ör. cabinet=1CE51, loc=POD 9)
+     ?q=<metin>                         tablo araması (ör. q=UPS, q=1DU06)
+     ?cabinet=<kod> | ?loc=<metin> | ?pdu=<metin>   filtre çubuğunu açık ve dolu başlat (ör. cabinet=1DM03, loc=POD 9)
      ?status=normal|warning|alarm|critical|disabled|disconnected|stale   durum filtresi (ör. status=disconnected)
      ?open=<cihaz id>|1                 detay penceresini aç (1 → ilk satır; ör. open=KAT1_SAL1_B7_UPS)
      ?edit=1                            (open ile) pencereyi düzenleme modunda aç

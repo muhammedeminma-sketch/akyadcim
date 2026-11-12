@@ -28,6 +28,7 @@
 
 .cv-host .canvas-wrapper {
   position: relative;
+  isolation: isolate;  /* iç katmanlar (üst şerit: z 60) burada kalır; başlık (z-40) açılır menüleri üstte görünür */
   overflow: hidden;
   border: 1px solid var(--color-border-subtle, #1b263b);
   border-radius: 2px;

@@ -30,31 +30,16 @@
               </nav>
               <div class="flex items-center gap-2">
                 <h1 class="text-sm md:text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100" id="page-title">ANLIK ALARMLAR</h1>
-                <span class="px-2 py-0.5 text-[10px] font-extrabold rounded-[2px] bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30" id="page-badge">CANLI</span>
               </div>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2.5 shrink-0 ml-auto">
-            <div class="flex items-center gap-2" id="header-actions"></div>
+            <div class="flex flex-wrap items-center gap-2" id="header-actions"></div>
           </div>
         </div>
 
-        <!-- Sekmeler: Aktif / Tarihsel -->
-        <div class="shrink-0 flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1 bg-slate-200/70 dark:bg-slate-900/70 p-0.5 rounded-[2px] border border-slate-200 dark:border-border-subtle" id="alarm-tabs">
-            <button type="button" data-tab="active"></button>
-            <button type="button" data-tab="history"></button>
-          </div>
-          <div class="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-slate-500 dark:text-slate-400">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>CMA/S00 · Canlı alarm akışı</span>
-            <span class="text-slate-400">|</span>
-            <span id="last-refresh">--:--:--</span>
-          </div>
-        </div>
-
-        <!-- Alarm Şiddeti Özet Sayaçları -->
-        <div class="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-2" id="severity-cards"></div>
+        <!-- Grup süzgeci alarmı sessizce saklamaz: gizlenen alarm sayısı ve gruplar her zaman görünür -->
+        <div id="grp-note" class="hidden"></div>
 
         <!-- SCADA Data Table (app-data-table) -->
         <div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs flex flex-col flex-1 min-h-0 overflow-hidden w-full" id="alarm-table"></div>
@@ -68,6 +53,8 @@
   <script src="js/layout-data.js"></script>
   <script src="js/mock-data.js"></script>
   <script src="js/shell.js"></script>
+  <script src="js/report-kit.js"></script>
+  <script src="js/mock/alarms.data.js"></script>
   <script src="js/alarms.js"></script>
 </body>
 </html>

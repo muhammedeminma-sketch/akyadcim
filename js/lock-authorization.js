@@ -15,7 +15,7 @@
    Derin bağlantılar:
      ?tab=users | groups | logs     açılış sekmesi
      ?pod=POD-8                     POD kapsamı
-     ?cabinet=1BN52                 kabin kapsamı (POD otomatik seçilir)
+     ?cabinet=1DR03                 kabin kapsamı (POD otomatik seçilir)
      ?q=deniz                       arama (kullanıcı / kart / yetki no / kabin)
      ?status=active|timed|scheduled|expired|revoked
      ?result=denied|granted         erişim kayıtları sonuç filtresi (logs sekmesi)
@@ -62,7 +62,8 @@
   const CABS = LOCK_CARDS.map(c => ({ code: c.cabinetCode, pod: c.pod, customer: c.cabinet.customer, lock: c }));
   const CAB_BY = {};
   CABS.forEach(c => { CAB_BY[c.code] = c; });
-  const podOrder = p => { const m = /^(NS|POD-)(\d+)$/.exec(p); return m ? (m[1] === 'NS' ? 0 : 100) + Number(m[2]) : 999; };
+  // Ağ sıraları (1. kat yerleşiminde NW-1, NW-2) önce, sonra POD-1..POD-10
+  const podOrder = p => { const m = /^(NS|NW-|POD-)(\d+)$/.exec(p); return m ? (m[1] === 'POD-' ? 100 : 0) + Number(m[2]) : 999; };
   const PODS = uniq(CABS.map(c => c.pod)).sort((a, b) => podOrder(a) - podOrder(b));
   const CABS_OF = {};
   PODS.forEach(p => { CABS_OF[p] = CABS.filter(c => c.pod === p).sort((a, b) => a.code.localeCompare(b.code)); });
@@ -138,11 +139,11 @@
   const permNames = arr => permOrder(arr).map(k => PERM_BY[k].label).join(', ');
 
   const WORK_ORDERS = [
-    { id: 'İE-2026-0931', name: '1BG41 PDU-A modül değişimi' },
+    { id: 'İE-2026-0931', name: '1DC06 PDU-A modül değişimi' },
     { id: 'İE-2026-0928', name: 'KLIMA 109 kompresör basınç kontrolü' },
     { id: 'İE-2026-0925', name: 'UPS A5 akü grubu kapasite testi' },
-    { id: 'İE-2026-0919', name: '1AV42 PDU-B faz onarımı' },
-    { id: 'İE-2026-0914', name: '1BX54 kilit motoru değişimi' },
+    { id: 'İE-2026-0919', name: '1NA06 PDU-B faz onarımı' },
+    { id: 'İE-2026-0914', name: '1DP06 kilit motoru değişimi' },
     { id: 'İE-2026-0907', name: 'KLIMA 104 filtre değişimi' },
     { id: 'İE-2026-0902', name: 'POD-6 kablo tavası düzenlemesi' }
   ];
@@ -152,15 +153,15 @@
   // ---------------------------------------------------------------------------
   const EGE = CABS.filter(c => c.customer === 'Ege Lojistik').map(c => c.code);
   const ANADOLU = CABS.filter(c => c.customer === 'Anadolu Finans A.Ş.').map(c => c.code);
-  const POD8 = (CABS_OF[podOf('1BN52')] || []).map(c => c.code);
-  const BURAK_CABS = (() => { const i = Math.max(0, POD8.indexOf('1BN52')); return POD8.slice(Math.max(0, i - 1), Math.max(0, i - 1) + 4); })();
+  const POD8 = (CABS_OF[podOf('1DR03')] || []).map(c => c.code);
+  const BURAK_CABS = (() => { const i = Math.max(0, POD8.indexOf('1DR03')); return POD8.slice(Math.max(0, i - 1), Math.max(0, i - 1) + 4); })();
 
   function seedGroups() {
     return [
       { id: 'GRP-01', name: 'NOC Operasyon', icon: 'pi pi-desktop', tone: 'sky', desc: '7/24 izleme ekibi — salon genelinde kapak takibi, kart ile giriş ve uzaktan kilitleme.', pod: '*', cabinets: 'ALL', sides: ['front', 'rear'], perms: ['view', 'unlock', 'lock'], mode: 'permanent', hours: 0, members: ['00549854', '00551207', '00551873'], createdAt: ago(310 * 1440) },
       { id: 'GRP-02', name: 'Güvenlik Ekibi', icon: 'pi pi-shield', tone: 'rose', desc: 'Fiziksel güvenlik — alarm ve zorlama durumlarında tüm kilitlere müdahale.', pod: '*', cabinets: 'ALL', sides: ['front', 'rear'], perms: ['view', 'unlock', 'lock'], mode: 'permanent', hours: 0, members: ['00552604'], createdAt: ago(310 * 1440) },
       { id: 'GRP-03', name: 'Enerji & Mekanik Bakım', icon: 'pi pi-wrench', tone: 'amber', desc: 'İş emrine bağlı bakım erişimi — varsayılan 8 saatlik bakım penceresi.', pod: '*', cabinets: 'ALL', sides: ['front', 'rear'], perms: ['view', 'unlock', 'lock'], mode: 'timed', hours: 8, members: ['00553318', '00550437', '00554419'], createdAt: ago(240 * 1440) },
-      { id: 'GRP-04', name: 'Yüklenici Bakım Firması', icon: 'pi pi-briefcase', tone: 'slate', desc: 'Harici firma personeli — refakatli, süreli ve kabin bazında erişim.', pod: podOf('1BN52'), cabinets: ['1BN52'], sides: ['rear'], perms: ['view', 'unlock'], mode: 'timed', hours: 4, members: ['00561190'], createdAt: ago(120 * 1440) },
+      { id: 'GRP-04', name: 'Yüklenici Bakım Firması', icon: 'pi pi-briefcase', tone: 'slate', desc: 'Harici firma personeli — refakatli, süreli ve kabin bazında erişim.', pod: podOf('1DR03'), cabinets: ['1DR03'], sides: ['rear'], perms: ['view', 'unlock'], mode: 'timed', hours: 4, members: ['00561190'], createdAt: ago(120 * 1440) },
       { id: 'GRP-05', name: 'Müşteri — Ege Lojistik', icon: 'pi pi-building', tone: 'emerald', desc: 'Müşteri temsilcisi — yalnızca sözleşmeli kabinler (Ege Lojistik).', pod: '*', cabinets: EGE.slice(), sides: ['front', 'rear'], perms: ['view', 'unlock'], mode: 'permanent', hours: 0, members: ['00560042'], createdAt: ago(200 * 1440) },
       { id: 'GRP-06', name: 'Yetki Yöneticileri', icon: 'pi pi-key', tone: 'purple', desc: 'Kilit yetkilerini tanımlayan, denetleyen ve iptal eden yöneticiler.', pod: '*', cabinets: 'ALL', sides: ['front', 'rear'], perms: ['view', 'unlock', 'lock', 'manage'], mode: 'permanent', hours: 0, members: ['00547731', '00546120'], createdAt: ago(310 * 1440) }
     ];
@@ -188,14 +189,14 @@
     add({ user: '00549854', group: 'GRP-01', perms: ALL3, createdAt: ago(210 * 1440), reason: 'NOC vardiya operatörü' });
     add({ user: '00551207', group: 'GRP-01', perms: ALL3, createdAt: ago(180 * 1440), reason: 'NOC vardiya operatörü' });
     add({ user: '00551873', group: 'GRP-01', perms: ALL3, createdAt: ago(60 * 1440), createdBy: 'Murat Aksoy', reason: 'NOC vardiya operatörü' });
-    add({ user: '00553318', group: 'GRP-03', pod: podOf('1BG41'), cabinets: ['1BG41'], sides: ['front'], perms: ALL3, mode: 'timed', start: ago(150), end: ago(-90), wo: 'İE-2026-0931', reason: '1BG41 PDU-A modül değişimi — yetkili bakım penceresi', createdAt: ago(1300), woReq: true });
-    add({ user: '00554419', group: 'GRP-03', pod: podOf('1BJ53'), cabinets: 'ALL', sides: ['rear'], perms: ALL3, mode: 'timed', start: ago(300), end: ago(-1140), wo: 'İE-2026-0928', reason: 'Yüksek sıcaklık — arka kapak hava akışı ve körleme paneli kontrolü (1BJ53 / 1BC37)', createdAt: ago(310), createdBy: 'Deniz Koç' });
-    add({ user: '00550437', group: 'GRP-03', pod: podOf('1BX54'), cabinets: ['1BX54'], perms: ALL3, mode: 'timed', start: roundTo5(ago(-180)), end: roundTo5(ago(-660)), wo: 'İE-2026-0914', reason: '1BX54 kilit motoru değişimi — planlı bakım', createdAt: ago(240), woReq: true });
-    add({ user: '00548816', pod: podOf('1BN52'), cabinets: BURAK_CABS, perms: ALL3, mode: 'timed', start: ago(2 * 1440 + 35), end: ago(-5 * 1440 + 35), reason: 'Omurga switch geçişi — POD ağ kabinleri', createdAt: ago(2 * 1440 + 60), createdBy: 'Murat Aksoy' });
-    add({ user: '00561190', group: 'GRP-04', pod: podOf('1BN52'), cabinets: ['1BN52'], sides: ['rear'], perms: ['view', 'unlock'], mode: 'timed', start: ago(180), end: ago(20), reason: 'Yüklenici — arka panel kablolama (refakatli)', createdAt: ago(200), createdBy: 'Deniz Koç' });
+    add({ user: '00553318', group: 'GRP-03', pod: podOf('1DC06'), cabinets: ['1DC06'], sides: ['front'], perms: ALL3, mode: 'timed', start: ago(150), end: ago(-90), wo: 'İE-2026-0931', reason: '1DC06 PDU-A modül değişimi — yetkili bakım penceresi', createdAt: ago(1300), woReq: true });
+    add({ user: '00554419', group: 'GRP-03', pod: podOf('1DU06'), cabinets: 'ALL', sides: ['rear'], perms: ALL3, mode: 'timed', start: ago(300), end: ago(-1140), wo: 'İE-2026-0928', reason: 'Yüksek sıcaklık — arka kapak hava akışı ve körleme paneli kontrolü (1DU06 / 1DA07)', createdAt: ago(310), createdBy: 'Deniz Koç' });
+    add({ user: '00550437', group: 'GRP-03', pod: podOf('1DP06'), cabinets: ['1DP06'], perms: ALL3, mode: 'timed', start: roundTo5(ago(-180)), end: roundTo5(ago(-660)), wo: 'İE-2026-0914', reason: '1DP06 kilit motoru değişimi — planlı bakım', createdAt: ago(240), woReq: true });
+    add({ user: '00548816', pod: podOf('1DR03'), cabinets: BURAK_CABS, perms: ALL3, mode: 'timed', start: ago(2 * 1440 + 35), end: ago(-5 * 1440 + 35), reason: 'Omurga switch geçişi — POD ağ kabinleri', createdAt: ago(2 * 1440 + 60), createdBy: 'Murat Aksoy' });
+    add({ user: '00561190', group: 'GRP-04', pod: podOf('1DR03'), cabinets: ['1DR03'], sides: ['rear'], perms: ['view', 'unlock'], mode: 'timed', start: ago(180), end: ago(20), reason: 'Yüklenici — arka panel kablolama (refakatli)', createdAt: ago(200), createdBy: 'Deniz Koç' });
     add({ user: '00560042', group: 'GRP-05', cabinets: EGE.slice(), perms: ['view', 'unlock'], createdAt: ago(200 * 1440), reason: 'Müşteri sözleşmesi — Ege Lojistik kabinleri' });
     add({ user: '00562275', cabinets: ANADOLU.slice(), perms: ['view'], createdAt: ago(75 * 1440), createdBy: 'Murat Aksoy', reason: 'Müşteri temsilcisi — salt izleme (Anadolu Finans A.Ş.)' });
-    add({ user: '00553318', pod: podOf('1BX54'), cabinets: 'ALL', perms: ALL3, mode: 'timed', start: ago(9 * 1440), end: ago(9 * 1440 - 480), wo: 'İE-2026-0907', reason: 'KLIMA 104 filtre değişimi — kabin arkası erişim', createdAt: ago(9 * 1440 + 30) });
+    add({ user: '00553318', pod: podOf('1DP06'), cabinets: 'ALL', perms: ALL3, mode: 'timed', start: ago(9 * 1440), end: ago(9 * 1440 - 480), wo: 'İE-2026-0907', reason: 'KLIMA 104 filtre değişimi — kabin arkası erişim', createdAt: ago(9 * 1440 + 30) });
     add({ user: '00549120', pod: 'POD-3', cabinets: 'ALL', perms: ['view', 'unlock'], mode: 'timed', start: ago(15 * 1440), end: ago(12 * 1440), reason: 'Kapasite sayımı — U doluluk doğrulaması', createdAt: ago(15 * 1440 + 20) });
     add({ user: '00550966', group: 'GRP-01', perms: ALL3, createdAt: ago(260 * 1440), revokedAt: ago(30 * 1440), revokedBy: 'Zeynep Arslan', revokeReason: 'Kullanıcı hesabı pasife alındı' });
     add({ user: '00548816', pod: 'POD-6', cabinets: 'ALL', perms: ALL3, createdAt: ago(80 * 1440), createdBy: 'Murat Aksoy', revokedAt: ago(20 * 1440), revokedBy: 'Murat Aksoy', revokeReason: 'Proje tamamlandı (POD-6 kablo tavası)' });
@@ -290,10 +291,10 @@
       out.push({ id: 'S' + out.length, tim, user: userId, name: u.name, card: u.card, dept: u.dept, cab, side, event, result, ref, note, test: false });
     };
     const can = SEED_GRANTS.find(g => g.user === '00561190');
-    extra(ago(12), '00561190', '1BN52', 'rear', 'Kart okutuldu — yetki süresi dolmuş', 'denied', can ? can.id : '', can ? 'Yetki bitişi ' + fmtShort(can.end) : '');
-    extra(ago(9), '00560042', '1AZ39', 'front', 'Uzaktan kilit açma talebi (Müşteri Portalı)', 'denied', '', 'Kabin yetki kapsamı dışında');
-    extra(ago(6), '00552604', '1AZ39', 'front', 'Uzaktan kilit açıldı — güvenlik yerinde kontrol', 'granted', gid('00552604'), '');
-    extra(ago(40), '00550437', '1BX54', 'front', 'Kart okutuldu — yetki henüz başlamadı', 'denied', gid('00550437', g => g.mode === 'timed'), 'Planlı bakım penceresi bekleniyor');
+    extra(ago(12), '00561190', '1DR03', 'rear', 'Kart okutuldu — yetki süresi dolmuş', 'denied', can ? can.id : '', can ? 'Yetki bitişi ' + fmtShort(can.end) : '');
+    extra(ago(9), '00560042', '1DA03', 'front', 'Uzaktan kilit açma talebi (Müşteri Portalı)', 'denied', '', 'Kabin yetki kapsamı dışında');
+    extra(ago(6), '00552604', '1DA03', 'front', 'Uzaktan kilit açıldı — güvenlik yerinde kontrol', 'granted', gid('00552604'), '');
+    extra(ago(40), '00550437', '1DP06', 'front', 'Kart okutuldu — yetki henüz başlamadı', 'denied', gid('00550437', g => g.mode === 'timed'), 'Planlı bakım penceresi bekleniyor');
     const pod3 = (CABS_OF['POD-3'] || CABS)[2] || CABS[0];
     extra(ago(2 * 1440 + 312), '00549120', pod3.code, 'front', 'Kart okutuldu — yetki süresi dolmuş', 'denied', gid('00549120'), '');
     const pod5 = (CABS_OF['POD-5'] || CABS)[4] || CABS[0];
@@ -332,7 +333,7 @@
     const user = DCIM.session.user();
     let list = [];
     try { list = JSON.parse(storage.sessionGet('dcim_audit_session') || '[]'); } catch (e) { list = []; }
-    list.push({ tim: new Date().toISOString(), cat: 'YETKİ', txt, sta: 0x0105, user: user.usr || 'operator', ip: '10.130.1.45', url: 'http://10.130.1.111/k/dcim/monitoring/lock-authorization', asset, res: 'success' });
+    list.push({ tim: new Date().toISOString(), cat: 'YETKİ', txt, sta: 0x0105, user: user.usr || 'operator', ip: '10.24.1.45', url: 'https://dcim.dca.local/k/dcim/monitoring/lock-authorization', asset, res: 'success' });
     storage.sessionSet('dcim_audit_session', JSON.stringify(list.slice(-50)));
   }
 
@@ -544,7 +545,7 @@
       el.innerHTML = '<span class="hidden sm:inline-flex items-center gap-1.5 font-mono text-slate-500 dark:text-slate-400"><i class="pi pi-sitemap text-[10px] text-sky-500"></i>Kapsam: Tüm Salon · ' + PODS.length + ' POD · ' + CABS.length + ' kabin</span>';
       return;
     }
-    let html = chip('pi pi-building', 'Salon 1', '') + '<i class="pi pi-chevron-right text-[8px] text-slate-400"></i>' + chip('pi pi-map-marker', S.pod, 'pod');
+    let html = chip('pi pi-building', '1. Kat · 1. Salon', '') + '<i class="pi pi-chevron-right text-[8px] text-slate-400"></i>' + chip('pi pi-map-marker', S.pod, 'pod');
     if (S.cab) {
       const cab = CAB_BY[S.cab];
       const st = p => (p.state === 'open' ? '<span class="text-rose-600 dark:text-rose-400">AÇIK</span>' : p.lockState === 'fault' ? '<span class="text-orange-600 dark:text-orange-400">ARIZA</span>' : p.state === 'closed' ? '<span class="text-emerald-600 dark:text-emerald-400">KİLİTLİ</span>' : '<span class="text-slate-400">?</span>');
@@ -1258,7 +1259,7 @@
     return { ok: true, grant: withPerm, why: withPerm.id + (grp ? ' (' + grp.name + ')' : '') + ' kapsamında ' + PERM_BY[perm].label.toLocaleLowerCase('tr-TR') + ' izni geçerli.' };
   }
   function testDialog() {
-    const firstCab = S.cab || (S.pod ? CABS_OF[S.pod][0].code : '1AZ39');
+    const firstCab = S.cab || (S.pod ? CABS_OF[S.pod][0].code : '1DA03');
     const cabOptions = pod => CABS_OF[pod].map(c => ({ value: c.code, label: c.code + ' — ' + c.customer }));
     const dlg = dialog({
       title: 'Erişim Testi', subtitle: 'Kart/kullanıcı için yetki kararını doğrular. Kilide komut gönderilmez.', variant: 'info', maxWidth: 'max-w-xl',

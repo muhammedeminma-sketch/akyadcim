@@ -1,0 +1,22 @@
+/* ==========================================================================
+   DCIM Sunum — Kapasite Tahmini (reports.html#capacity-forecast)
+   capacity-forecast.component.ts stilleri (model analizi animasyonu) +
+   forecast-chart-3d.component CSS2D etiketlerinin karşılığı (izdüşümlü HTML etiketleri).
+   ========================================================================== */
+.fc-root .fc-step { opacity: 0; animation: fcIn .45s ease-out forwards; }
+.fc-root .fc-bar { transform-origin: left; animation: fcGrow .9s .9s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes fcIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes fcGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.fc3d-host canvas { display: block; position: absolute; inset: 0; }
+.fc3d-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.fc3d-label {
+  position: absolute; left: 0; top: 0; font-size: 11px; line-height: 1.2; white-space: nowrap;
+  margin-left: 0; will-change: transform;
+}
+/* CSS2DObject gibi: etiket noktaya ortalanır */
+.fc3d-label { translate: -50% -50%; }
+.fc3d-label.fc3d-left { translate: -100% -50%; }
+.fc3d-label.fc3d-right { translate: 0 -50%; }
+.fc3d-label.fc3d-chip { padding: 1px 6px; border-radius: 4px; background: rgba(15, 23, 42, 0.75); }
+html:not(.dark) .fc3d-label.fc3d-chip { background: rgba(255, 255, 255, 0.85); }

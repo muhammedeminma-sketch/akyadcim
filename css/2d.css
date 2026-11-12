@@ -1,0 +1,46 @@
+/* ==========================================================================
+   2D Dijital İkiz — sayfa stilleri
+   schematic-viewer.component.scss (POD düğmesi, odak işareti, tek değer hapı),
+   digital-twin-2d / cabinet-inline-detail kayma animasyonları
+   ========================================================================== */
+
+/* Kabin paneli (bölünmüş) ve cihaz detayı sağdan kayarak açılır */
+.detail-slide-in { animation: dt2d-detail-in 260ms ease-out both; }
+@keyframes dt2d-detail-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+.device-slide-in { animation: dt2d-device-in 300ms ease-out both; }
+@keyframes dt2d-device-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: translateX(0); } }
+
+/* Arama / POD odak işareti: seçilen öğenin çevresinde kayan kesikli çerçeve */
+.dt-focus-marker { animation: dt-focus-dash 0.9s linear infinite, dt-focus-pulse 1.3s ease-in-out infinite; }
+@keyframes dt-focus-dash { to { stroke-dashoffset: -32; } }
+@keyframes dt-focus-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* POD metinleri: tıklanabilir düğme (POD detay penceresi) */
+.pod-button { cursor: pointer; }
+.pod-button .pod-button-bg { fill: rgba(14, 165, 233, 0.14); stroke: #0ea5e9; stroke-width: 1.2; transition: fill 0.15s ease, stroke-width 0.15s ease; }
+.pod-button:hover .pod-button-bg { fill: rgba(14, 165, 233, 0.32); stroke-width: 2; }
+
+/* Tek değerli hap (POD koridor / klima dönüş sıcaklığı) */
+.dt-pill-bg { fill: rgba(255, 255, 255, 0.92); stroke: #94a3b8; stroke-width: 1; }
+.dt-pill-unit { fill: #475569; }
+.dt-pill-normal { fill: #15803d; }
+.dt-pill-warning { fill: #a16207; }
+.dt-pill-alarm { fill: #dc2626; }
+.dt-pill-lost { fill: #c2410c; }
+html.dark .dt-pill-bg { fill: rgba(15, 23, 42, 0.92); stroke: #475569; }
+html.dark .dt-pill-unit { fill: #94a3b8; }
+html.dark .dt-pill-normal { fill: #4ade80; }
+html.dark .dt-pill-warning { fill: #facc15; }
+html.dark .dt-pill-alarm { fill: #f87171; }
+html.dark .dt-pill-lost { fill: #fb923c; }
+
+/* Kroki etiket plakası (öğenin üstünde yarı saydam beyaz) */
+.dt-label-plate { fill: rgba(255, 255, 255, 0.70); stroke: rgba(194, 194, 194, 0.85); stroke-width: 0.6; }
+.dt-label-text { fill: #0f172a; font-weight: 700; }
+
+/* Şerit (hızlı seçim) kaydırma çubuğu gizli */
+.dt-chip-track { scrollbar-width: none; }
+.dt-chip-track::-webkit-scrollbar { display: none; }
+
+/* Ağ katmanları (Tel Tava / Fiber Runner) ve kat geçişi işaretleri yalnız görseldir */
+.network-layer, .network-riser { pointer-events: none; }

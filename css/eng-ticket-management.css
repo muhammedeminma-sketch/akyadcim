@@ -1,1 +1,15 @@
-/* Yer tutucu — ticket-management mühendislik sayfası stilleri (boş kalırsa ana ajan kaldırır) */
+/* Ticket Yönetimi (engineering.html#ticket-management) — şablonda kullanılan, başka sayfa CSS'lerinde tanımlı olduğu için
+   tools/build-extra-css.js'in üretmediği Tailwind sınıfları (engineering.html bu dosyaları yüklemez). */
+.text-\[10\.5px\] { font-size: 10.5px; }
+.tabular-nums { font-variant-numeric: tabular-nums; }
+.hover\:brightness-95:hover { filter: brightness(0.95); }
+.dark .dark\:ring-sky-400\/40 { --tw-ring-color: rgb(56 189 248 / 0.4); }
+
+/* Şablondaki important yuvarlatmalar (rounded-…!): styles.css'teki katmansız "* { border-radius: inherit }" ve
+   button/input için 2px !important kuralını ezer. tools/check-classes.js '!' son ekli sınıfları taramadığı için burada. */
+.rounded-full\! { border-radius: 9999px !important; }
+.rounded-\[4px\]\! { border-radius: 4px !important; }
+.rounded-\[5px\]\! { border-radius: 5px !important; }
+.rounded-\[7px\]\! { border-radius: 7px !important; }
+.rounded-\[8px\]\! { border-radius: 8px !important; }
+.rounded-t-\[7px\]\! { border-top-left-radius: 7px !important; border-top-right-radius: 7px !important; }

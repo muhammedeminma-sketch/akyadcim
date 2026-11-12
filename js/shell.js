@@ -113,7 +113,8 @@
   // ---------------------------------------------------------------------------
   function badgeLabel(s) {
     switch (s) {
-      case 'alarm': case 'critical': case 'kritik': case 'acil': case 'emergency': return 'Alarm';
+      case 'acil': case 'emergency': return 'Acil';
+      case 'alarm': case 'critical': case 'kritik': return 'Alarm';
       case 'warning': case 'uyarı': case 'major': case 'majör': case 'minor': case 'minör': return 'Uyarı';
       case 'koptu': return 'Koptu';
       case 'kayıp': case 'lost': case 'dataerr': case 'data_err': return 'Veri Alınamıyor';
@@ -125,7 +126,9 @@
   }
   function badgeClass(s) {
     switch (s) {
-      case 'alarm': case 'critical': case 'kritik': case 'acil': case 'emergency': case 'danger':
+      case 'acil': case 'emergency':
+        return 'bg-purple-500/10 text-purple-700 border-purple-300 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/50';
+      case 'alarm': case 'critical': case 'kritik': case 'danger':
         return 'bg-rose-500/10 text-rose-600 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/50';
       case 'warning': case 'uyarı': case 'major': case 'majör': case 'minor': case 'minör':
         return 'bg-amber-500/10 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/50';
@@ -143,7 +146,8 @@
   }
   function badgeDot(s) {
     switch (s) {
-      case 'alarm': case 'critical': case 'kritik': case 'acil': case 'emergency': case 'danger': return 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]';
+      case 'acil': case 'emergency': return 'bg-purple-500 shadow-[0_0_8px_rgba(147,51,234,0.8)]';
+      case 'alarm': case 'critical': case 'kritik': case 'danger': return 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]';
       case 'warning': case 'uyarı': case 'major': case 'majör': case 'minor': case 'minör': return 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]';
       case 'koptu': case 'kayıp': case 'lost': case 'dataerr': case 'data_err': return 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]';
       case 'normal': case 'active': case 'completed': return 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]';
@@ -273,126 +277,213 @@
   // navigation.config.ts → NAV_CATEGORIES (etiketler messages.tr.json'dan).
   // href'i olmayan öğeler sunumda hazır değildir: menüde görünür ama tıklanamaz.
   // "Kabin Yönetimi" orijinal menüde yoktur (kabinden açılır); sunum için Varlıklar altına eklendi.
+  // 11 Kas 2026 menüsü: Genel Bakış · Operasyon · Tesis · Varlıklar · İzleme · Raporlar · Yönetim.
+  // group: açılır menüde alt başlık (navigation.config.ts "group" alanı).
+  // "Kilit Yetkilendirme" orijinal menüde yoktur; sunum eklentisi olarak Yönetim altında.
   const NAV_CATEGORIES = [
+    { key: 'dashboard', label: 'Genel Bakış', icon: 'pi pi-home', href: 'dashboard.html' },
     {
       label: 'Operasyon', icon: 'pi pi-map', items: [
         { key: '2d', label: 'Dijital İkiz (2D)', icon: 'pi pi-map', href: '2d.html' },
         { key: '3d', label: 'Dijital İkiz (3D)', icon: 'pi pi-box', href: '3d.html' },
         { key: 'work-orders', label: 'İş Emirleri', icon: 'pi pi-list-check', href: 'work-orders.html' },
-        { key: 'customers', label: 'Müşteri Eşleştirme', icon: 'pi pi-users', href: 'customer-pages.html' }
-      ]
-    },
-    { key: 'bms', label: 'BMS · Bina Yönetimi', icon: 'pi pi-building', href: 'bms.html' },
-    {
-      label: 'Varlıklar', icon: 'pi pi-server', items: [
-        // Orijinalde all-assets'e gider; sunumda eşleşen müşteri listesine bağlandı
-        { key: 'customer-list', label: 'Müşteri Listesi', icon: 'pi pi-server', href: 'customer-pages.html?tab=matched' },
-        { key: 'pdu', label: 'PDU Detay Sayfası', icon: 'pi pi-bolt', href: 'pdu-detail.html' },
-        { key: 'locations', label: 'Lokasyon Şeması', icon: 'pi pi-building', href: 'location-list.html' },
-        { key: 'models', label: 'Model Kütüphanesi', icon: 'pi pi-tags', href: 'category-list.html' }
+        { key: 'customers', label: 'Müşteri Eşleştirme', icon: 'pi pi-users', href: 'customer-pages.html' },
+        { key: 'cctv', label: 'CCTV', icon: 'pi pi-video', href: 'cctv.html' }
       ]
     },
     {
-      // Orijinalde "Enerji" kategorisi PMS olarak yenilendi (Enerji Genel Görünüm → PMS Dashboard, aynı route).
-      // energy.html dosyası eski derin bağlantılar için yerinde duruyor.
-      label: 'PMS · Güç Yönetimi', icon: 'pi pi-bolt', items: [
+      // Orijinalde BMS ve PMS 9 Kas'ta "Tesis" açılır menüsünde birleşti.
+      // energy.html (eski Enerji Genel Görünüm) eski derin bağlantılar için yerinde duruyor.
+      label: 'Tesis', icon: 'pi pi-building', items: [
+        { key: 'bms', label: 'BMS · Bina Yönetimi', icon: 'pi pi-building', href: 'bms.html' },
         { key: 'pms', label: 'PMS Dashboard', icon: 'pi pi-bolt', href: 'pms.html' },
         { key: 'connectivity', label: 'SDP Kablolama Topolojisi', icon: 'pi pi-sitemap', href: 'connectivity.html' }
       ]
     },
     {
+      label: 'Varlıklar', icon: 'pi pi-server', items: [
+        // Orijinalde all-assets'e gider; sunumda eşleşen müşteri listesine bağlandı
+        { key: 'customer-list', label: 'Müşteri Varlıkları', icon: 'pi pi-server', href: 'customer-pages.html?tab=matched' },
+        { key: 'pdu', label: 'PDU Detay Sayfası', icon: 'pi pi-bolt', href: 'pdu-detail.html' },
+        { key: 'locations', label: 'Lokasyon Şeması', icon: 'pi pi-building', href: 'location-list.html' },
+        { key: 'models', label: 'Model Kütüphanesi', icon: 'pi pi-tags', href: 'category-list.html' },
+        { key: 'lnk-failed', label: 'Import Hata Kayıtları', icon: 'pi pi-exclamation-circle', href: 'lnk-failed-list.html' }
+      ]
+    },
+    {
       label: 'İzleme', icon: 'pi pi-bell', items: [
-        { key: 'alarms', label: 'Aktif Alarmlar', icon: 'pi pi-exclamation-triangle', href: 'alarms.html' },
-        { key: 'history', label: 'Tarihsel Alarmlar', icon: 'pi pi-history', href: 'alarms.html?tab=history' },
-        { key: 'events', label: 'Otonom Olaylar', icon: 'pi pi-history', href: 'events.html' },
-        { key: 'telemetry', label: 'Telemetri Noktaları', icon: 'pi pi-circle-fill', href: 'telemetry-points.html' },
-        { key: 'health', label: 'Sistem Sağlığı', icon: 'pi pi-heart-fill', href: 'system-health.html' },
-        { key: 'locks', label: 'Kapak Kilitleri', icon: 'pi pi-lock', href: 'locks.html' }
+        { key: 'alarms', label: 'Aktif Alarmlar', icon: 'pi pi-exclamation-triangle', href: 'alarms.html', group: 'Alarm ve Olaylar' },
+        { key: 'history', label: 'Tarihsel Alarmlar', icon: 'pi pi-history', href: 'alarms.html?tab=history', group: 'Alarm ve Olaylar' },
+        { key: 'events', label: 'Otonom Olaylar', icon: 'pi pi-list', href: 'events.html', group: 'Alarm ve Olaylar' },
+        { key: 'telemetry', label: 'Telemetri Noktaları', icon: 'pi pi-circle-fill', href: 'telemetry-points.html', group: 'Alarm ve Olaylar' },
+        { key: 'tickets', label: 'Ticket Yönetimi', icon: 'pi pi-ticket', href: 'engineering.html#ticket-management', group: 'Servis ve Bakım' },
+        { key: 'maintenance', label: 'Bakım Modülü', icon: 'pi pi-wrench', href: 'maintenance.html', group: 'Servis ve Bakım' },
+        { key: 'health', label: 'Sistem Sağlığı', icon: 'pi pi-heart-fill', href: 'system-health.html', group: 'Sağlık ve Analiz' },
+        { key: 'locks', label: 'Kapak Kilitleri', icon: 'pi pi-lock', href: 'locks.html', group: 'Sağlık ve Analiz' },
+        { key: 'cabin-anomaly', label: 'Kabin Anomali', icon: 'pi pi-chart-line', href: 'cabin-anomaly.html', group: 'Sağlık ve Analiz' }
       ]
     },
     { key: 'reports', label: 'Raporlar', icon: 'pi pi-file', href: 'reports.html' },
-    { key: 'engineering', label: 'Mühendislik', icon: 'pi pi-wrench', href: 'engineering.html' },
     {
       label: 'Yönetim', icon: 'pi pi-cog', items: [
         { key: 'accounts', label: 'Kullanıcı Ayarları', icon: 'pi pi-users', href: 'account-settings.html' },
         { key: 'permissions', label: 'Yetki Ayarları', icon: 'pi pi-shield', href: 'permission-settings.html' },
-        { key: 'lock-auth', label: 'Kilit Yetkilendirme', icon: 'pi pi-key', href: 'lock-authorization.html' },
-        { key: 'audit', label: 'Audit ve Loglar', icon: 'pi pi-book', href: 'audit-logs.html' }
+        { key: 'audit', label: 'Audit ve Loglar', icon: 'pi pi-book', href: 'audit-logs.html' },
+        { key: 'engineering', label: 'Mühendislik', icon: 'pi pi-wrench', href: 'engineering.html' },
+        { key: 'lock-auth', label: 'Kilit Yetkilendirme', icon: 'pi pi-key', href: 'lock-authorization.html' }
       ]
     }
   ];
+  // Kendi menü öğesi olmayan sayfalar menüde şu öğeyi vurgular (navigation.config.ts activeRoutes)
+  const NAV_ALIAS = { 'customer-auth': 'accounts' };
   const NAV_DISABLED = 'opacity-40 pointer-events-none cursor-not-allowed';
-  const NAV_ACTIVE = 'border-b-2 border-sky-600 text-sky-600 dark:text-sky-400 font-bold';
-  const NAV_IDLE = 'border-b-2 border-transparent text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 font-semibold';
+  // new-ui-shell.component.html (11 Kas): seçili göstergesi yazının altında 2px çizgi; açık menü çizgi almaz
+  const NAV_ITEM = 'relative px-2 xl:px-3 h-full transition-colors flex items-center whitespace-nowrap';
+  const navTone = (on, open) => on ? 'text-sky-600 dark:text-sky-400 font-bold' : open ? 'text-sky-600 dark:text-sky-400 font-semibold' : 'text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 font-semibold';
+  const navLabel = (label, on) => '<span class="relative">' + esc(label) +
+    (on ? '<span aria-hidden="true" class="absolute left-0 right-0 top-full mt-1 h-0.5 rounded-[1px] bg-sky-600 dark:bg-sky-400 pointer-events-none"></span>' : '') + '</span>';
   let openDropdown = '';
+  let mobileOpen = false;
+  let userOpen = false;
+  let locationLabel = '';
 
   function renderNav(active) {
     return NAV_CATEGORIES.map(cat => {
       if (!cat.items) {
         if (!cat.href) return '';
-        const cls = cat.key && cat.key === active ? NAV_ACTIVE : NAV_IDLE;
-        return '<a href="' + cat.href + '" class="' + cls + ' px-2.5 py-3 h-full transition-all flex items-center whitespace-nowrap"><span>' + esc(cat.label) + '</span></a>';
+        const on = !!cat.key && cat.key === active;
+        return '<a href="' + cat.href + '" class="' + NAV_ITEM + ' ' + navTone(on, false) + '">' + navLabel(cat.label, on) + '</a>';
       }
       const activeItems = cat.items.filter(i => i.href);
       if (!activeItems.length) return '';
       const catActive = activeItems.some(i => i.key && i.key === active);
       const isOpen = openDropdown === cat.label;
-      const items = activeItems.map(item => {
+      // groupHeading(): ilk grup başlığı üstte, sonraki gruplar ayırıcı çizgiyle
+      const GH = 'px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500';
+      const items = activeItems.map((item, idx) => {
         const on = item.key && item.key === active;
-        const cls = 'px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-2 transition-colors' +
-          (on ? ' bg-sky-600/10 text-sky-600 dark:text-sky-400 font-bold' : '');
-        return '<a href="' + item.href + '" class="' + cls + '" title="' + esc(item.label) + '"><span>' + esc(item.label) + '</span></a>';
+        const prev = activeItems[idx - 1];
+        const heading = !item.group ? '' :
+          !prev ? '<div class="' + GH + '">' + esc(item.group) + '</div>' :
+          prev.group !== item.group ? '<div class="' + GH + ' mt-1 border-t border-slate-100 dark:border-slate-800">' + esc(item.group) + '</div>' : '';
+        const cls = 'pl-2.5 pr-3 py-2 border-l-2 flex items-center gap-2.5 transition-colors ' +
+          (on ? 'bg-sky-600/10 text-sky-700 dark:text-sky-300 font-bold border-sky-600' : 'text-slate-700 dark:text-slate-300 border-transparent hover:bg-slate-100 dark:hover:bg-slate-800');
+        return heading + '<a href="' + item.href + '" role="menuitem" class="' + cls + '">' +
+          '<i class="' + item.icon + ' text-[12px] w-4 text-center opacity-70"></i><span class="truncate">' + esc(item.label) + '</span></a>';
       }).join('');
       return '<div class="relative h-full flex items-center">' +
-        '<button type="button" data-nav-toggle="' + esc(cat.label) + '" class="' + (catActive || isOpen ? NAV_ACTIVE : NAV_IDLE) + ' px-2.5 py-3 h-full transition-all flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">' +
-          '<span>' + esc(cat.label) + '</span><i class="pi pi-chevron-down text-[8px] opacity-60"></i>' +
+        '<button type="button" data-nav-toggle="' + esc(cat.label) + '" aria-haspopup="menu" aria-expanded="' + isOpen + '" class="' + NAV_ITEM + ' gap-1.5 text-xs cursor-pointer ' + navTone(catActive, isOpen) + '">' +
+          navLabel(cat.label, catActive) +
+          '<i class="pi pi-chevron-down text-[8px] opacity-60 transition-transform duration-150' + (isOpen ? ' rotate-180' : '') + '"></i>' +
         '</button>' +
-        (isOpen ? '<div data-nav-menu class="absolute left-0 top-full mt-0.5 w-48 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-xl z-50 py-1 text-xs divide-y divide-slate-100 dark:divide-slate-800 animate-fade-in"><div class="py-1">' + items + '</div></div>' : '') +
+        (isOpen ? '<div data-nav-menu role="menu" class="absolute left-0 top-full mt-px min-w-56 max-w-72 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-xl z-50 py-1 text-xs animate-fade-in">' + items + '</div>' : '') +
       '</div>';
     }).join('');
+  }
+
+  // Mobil/tablet (lg altı) menü çekmecesi: kullanıcı, simgeli modül listesi, tema ve çıkış
+  function renderMobileMenu(active, user, initials, isDark) {
+    if (!mobileOpen) return '';
+    const row = (href, icon, label, on, sub) =>
+      '<a href="' + href + '" class="pl-4 pr-4 ' + (sub ? 'py-2.5 text-[13.5px] font-medium text-slate-700 dark:text-slate-300' : 'py-3 text-sm font-semibold text-slate-800 dark:text-slate-200') +
+      ' flex items-center gap-3 border-l-[3px] transition-colors active:bg-slate-100 dark:active:bg-slate-800 ' +
+      (on ? 'bg-sky-600/10 text-sky-700 dark:text-sky-300 font-bold border-sky-600' : 'border-transparent') + '">' +
+      '<i class="' + (icon || 'pi pi-circle') + ' text-[15px] w-5 text-center opacity-80"></i><span class="min-w-0">' + esc(label) + '</span></a>';
+    const mods = NAV_CATEGORIES.map(cat => {
+      if (!cat.items) return cat.href ? row(cat.href, cat.icon, cat.label, cat.key === active, false) : '';
+      const items = cat.items.filter(i => i.href);
+      if (!items.length) return '';
+      return '<div class="pt-1"><div class="px-4 pt-3 pb-1 text-[10.5px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">' + esc(cat.label) + '</div>' +
+        items.map(i => row(i.href, i.icon, i.label, i.key === active, true)).join('') + '</div>';
+    }).join('');
+    return '<div data-mobile-backdrop class="lg:hidden fixed inset-0 z-[45] bg-slate-950/55 animate-fade-in"></div>' +
+      '<aside data-mobile-drawer class="lg:hidden fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[22rem] bg-white dark:bg-surface-card shadow-2xl flex flex-col nu-drawer-left">' +
+        '<div class="shrink-0 px-4 pt-4 pb-3 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-surface-base flex items-center gap-3">' +
+          '<div class="w-11 h-11 rounded-[2px] bg-sky-700 text-white font-bold text-sm flex items-center justify-center shrink-0">' + esc(initials) + '</div>' +
+          '<div class="min-w-0 flex-1"><p class="text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">' + esc(user.fullname || user.usr) + '</p>' +
+          '<p class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">' + esc(user.usr) + '</p></div>' +
+          '<button type="button" data-mobile-close aria-label="Kapat" class="w-10 h-10 shrink-0 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px]"><i class="pi pi-times text-sm"></i></button>' +
+        '</div>' +
+        '<nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1.5">' + mods + '</nav>' +
+        '<div class="shrink-0 border-t border-slate-200 dark:border-border-subtle py-1">' +
+          '<button type="button" data-theme-toggle class="w-full pl-4 pr-4 py-3 flex items-center gap-3 border-l-[3px] border-transparent text-sm font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">' +
+            '<i class="' + (isDark ? 'pi pi-moon text-amber-400' : 'pi pi-sun text-sky-600') + ' text-[15px] w-5 text-center"></i><span class="flex-1 text-left">Koyu Mod</span>' +
+            '<span class="relative w-10 h-6 shrink-0 rounded-full transition-colors ' + (isDark ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600') + '"><span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ' + (isDark ? 'translate-x-4' : 'translate-x-0') + '"></span></span>' +
+          '</button>' +
+          '<button type="button" data-logout class="w-full pl-4 pr-4 py-3 flex items-center gap-3 border-l-[3px] border-transparent text-sm font-semibold text-rose-600 dark:text-rose-400 cursor-pointer"><i class="pi pi-sign-out text-[15px] w-5 text-center"></i><span class="flex-1 text-left">Çıkış</span></button>' +
+        '</div>' +
+      '</aside>';
+  }
+
+  // Zil rozeti: Alarm + Acil (Uyarı ve Kayıp yalnız ipucunda); Alarmlar sayfasıyla aynı sayım (varsayılan gizli gruplar hariç)
+  function alarmCounts() {
+    const D = DCIM.data || {};
+    const c = { acil: 0, alarm: 0, uyari: 0, kayip: 0 };
+    if (D.alarmsPage) {
+      const hidden = new Set((D.alarmsPage.groups || []).filter(g => g.hidden).map(g => g.code));
+      D.alarmsPage.active.filter(a => !hidden.has(a.grp)).forEach(a => { if (c[a.level] != null) c[a.level]++; });
+    } else {
+      (D.activeAlarms || []).forEach(a => {
+        const k = a.level === 'lost' ? 'kayip' : a.level === 'warning' ? 'uyari' : a.severity === 'critical' ? 'acil' : 'alarm';
+        c[k]++;
+      });
+    }
+    return c;
   }
 
   function renderHeader(active) {
     const user = session.user();
     const initials = session.initials(user);
-    const site = (DCIM.data && DCIM.data.site) || { badge: 'Veri Merkezi / Salon 1' };
-    const activeCount = DCIM.data && DCIM.data.activeAlarms ? DCIM.data.activeAlarms.length : 0;
+    const site = (DCIM.data && DCIM.data.site) || {};
+    const c = alarmCounts();
+    const badge = c.acil + c.alarm;
+    const bellTitle = 'Aktif Alarmlar — Acil: ' + c.acil + ' · Alarm: ' + c.alarm + ' · Uyarı: ' + c.uyari + ' · Veri Alınamıyor: ' + c.kayip;
     const scale = theme.scale();
     const isDark = theme.mode() === 'dark';
+    const onAlarms = active === 'alarms';
+    const loc = locationLabel || site.name || 'DCA Veri Merkezi';
 
     const scaleBtns = SCALE_LEVELS.map(s =>
       '<button type="button" data-scale="' + s + '" class="' + (scale === s ? 'bg-sky-600 text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100') + ' py-0.5 rounded-[2px] transition-colors">%' + s + '</button>'
     ).join('');
 
     return (
-      '<div class="flex items-center gap-4">' +
-        // Akya logosunun altında Türk Telekom (sunum): koyu/açık tema varyantı css/components.css .tt-logo-* ile seçilir
-        '<a href="2d.html" class="flex flex-col items-start justify-center gap-0.5 shrink-0" title="Akya Software · Türk Telekom">' +
+      // self-stretch: üst menü öğeleri çubuk yüksekliğini doldurur
+      '<div class="flex items-center gap-4 self-stretch">' +
+        '<div class="lg:hidden flex items-center">' +
+          '<button type="button" data-mobile-toggle aria-label="Menü" aria-expanded="' + mobileOpen + '" class="w-10 h-10 flex items-center justify-center rounded-[2px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-card text-slate-700 dark:text-slate-200 transition-colors">' +
+            '<i class="' + (mobileOpen ? 'pi pi-times' : 'pi pi-bars') + ' text-[15px]"></i></button>' +
+          renderMobileMenu(active, user, initials, isDark) +
+        '</div>' +
+        // Akya logosu (orijinal); altında Türk Telekom (sunum eklentisi, css/components.css .tt-logo-*)
+        '<a href="dashboard.html" class="flex flex-col items-start justify-center gap-0.5 shrink-0" title="Akya Software · Türk Telekom">' +
           '<img src="assets/img/logo-akya-white.png" alt="Akya Logo" class="h-5 w-auto object-contain invert dark:invert-0 transition-all" />' +
           '<img src="assets/img/tt-logo-dark.png" alt="Türk Telekom Logo" class="tt-logo tt-logo-dark w-auto object-contain" />' +
           '<img src="assets/img/tt-logo-light.png" alt="Türk Telekom Logo" class="tt-logo tt-logo-light w-auto object-contain" />' +
         '</a>' +
-        '<nav class="hidden md:flex items-center gap-1 text-xs h-full">' + renderNav(active) + '</nav>' +
+        '<nav class="hidden lg:flex items-center gap-0.5 text-xs h-full">' + renderNav(active) + '</nav>' +
       '</div>' +
-      '<div class="flex items-center gap-2">' +
-        '<div class="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">' +
-          '<i class="pi pi-building text-sky-600 dark:text-sky-400 text-xs"></i>' +
-          '<span class="font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-[2px] border border-slate-200 dark:border-slate-700 text-[10px]">' + esc(site.badge) + '</span>' +
+      // Sağ alan: bağlam (site / kat) | alarm zili, yardım, sayfa raporu | kullanıcı
+      '<div class="flex items-center gap-1.5">' +
+        '<div class="hidden xl:flex items-center gap-1.5 pr-2.5 mr-1 border-r border-slate-200 dark:border-border-subtle text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">' +
+          '<i class="pi pi-map-marker text-[11px] text-slate-400"></i><span>' + esc(loc) + '</span>' +
         '</div>' +
-        '<div class="hidden md:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title="Sistem Saati">' +
-          '<i class="pi pi-clock text-sky-600 dark:text-sky-400 text-xs"></i>' +
-          '<span id="shell-clock" class="font-mono font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-[2px] border border-slate-200 dark:border-slate-700 text-[10px]">--:--:--</span>' +
-        '</div>' +
-        '<a href="alarms.html" class="flex items-center gap-1 px-2 py-1 rounded-[2px] bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 border transition-all text-xs font-bold" style="color: var(--schema-status-alarm); border-color: var(--schema-status-alarm);" title="Aktif Alarmlar">' +
-          '<i class="pi pi-exclamation-triangle text-xs animate-pulse"></i><span>Aktif Alarmlar</span>' +
-          (activeCount ? '<span class="font-mono text-[10px]">(' + activeCount + ')</span>' : '') +
+        '<a href="alarms.html" class="max-lg:hidden relative w-8 h-8 flex items-center justify-center rounded-[2px] transition-colors ' +
+          (onAlarms ? 'bg-sky-600/10 text-sky-600 dark:text-sky-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800') + '" title="' + esc(bellTitle) + '" aria-label="' + esc(bellTitle) + '">' +
+          '<i class="pi pi-bell text-[15px]"></i>' +
+          (badge > 0 ? '<span class="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full text-[9.5px] font-bold leading-4 text-center text-white tabular-nums ring-2 ring-white dark:ring-surface-base ' +
+            (c.acil > 0 ? 'bg-purple-600 nu-pulse-ring nu-tone-acil' : 'bg-rose-600') + '">' + (badge > 99 ? '99+' : badge) + '</span>' : '') +
         '</a>' +
-        '<div class="relative user-menu-container">' +
-          '<button type="button" data-user-toggle class="flex items-center gap-1.5 px-2 py-1 rounded-[2px] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">' +
-            '<div class="w-6 h-6 rounded-[2px] bg-sky-700 text-white font-bold text-[10px] flex items-center justify-center">' + esc(initials) + '</div>' +
+        // Yardım: kullanım kılavuzu ve SSS (kullanıcı menüsünde de var)
+        '<button type="button" data-manual-open class="max-lg:hidden w-8 h-8 flex items-center justify-center rounded-[2px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Kullanım Kılavuzu & SSS" aria-label="Kullanım Kılavuzu & SSS"><i class="pi pi-question-circle text-[15px]"></i></button>' +
+        // Sayfa rapor kaynağı kaydettiyse (Genel Bakış, 2D, 3D, Kapak Kilitleri, BMS, Kabin Anomali): standart rapor menüsü
+        (pageReport ? '<div data-page-report class="hidden sm:block"></div>' : '') +
+        '<div class="relative user-menu-container lg:pl-2.5 lg:ml-1 lg:border-l lg:border-slate-200 lg:dark:border-border-subtle">' +
+          '<button type="button" data-user-toggle aria-haspopup="menu" aria-expanded="' + userOpen + '" class="flex items-center gap-1.5 px-2 py-1 rounded-[2px] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">' +
+            '<div class="relative shrink-0 w-6 h-6 rounded-[2px] bg-sky-700 text-white font-bold text-[10px] flex items-center justify-center">' + esc(initials) + '</div>' +
             '<i class="pi pi-chevron-down text-[8px] text-slate-400"></i>' +
           '</button>' +
-          '<div data-user-menu class="hidden absolute right-0 mt-1 w-64 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xl z-50 py-1.5 text-xs text-slate-700 dark:text-slate-300 divide-y divide-slate-100 dark:divide-slate-800 animate-fade-in">' +
+          '<div data-user-menu class="' + (userOpen ? '' : 'hidden ') + 'absolute right-0 mt-1 w-64 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xl z-50 py-1.5 text-xs text-slate-700 dark:text-slate-300 divide-y divide-slate-100 dark:divide-slate-800 animate-fade-in">' +
             '<div class="px-3 py-2 bg-slate-50 dark:bg-[#0b121e] flex items-center gap-2.5">' +
               '<div class="w-8 h-8 rounded-[2px] bg-sky-700 text-white font-bold text-xs flex items-center justify-center shrink-0">' + esc(initials) + '</div>' +
               '<div class="overflow-hidden">' +
@@ -415,15 +506,13 @@
             '<div class="px-3 py-2 space-y-1.5">' +
               '<div class="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-400"><span class="flex items-center gap-1.5"><i class="pi pi-globe text-emerald-500"></i> Dil</span></div>' +
               '<div class="py-1"><select class="w-full bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs rounded-[2px] px-2 py-1 font-semibold focus:outline-none">' +
-                '<option value="tr" selected>Türkçe</option>' +
-                '<option value="en" disabled>English</option>' +
-                '<option value="de" disabled>Deutsch</option>' +
-                '<option value="es" disabled>Español</option>' +
-                '<option value="fr" disabled>Français</option>' +
-                '<option value="ru" disabled>Русский</option>' +
-                '<option value="ja" disabled>日本語</option>' +
-                '<option value="zh" disabled>简体中文</option>' +
+                '<option value="tr" selected>Türkçe</option><option value="en" disabled>English</option><option value="de" disabled>Deutsch</option><option value="es" disabled>Español</option>' +
+                '<option value="fr" disabled>Français</option><option value="ru" disabled>Русский</option><option value="ja" disabled>日本語</option><option value="zh" disabled>简体中文</option>' +
               '</select></div>' +
+            '</div>' +
+            '<div data-manual-open class="px-3 py-2 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer">' +
+              '<span class="flex items-center gap-2 font-medium"><i class="pi pi-book text-sky-600 dark:text-sky-400"></i><span>Kullanım Kılavuzu & SSS</span></span>' +
+              '<i class="pi pi-arrow-right text-[10px] text-slate-400"></i>' +
             '</div>' +
             '<div class="p-1.5 bg-slate-50 dark:bg-[#0b121e]">' +
               '<button type="button" data-logout class="w-full px-2.5 py-1.5 text-left rounded-[2px] text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/15 font-bold flex items-center justify-between transition-colors">' +
@@ -437,54 +526,74 @@
   }
 
   let activeKey = '';
+  let pageReport = null;
   function mountHeader() {
     const header = document.getElementById('app-header');
     if (!header) return;
+    // Orijinal: h-13, lg altında 58px
+    header.classList.add('max-lg:h-[58px]');
     header.innerHTML = renderHeader(activeKey);
 
     const toggle = header.querySelector('[data-user-toggle]');
     const menu = header.querySelector('[data-user-menu]');
-    toggle.addEventListener('click', e => { e.stopPropagation(); menu.classList.toggle('hidden'); });
+    toggle.addEventListener('click', e => { e.stopPropagation(); userOpen = !userOpen; openDropdown = ''; mountHeader(); });
     menu.addEventListener('click', e => e.stopPropagation());
     header.querySelectorAll('[data-nav-toggle]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
       const label = b.getAttribute('data-nav-toggle');
       openDropdown = openDropdown === label ? '' : label;
+      userOpen = false;
       mountHeader();
     }));
     const navMenu = header.querySelector('[data-nav-menu]');
     if (navMenu) navMenu.addEventListener('click', e => e.stopPropagation());
-    header.querySelector('[data-theme-toggle]').addEventListener('click', () => { theme.toggle(); mountHeader(); header.querySelector('[data-user-menu]').classList.remove('hidden'); });
+    const mt = header.querySelector('[data-mobile-toggle]');
+    if (mt) mt.addEventListener('click', e => { e.stopPropagation(); mobileOpen = !mobileOpen; mountHeader(); });
+    const drawer = header.querySelector('[data-mobile-drawer]');
+    if (drawer) drawer.addEventListener('click', e => e.stopPropagation());
+    header.querySelectorAll('[data-mobile-close],[data-mobile-backdrop]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); mobileOpen = false; mountHeader(); }));
+    header.querySelectorAll('[data-theme-toggle]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); theme.toggle(); mountHeader(); }));
     header.querySelectorAll('[data-scale]').forEach(b => b.addEventListener('click', () => {
       theme.setScale(parseInt(b.getAttribute('data-scale'), 10));
       mountHeader();
-      header.querySelector('[data-user-menu]').classList.remove('hidden');
     }));
-    header.querySelector('[data-logout]').addEventListener('click', () => {
+    header.querySelectorAll('[data-logout]').forEach(b => b.addEventListener('click', () => {
       storage.sessionRemove('dcim_user');
       window.location.href = 'login.html';
-    });
-    const printBtn = header.querySelector('[data-shell-print]');
-    if (printBtn) printBtn.addEventListener('click', () => window.print());
-    updateClock();
+    }));
+    header.querySelectorAll('[data-manual-open]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      userOpen = false;
+      mountHeader();
+      if (DCIM.manual) DCIM.manual.open();
+    }));
+    const prHost = header.querySelector('[data-page-report]');
+    if (prHost && pageReport && DCIM.report) {
+      const fmts = pageReport.formats || ['pdf'];
+      DCIM.report.menu(prHost, {
+        label: fmts.length === 1 && fmts[0] === 'pdf' ? 'PDF Raporu' : 'Rapor al',
+        scopes: pageReport.scopes || [{ id: 'page', label: 'Bu sayfa' }],
+        formats: fmts,
+        onExport: req => pageReport.export(req)
+      });
+    }
   }
 
-  function updateClock() {
-    const el = document.getElementById('shell-clock');
-    if (!el) return;
-    const now = new Date();
-    el.textContent = pad(now.getDate()) + '.' + pad(now.getMonth() + 1) + '.' + now.getFullYear() + ' ' + fmtTime(now);
-  }
-
+  // Ağır sayfalar (3D, BMS, PMS, Kabin Anomali) başlığı sayfa betiğinden önce çizer (html'de satır içi init),
+  // sahne kurulumu ilk boyamadan sonra yüklenir; sayfa betiğinin ikinci init çağrısı yalnız başlığı tazeler.
+  let initDone = false;
   function init(opts) {
     activeKey = (opts && opts.active) || '';
+    if (NAV_ALIAS[activeKey]) activeKey = NAV_ALIAS[activeKey];
+    if (initDone) { mountHeader(); return; }
+    initDone = true;
     theme.init();
     mountHeader();
-    setInterval(updateClock, 1000);
     document.addEventListener('click', () => {
-      const menu = document.querySelector('[data-user-menu]');
-      if (menu) menu.classList.add('hidden');
-      if (openDropdown) { openDropdown = ''; mountHeader(); }
+      if (openDropdown || userOpen) { openDropdown = ''; userOpen = false; mountHeader(); }
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && (openDropdown || userOpen || mobileOpen)) { openDropdown = ''; userOpen = false; mobileOpen = false; mountHeader(); }
     });
   }
 
@@ -493,9 +602,21 @@
   DCIM.session = session;
   session.guard();
   function setActive(key) {
-    activeKey = key || '';
+    activeKey = NAV_ALIAS[key] || key || '';
+    mountHeader();
+  }
+  // Sayfa raporu (page-report.service.ts karşılığı): { scopes?, formats?, export(req) }.
+  // Kayıtlıyken başlıkta "PDF Raporu" menüsü görünür; null ile kaldırılır.
+  function setPageReport(src) {
+    pageReport = src || null;
     mountHeader();
   }
 
-  DCIM.shell = { init, setActive };
+  // Sağ üstteki konum etiketi (orijinalde 2D/3D açık katı ekler: "DCA Veri Merkezi / 2. Kat")
+  function setLocation(label) {
+    locationLabel = label || '';
+    mountHeader();
+  }
+
+  DCIM.shell = { init, setActive, setPageReport, setLocation };
 })();

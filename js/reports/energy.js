@@ -38,6 +38,7 @@
     allSalons: 'Tüm Salonlar',
     salonNotFound: 'Salon bulunamadı',
     allPods: 'Tüm POD/Sıra',
+    podUnspecified: 'POD tanımsız',
     podNotFound: 'Pod/Sıra bulunamadı',
     allCustomers: 'Tüm Müşteriler',
     noResults: 'Sonuç bulunamadı',
@@ -129,7 +130,7 @@
     { id: 'T01', label: '1. Kat' },
     { id: 'T02', label: '2. Kat' },
     { id: 'T03', label: '3. Kat' },
-    { id: 'T04', label: 'IDC4' }
+    { id: 'T04', label: 'DCB' }
   ];
   const DATE_PRESETS = [
     { value: 'custom', label: 'Özel Aralık Seç' },
@@ -175,17 +176,26 @@
   }
   const displayCabinetName = c => (!c ? null : /^K(?=[A-Za-z0-9])/i.test(c) ? c.replace(/^K/i, '') : c);
   const normalizeCabinetCode = id => { const p = parseCabinetName(id || ''); return p ? displayCabinetName(p) || p : null; };
+  // @pod'u olmayan kabinlerin POD anahtarı parçası (gösterimde T.podUnspecified)
+  const ENERGY_NO_POD = '-';
   function parseDevLoc(devLoc, floorId) {
     const segs = String(devLoc || '').split('/').map(s => s.trim()).filter(s => s && s !== '_');
     if (floorId === 'T04') return { salonSeg: '', podSeg: segs.find(s => normalizeKey(s).startsWith('POD')) || segs[1] || '' };
-    return { salonSeg: segs[1] || '', podSeg: segs[2] || '' };
+    let salonSeg = segs[1] || '';
+    let podSeg = segs[2] || '';
+    // b024610d2: katın kendi konum kaydı (tek salonlu kat) salon değildir; bütün kat (GENEL) sayılır
+    if (salonSeg && segs[0] && normalizeKey(salonSeg) === normalizeKey(segs[0])) salonSeg = '';
+    // Sunum: çok salonlu 2. katın ağ sırası (NW-3) kaynakta @pod taşımaz (orijinalde 2. kat / 3. kat Salon 1-5)
+    if (floorId === 'T02' && /^NW-/i.test(podSeg)) podSeg = '';
+    return { salonSeg, podSeg };
   }
   function mapCabinetInfo(item, floorId) {
     const cabinet = normalizeCabinetCode(item && item.id);
     if (!cabinet) return null;
     const { salonSeg, podSeg } = parseDevLoc(item.dev_loc, floorId);
     const salonKey = salonSeg ? floorId + '|' + normalizeKey(salonSeg || 'SALON') : floorId + '|GENEL';
-    const podKey = podSeg ? floorId + '|' + salonKey + '|' + normalizeKey(podSeg || 'POD') : undefined;
+    // @pod'u olmayan kabinler salonun "POD tanımsız" seçeneğine düşer (önceden hiç seçilemiyordu)
+    const podKey = floorId + '|' + salonKey + '|' + (podSeg ? normalizeKey(podSeg) : ENERGY_NO_POD);
     return { cabinet, floorId, salonKey, podKey, devId: item.id, salonSeg, podSeg };
   }
   const localizedFloor = id => (FLOOR_OPTIONS.find(f => f.id === id) || { label: id }).label;
@@ -205,8 +215,8 @@
     const floor = localizedFloor(o.floorId);
     const salon = o.rawSalonSeg ? localizedSalonName(o.rawSalonSeg) : '';
     const num = extractNumber(o.rawPodSeg);
-    // Sunum: NS1/NS2 ağ sıraları "POD n" etiketine dönüştürülmez (POD-1/POD-2 ile karışmasın)
-    const pod = num && /^POD/i.test(o.rawPodSeg) ? 'POD ' + num : (o.rawPodSeg || 'POD');
+    // Sunum: NW-1/NW-2 ağ sıraları "POD n" etiketine dönüştürülmez (POD-1/POD-2 ile karışmasın)
+    const pod = num && /^POD/i.test(o.rawPodSeg) ? 'POD ' + num : (o.rawPodSeg || T.podUnspecified);
     return salon ? (floor + ' ' + salon + ' - ' + pod).trim() : (floor + ' ' + pod).trim();
   }
   const valueTypeLabel = v => (VALUE_TYPES.find(o => o.value === v) || { label: v }).label;
@@ -348,12 +358,14 @@
       const allowed = new Set(state.selectedSalonKeys);
       const map = new Map();
       state.selectedFloorIds.forEach(fid => (state.floorCache[fid] || []).forEach(info => {
-        if (!info.podKey || !info.podSeg || !allowed.has(info.salonKey)) return;
+        if (!info.podKey || !allowed.has(info.salonKey)) return;
         if (!map.has(info.podKey)) map.set(info.podKey, { key: info.podKey, floorId: fid, salonKey: info.salonKey, rawSalonSeg: info.salonSeg, rawPodSeg: info.podSeg });
       }));
       state.podOptions = Array.from(map.values()).sort((a, b) => {
         if (a.floorId !== b.floorId) return a.floorId.localeCompare(b.floorId);
         if (a.salonKey !== b.salonKey) return a.salonKey.localeCompare(b.salonKey);
+        // "POD tanımsız" salonun en sonunda
+        if (!a.rawPodSeg !== !b.rawPodSeg) return a.rawPodSeg ? -1 : 1;
         const na = parseInt(extractNumber(a.rawPodSeg) || '0', 10), nb = parseInt(extractNumber(b.rawPodSeg) || '0', 10);
         return na !== nb ? na - nb : a.rawPodSeg.localeCompare(b.rawPodSeg);
       });
@@ -643,66 +655,60 @@
 
     function cmrPopupHtml() {
       if (!state.showCmr) return '';
+      const RM = DCIM.reportModal;
       const types = calcTypes();
+      const has = !state.isPopupLoading && state.rows.length > 0;
       let body = '';
       if (state.isPopupLoading) {
-        body += '<div class="py-12 flex flex-col items-center justify-center gap-3">' +
-          '<i class="pi pi-spin pi-spinner text-sky-400 text-3xl"></i>' +
-          '<p class="text-slate-300 text-sm font-medium">' + esc(T.processingData) + '</p>' +
-          (state.progressMessage ? '<div class="w-64 h-2 bg-slate-700 rounded-full overflow-hidden"><div class="h-full bg-sky-500 transition-all duration-300" style="width:' + state.progressPercent + '%"></div></div>' +
-            '<p class="text-xs text-slate-400 font-mono">' + esc(state.progressMessage) + '</p>' : '') +
+        body += '<div class="rpt-state gap-3">' +
+          '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl"></i>' +
+          '<p class="text-slate-700 dark:text-slate-300 text-sm font-medium">' + esc(T.processingData) + '</p>' +
+          (state.progressMessage ? '<div class="w-64 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div class="h-full bg-sky-500 transition-all duration-300" style="width:' + state.progressPercent + '%"></div></div>' +
+            '<p class="text-xs text-slate-500 dark:text-slate-400 font-mono">' + esc(state.progressMessage) + '</p>' : '') +
         '</div>';
       } else if (state.rows.length) {
         const shown = state.rows.slice(0, MAX_TABLE_ROWS);
-        body += '<div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
-          '<table class="w-full text-left text-xs border-collapse"><thead>' +
-            '<tr class="bg-slate-100 dark:bg-surface-panel border-b border-slate-200 dark:border-border-subtle text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider">' +
-              '<th class="' + TH + '">' + esc(T.tableDate) + '</th>' +
-              (state.isCustomer ? '<th class="' + TH + '">' + esc(T.tableCustomer) + '</th>' : '') +
-              '<th class="' + TH + '">' + esc(T.tableCabinetName) + '</th>' +
-              (!state.isCustomer ? '<th class="' + TH + '">' + esc(T.tablePdu) + '</th>' : '') +
-              types.map(vt => '<th class="' + TH + '">' + esc(T.tableValue + ' (' + valueTypeLabel(vt) + ') kW') + '</th>').join('') +
+        body += '<table class="rpt-table"><thead><tr>' +
+              '<th>' + esc(T.tableDate) + '</th>' +
+              (state.isCustomer ? '<th>' + esc(T.tableCustomer) + '</th>' : '') +
+              '<th>' + esc(T.tableCabinetName) + '</th>' +
+              (!state.isCustomer ? '<th>' + esc(T.tablePdu) + '</th>' : '') +
+              types.map(vt => '<th>' + esc(T.tableValue + ' (' + valueTypeLabel(vt) + ') kW') + '</th>').join('') +
             '</tr></thead>' +
-            '<tbody class="divide-y divide-slate-200 dark:divide-border-subtle text-slate-800 dark:text-slate-200">' +
-              shown.map(r => '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover transition-colors">' +
-                '<td class="' + TD + '">' + esc(r.date) + '</td>' +
-                (state.isCustomer ? '<td class="' + TD + '">' + esc(r.customerAdi || '—') + '</td>' : '') +
-                '<td class="' + TD + '">' + esc(r.kabinAdi) + '</td>' +
-                (!state.isCustomer ? '<td class="' + TD + '">' + esc(pduTranslatedLabel(r.pduAdi)) + '</td>' : '') +
-                types.map(vt => '<td class="' + TD + '">' + (r.values[vt] != null && r.values[vt] !== 0 ? r.values[vt].toFixed(2) : '0.00') + ' kW</td>').join('') +
+            '<tbody class="text-slate-800 dark:text-slate-200">' +
+              shown.map(r => '<tr>' +
+                '<td class="font-mono">' + esc(r.date) + '</td>' +
+                (state.isCustomer ? '<td class="font-mono">' + esc(r.customerAdi || '—') + '</td>' : '') +
+                '<td class="font-mono">' + esc(r.kabinAdi) + '</td>' +
+                (!state.isCustomer ? '<td class="font-mono">' + esc(pduTranslatedLabel(r.pduAdi)) + '</td>' : '') +
+                types.map(vt => '<td class="font-mono">' + (r.values[vt] != null && r.values[vt] !== 0 ? r.values[vt].toFixed(2) : '0.00') + ' kW</td>').join('') +
               '</tr>').join('') +
-            '</tbody></table></div>' +
+            '</tbody></table>' +
           (state.rows.length > shown.length
-            ? '<p class="text-[11px] text-slate-400 font-mono">İlk ' + shown.length + ' satır gösteriliyor (toplam ' + state.rows.length + '). Tüm satırlar Excel çıktısında yer alır.</p>'
+            ? '<p class="mx-4 mt-3 text-[11px] text-slate-400 font-mono">İlk ' + shown.length + ' satır gösteriliyor (toplam ' + state.rows.length + '). Tüm satırlar Excel çıktısında yer alır.</p>'
             : '');
       } else {
         body += kit.emptyState({ icon: 'pi pi-inbox', message: T.noData });
       }
-      if (!state.isPopupLoading && state.rows.length) {
-        const sl = summaryTypeLabel().toUpperCase();
-        body += '<div class="mt-4 p-3 bg-slate-50 dark:bg-surface-panel border border-slate-200 dark:border-border-subtle rounded-[2px] flex flex-wrap items-center gap-4 text-xs">' +
+      if (has) {
+        const sl = summaryTypeLabel().toLocaleUpperCase('tr-TR');
+        body += '<div class="m-4 p-3 bg-slate-50 dark:bg-surface-panel border border-slate-200 dark:border-border-subtle rounded-[2px] flex flex-wrap items-center gap-4 text-xs">' +
           summaryResults().map(s => '<div class="flex items-center gap-1.5">' +
-            '<span class="text-slate-400 font-medium">' + esc(s.label + ' (' + sl + '):') + '</span>' +
-            '<span class="text-sky-400 font-bold font-mono">' + esc(s.value) + ' kW</span></div>').join('') +
+            '<span class="text-slate-500 dark:text-slate-400 font-medium">' + esc(s.label + ' (' + sl + '):') + '</span>' +
+            '<span class="text-sky-600 dark:text-sky-400 font-bold font-mono">' + esc(s.value) + ' kW</span></div>').join('') +
         '</div>';
       }
-      return '<div class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-cmr-overlay>' +
-        '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">' +
-          '<div class="px-4 py-3 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-panel">' +
-            '<div class="flex items-center gap-3">' +
-              '<h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">' + esc(T.popupTitle) + '</h3>' +
-              '<span class="px-2 py-0.5 text-[11px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-[2px]">' + esc(valueTypesLabel()) + '</span>' +
-            '</div>' +
-            '<div class="flex items-center gap-2">' +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: T.downloadPdf, attrs: 'data-act="pdf"' }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: T.downloadExcel, attrs: 'data-act="excel"' }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: T.downloadZip, attrs: 'data-act="zip"' }) +
-              '<button type="button" class="text-slate-400 hover:text-slate-200 text-lg px-2" data-act="close-cmr">×</button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="p-4 overflow-y-auto flex-1 space-y-4">' + body + '</div>' +
-        '</div>' +
-      '</div>';
+      // Ortak rapor pop-up görünümü (app-report-modal)
+      return RM.html({
+        title: T.popupTitle, subtitle: T.title, icon: 'pi pi-bolt', tone: 'amber', size: 'lg', z: 'z-50',
+        attrs: 'data-cmr-overlay',
+        badge: '<span class="px-2 py-0.5 text-[11px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 rounded-[2px]">' + esc(valueTypesLabel()) + '</span>',
+        actions: has ? RM.btn('pdf', 'pi pi-file-pdf', T.downloadPdf, 'data-act="pdf"') +
+          RM.btn('excel', 'pi pi-file-excel', T.downloadExcel, 'data-act="excel"') +
+          RM.btn('zip', 'pi pi-folder', T.downloadZip, 'data-act="zip"') : '',
+        summary: has ? RM.total(state.rows.length) : '',
+        body
+      }).replace('data-rpt-close', 'data-rpt-close data-act="close-cmr"');
     }
 
     function loadingOverlayHtml() {
@@ -979,7 +985,7 @@
       kit.exportExcel(file, cols, g.labels.map(label => ({ label })));
     }
 
-    // Kabin derin bağlantısı: reports.html?cabinet=1AV42#energy → kabin bazlı mod, ilgili kat/salon/POD seçili
+    // Kabin derin bağlantısı: reports.html?cabinet=1NA06#energy → kabin bazlı mod, ilgili kat/salon/POD seçili
     function applyCabinetParam(code) {
       const hit = src.findCabinetAnyFloor(code) || src.findCabinetAnyFloor(code.replace(/^K/, ''));
       if (!hit) return;

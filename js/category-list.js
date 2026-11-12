@@ -2,10 +2,14 @@
    DCIM Sunum — Model Kütüphanesi
    Kaynak: new-ui/pages/assets/category-list   (NewUICMPCategoryListComponent)
            new-ui/pages/assets/category-manager (NewUICMPCategoryManagerComponent)
-           common/pop-ups/report-pop-up/asset-cat-report-popup (AssetCatReportPopupComponent)
+           shared/components/data-table (app-data-table: arama, sütun filtre satırı, 50 satır/sayfa, mobil kartlar)
+           shared/components/report-export-menu ("Model Kütüphanesi Raporu": Filtrelenmiş liste, 'limit', birim 'model')
    Tek sayfa: liste varsayılan; /dcim/assets/category-manager/:cat_id rotası aynı sayfada
    yönetim görünümü olarak açılır (liste → yönetim geçişi URL hash'i ile, geri tuşu çalışır).
-   Veri: DCIM.data.catList (js/mock/category-list.data.js) — SQL_QueryCat / getCatById / updateCatalogItem yerine.
+   Model kütüphanesi tek CAT tablosudur (eski CAT_IDC4 ayrımı yok): liste "SELECT … FROM CAT", yönetim CAT'ten cat_id / model_id ile.
+   Liste süzgeçleri (arama, sütun filtreleri, nitelik çipi, filtre satırı, sayfa) sessionStorage 'dcim_catlist_state'te
+   tutulur (orijinal catService.catListState): yönetimden ya da başka sayfadan dönünce korunur.
+   Veri: DCIM.data.catList (js/mock-data.js) — SQL_QueryCat / getCatById / updateCatalogItem yerine.
 
    Derin bağlantılar:
      category-list.html?cat=CAT1003          → CAT1003 kategori yönetimi (ayrıca #cat=CAT1003)
@@ -13,9 +17,10 @@
      category-list.html?view=cards           → kart görünümü (tablo varsayılan)
      category-list.html?nature=PDU           → nitelik (kategori) filtresi
      category-list.html?q=dell               → arama çubuğu
-     category-list.html?filter=1             → orijinal filtre paneli açık
+     category-list.html?filter=1             → sütun filtre satırı açık
      category-list.html?new=model            → Yeni Model penceresi (?new=nature → Yeni Nitelik)
-     category-list.html?report=1             → Kategori Listesi (CAT) Raporu penceresi
+     category-list.html?report=1             → rapor menüsü açık
+     category-list.html?reset=1              → kayıtlı liste süzgeçlerini temizle
    ========================================================================== */
 (function () {
   'use strict';
@@ -133,200 +138,84 @@
   const mgrHost = document.getElementById('cl-manager-host');
   const mgrEl = document.getElementById('cl-manager');
 
+  // Liste durumu: arama, sütun filtreleri, nitelik çipi, filtre satırı ve sayfa sessionStorage 'dcim_catlist_state'te
+  // tutulur (orijinal catService.catListState — yönetim ekranından / başka sayfadan dönünce süzgeçler korunur).
+  const STORE_KEY = 'dcim_catlist_state';
+  if (qs.get('reset') === '1') storage.sessionRemove(STORE_KEY);
+  let saved = null;
+  try { saved = JSON.parse(storage.sessionGet(STORE_KEY) || 'null'); } catch (e) { saved = null; }
+  if (['q', 'nature', 'filter'].some(k => qs.has(k))) saved = null;
+  saved = saved || {};
   const st = {
-    ELEMENT_DATA: [], allRaw: [],
-    page_cur: 0, page_ofs: 0, page_rng: 15, page_total: 0, total_records: 0, page_input: 1,
-    isLoading: false, cnt1: 0,
-    filter_switch: qs.get('filter') === '1' ? 1 : 0, where: '{}',
-    f: { model_id: '', name: '', brand: '', nature: '', full_name: '' },
-    // Sunum ekleri: görünüm, kategori çipi, arama çubuğu
+    allRaw: [], rows: [], isLoading: false, cnt1: 0,
+    // Sunum eki: liste / kart (katalog) görünümü
     view: qs.get('view') === 'cards' ? 'cards' : qs.get('view') === 'table' ? 'table' : (storage.get('dcim_catlist_view') === 'cards' ? 'cards' : 'table'),
-    nature: qs.get('nature') || '',
-    search: qs.get('q') || ''
+    nature: qs.get('nature') || saved.nature || '',
+    search: qs.get('q') || saved.search || '',
+    showFilters: qs.get('filter') === '1' || !!saved.showFilters,
+    filters: saved.filters || {},
+    page: saved.page || 1,
+    pageSize: saved.pageSize || 50   // orijinal page_rng = 50
   };
+  let dt = null;
+  let reportMenu = null;
   let loadTimer = null;
 
   function getConClass() { return st.cnt1 >= 2 ? 'con0' : 'con1'; }
+  function saveState() {
+    if (!dt) return;
+    const s = dt.state;
+    st.search = s.search; st.filters = s.filters; st.showFilters = s.showFilters; st.page = s.page; st.pageSize = s.pageSize; st.nature = s.quick || '';
+    storage.sessionSet(STORE_KEY, JSON.stringify({ search: st.search, filters: st.filters, showFilters: st.showFilters, page: st.page, pageSize: st.pageSize, nature: st.nature }));
+  }
 
-  // refresh1(forceReload) — SQL_QueryCat yerine DCIM.data.catList.list()
+  // refresh1(forceReload) — SQL_QueryCat ("SELECT … FROM CAT", tek model kütüphanesi tablosu) yerine DCIM.data.catList.list()
   function refresh1(force) {
     if (!force && st.allRaw.length) { processCatData(st.allRaw); return; }
     st.isLoading = true;
     st.cnt1 = 2;
-    renderData();
-    renderHeaderActions();
+    if (dt) dt.renderTools();
     clearTimeout(loadTimer);
     loadTimer = setTimeout(() => {
       st.allRaw = C.list();
       processCatData(st.allRaw);
     }, force ? 380 : 0);
   }
-
-  // Orijinal where filtresi + sunum ekleri (arama çubuğu, nitelik çipi)
-  function whereFiltered(processed) {
-    let out = processed;
-    if (st.where && st.where !== '{}') {
-      try {
-        const fo = JSON.parse(st.where);
-        out = processed.filter(item => {
-          let match = true;
-          if (fo.model_id) {
-            const v = String(fo.model_id).toLowerCase().trim();
-            match = match && (String(item.model_id || '').toLowerCase().includes(v) || String(item.cat_id || '').toLowerCase().includes(v));
-          }
-          if (fo.name) match = match && String(item.name).toLowerCase().includes(String(fo.name).toLowerCase());
-          if (fo.brand) match = match && String(item.brand).toLowerCase().includes(String(fo.brand).toLowerCase());
-          if (fo.nature) match = match && String(item.nature).toLowerCase().includes(String(fo.nature).toLowerCase());
-          if (fo.full_name) match = match && String(item.full_name).toLowerCase().includes(String(fo.full_name).toLowerCase());
-          return match;
-        });
-      } catch (e) { /* yok say */ }
-    }
-    const q = lc(st.search.trim());
-    if (q) out = out.filter(i => [i.model_id, i.name, i.brand, i.nature, i.full_name].some(v => lc(v).indexOf(q) >= 0));
-    return out;
-  }
-
-  let chipBase = [];
   function processCatData(raw) {
-    const processed = parseCatListData(raw);
-    chipBase = whereFiltered(processed);
-    const filtered = st.nature ? chipBase.filter(i => i.nature === st.nature) : chipBase;
-    st.total_records = filtered.length;
-    st.page_total = Math.ceil(st.total_records / st.page_rng) || 1;
-    if (st.page_ofs > st.page_total - 1) st.page_ofs = st.page_total - 1;
-    const start = st.page_ofs * st.page_rng;
-    st.ELEMENT_DATA = filtered.slice(start, start + st.page_rng);
-    st.page_cur = st.page_ofs;
-    st.page_input = st.page_cur + 1;
+    st.rows = parseCatListData(raw);
     st.cnt1 = 0;
     st.isLoading = false;
-    renderChips();
-    renderData();
-    renderHeaderActions();
+    if (!dt) return;
+    dt.renderTools();
+    dt.setRows(st.rows);
   }
 
-  // ---- Başlık ---------------------------------------------------------------
-  function headerActionsHtml() {
-    return '<div class="flex items-center gap-2">' +
-      // Sunum eki: yeni nitelik / yeni model
-      '<button type="button" data-act="new-nature" class="' + BTN_SEC + '" title="Yeni nitelik (kategori) tanımla"><i class="pi pi-folder-plus text-xs"></i><span>Yeni Nitelik</span></button>' +
-      '<button type="button" data-act="new-model" class="' + BTN_ADD + '" title="Kataloğa yeni cihaz modeli ekle"><i class="pi pi-plus text-xs"></i><span>Yeni Model</span></button>' +
-      '<button type="button" data-act="filter" class="' + (st.filter_switch === 1 ? BTN_ON : BTN_SEC) + '" title="' + L.toggleFilter + '"><i class="pi pi-filter text-xs"></i><span>' + L.filter + '</span></button>' +
-      '<button type="button" data-act="refresh" class="' + BTN_SEC + '"' + (st.isLoading ? ' disabled' : '') + ' title="' + L.refreshTitle + '"><i class="pi pi-refresh text-xs' + (st.isLoading ? ' pi-spin' : '') + '"></i><span>' + L.refresh + '</span></button>' +
-      '<button type="button" data-act="report" class="' + BTN_PRI + '"><i class="pi pi-file-pdf text-xs"></i><span>' + L.report + '</span></button>' +
-    '</div>';
-  }
-  function renderHeaderActions() {
-    const el = listEl.querySelector('[data-header-actions]');
-    if (el) el.innerHTML = headerActionsHtml();
-  }
+  // ---- Sütunlar (columns: model_id_label → primary, name → sub pi-tag, brand / nature → meta, full_name → secondary) ----
+  const modelBtn = (el, card) => '<button type="button" data-open-cat="' + esc(el.cat_id) + '" class="font-mono ' +
+    (card ? 'font-extrabold' : 'font-bold text-[11px] hover:underline') + ' text-sky-600 dark:text-sky-400 text-left cursor-pointer">' + esc(el.model_id) + '</button>';
+  const COLS = [
+    { field: 'model_id', header: 'Model ID', width: '110px', wrap: false, sortable: true, mobile: 'primary',
+      value: r => r.model_id, render: r => modelBtn(r, false), card: r => modelBtn(r, true) },
+    { field: 'name', header: L.colName, sortable: true, mobile: 'sub', mobileIcon: 'pi-tag', render: r => '<span class="font-bold text-slate-900 dark:text-slate-100">' + esc(r.name) + '</span>', card: r => esc(r.name) },
+    { field: 'brand', header: L.colBrand, sortable: true, mobile: 'meta' },
+    { field: 'nature', header: L.colNature, sortable: true, mobile: 'meta',
+      render: r => '<span class="inline-flex items-center gap-1.5"><i class="' + natureIcon(r.nature) + ' text-[10px] text-sky-600 dark:text-sky-400"></i>' + esc(r.nature) + '</span>' },
+    // Sunum eki kolonlar: U / Güç / Ağırlık / Ön-Arka port (mobilde "Detayları Göster")
+    { field: 'u', header: 'U', width: '56px', wrap: false, sortable: true, filterable: false, mobile: 'extra', value: r => num(r.jsn.ucapacity), render: r => '<span class="font-mono">' + fmtU(r.jsn.ucapacity) + '</span>', card: r => fmtU(r.jsn.ucapacity) },
+    { field: 'power', header: 'Güç (W)', width: '80px', wrap: false, sortable: true, filterable: false, mobile: 'extra', value: r => num(r.jsn.power), render: r => '<span class="font-mono">' + fmtW(r.jsn.power) + '</span>', card: r => fmtW(r.jsn.power) },
+    { field: 'weight', header: 'Ağırlık (kg)', width: '92px', wrap: false, sortable: true, filterable: false, mobile: 'extra', value: r => num(r.jsn.weight), render: r => '<span class="font-mono">' + fmtKg(r.jsn.weight) + '</span>', card: r => fmtKg(r.jsn.weight) },
+    { field: 'ports', header: 'Ön / Arka Port', width: '104px', wrap: false, filterable: false, mobile: 'extra', value: r => portCount(r.jsn, 'front'),
+      render: r => '<span class="font-mono whitespace-nowrap">' + portCount(r.jsn, 'front') + ' <span class="text-slate-400">/</span> ' + (r.nature === 'Patch Panel' ? '<span class="text-slate-400">—</span>' : portCount(r.jsn, 'back')) + '</span>' },
+    { field: 'full_name', header: L.colFullName, sortable: true, mobile: 'secondary', render: r => '<span class="text-slate-600 dark:text-slate-400">' + esc(r.full_name) + '</span>' }
+  ];
 
-  // ---- Arama + kategori çipleri + görünüm (sunum eki) ------------------------
-  function toolbarHtml() {
-    return '<div class="shrink-0 p-2 px-3 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs flex flex-wrap items-center gap-2.5 select-none">' +
-      '<div class="relative w-full sm:w-72 shrink-0">' +
-        '<i class="pi pi-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>' +
-        '<input type="text" data-search value="' + esc(st.search) + '" placeholder="Cihaz ara: model, marka, Model ID..." class="w-full pl-7 pr-7 py-1.5 text-xs bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
-        '<button type="button" data-act="search-clear" class="' + (st.search ? '' : 'hidden ') + 'absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" title="Temizle"><i class="pi pi-times text-[10px]"></i></button>' +
-      '</div>' +
-      '<div data-chips class="flex flex-wrap items-center gap-1.5 flex-1 min-w-0"></div>' +
-      '<div data-viewtoggle class="flex items-center border border-slate-200 dark:border-slate-700 rounded-[2px] overflow-hidden shrink-0 ml-auto"></div>' +
-    '</div>';
-  }
-  function renderChips() {
-    const el = listEl.querySelector('[data-chips]');
-    if (!el) return;
-    const counts = {};
-    chipBase.forEach(i => { counts[i.nature] = (counts[i.nature] || 0) + 1; });
-    const keys = C.natures.map(n => n.key);
-    Object.keys(counts).forEach(k => { if (keys.indexOf(k) < 0) keys.push(k); });
-    const chip = (key, label, icon, n) =>
-      '<button type="button" data-nature="' + esc(key) + '" class="' + (st.nature === key ? CHIP_ON : CHIP_OFF) + ' flex items-center gap-1.5">' +
-        (icon ? '<i class="' + icon + ' text-[10px]"></i>' : '') + '<span>' + esc(label) + '</span>' +
-        '<span class="font-mono text-[10px] ' + (st.nature === key ? 'text-sky-100' : 'text-slate-400') + '">' + n + '</span></button>';
-    el.innerHTML = chip('', 'Tümü', 'pi pi-tags', chipBase.length) +
-      keys.map(k => chip(k, k, natureIcon(k), counts[k] || 0)).join('');
-    const vt = listEl.querySelector('[data-viewtoggle]');
-    if (vt) {
-      const b = (v, icon, label) => '<button type="button" data-view="' + v + '" title="' + label + ' görünümü" class="px-2.5 py-1.5 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ' +
-        (st.view === v ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700') + '"><i class="' + icon + ' text-xs"></i><span class="hidden md:inline">' + label + '</span></button>';
-      vt.innerHTML = b('table', 'pi pi-list', 'Liste') + b('cards', 'pi pi-objects-column', 'Kart');
-    }
-  }
-
-  // ---- Filtre paneli (orijinal) --------------------------------------------
-  function filterHtml() {
-    if (st.filter_switch !== 1) return '';
-    const fld = (id, key, label, ph) =>
-      '<div><label for="' + id + '" class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">' + esc(label) + '</label>' +
-      '<input id="' + id + '" type="text" data-f="' + key + '" value="' + esc(st.f[key]) + '" placeholder="' + esc(ph) + '" class="' + INP + '" /></div>';
-    return '<div class="shrink-0 p-3 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs space-y-3 select-none">' +
-      '<div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">' +
-        '<div class="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200"><i class="pi pi-filter text-sky-600 dark:text-sky-400"></i><span>' + L.filter + '</span></div>' +
-        '<button type="button" data-act="filter" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs cursor-pointer"><i class="pi pi-times"></i></button>' +
-      '</div>' +
-      '<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">' +
-        fld('model_id_filter', 'model_id', 'Model ID', 'Model ID') +
-        fld('name_filter', 'name', L.colName, L.phName) +
-        fld('brand_filter', 'brand', L.colBrand, L.phBrand) +
-        fld('nature_filter', 'nature', L.colNature, L.phNature) +
-        fld('full_name_filter', 'full_name', L.colFullName, L.phFullName) +
-      '</div>' +
-      '<div class="flex justify-end pt-1"><button type="button" data-act="apply" class="px-3 py-1 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-[2px] transition-all cursor-pointer">' + L.apply + '</button></div>' +
-    '</div>';
-  }
-
-  // ---- Tablo / kart kutusu --------------------------------------------------
-  function conBadge() {
-    const c = getConClass();
-    if (c === 'con0') return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1"><i class="pi pi-spin pi-spinner text-[10px]"></i><span>Yükleniyor</span></span>';
-    return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Online</span></span>';
-  }
-  function emptyHtml(colspan) {
-    const c = getConClass();
-    const inner = '<div class="flex flex-col items-center justify-center gap-2">' +
-      (c === 'con0' ? '<i class="pi pi-spin pi-spinner text-2xl text-sky-600 dark:text-sky-400 mb-1"></i>' : '<i class="pi pi-inbox text-2xl opacity-40 mb-1"></i>') +
-      '<span class="text-xs font-semibold">' + (c === 'con0' ? L.errNoData : L.errEmpty) + '</span></div>';
-    return colspan ? '<tr><td colspan="' + colspan + '" class="p-8 text-center text-slate-400 dark:text-slate-500">' + inner + '</td></tr>'
-      : '<div class="p-8 text-center text-slate-400 dark:text-slate-500">' + inner + '</div>';
-  }
-
-  function tableHtml() {
-    const th = (label, cls) => '<th class="py-2.5 px-3 bg-slate-100 dark:bg-surface-base' + (cls ? ' ' + cls : '') + '">' + label + '</th>';
-    const rows = st.ELEMENT_DATA.map(el => {
-      const j = el.jsn || {};
-      const pp = el.nature === 'Patch Panel';
-      return '<tr class="hover:bg-slate-50 dark:hover:bg-surface-base transition-colors">' +
-        '<td class="py-2.5 px-3 font-mono font-semibold"><button type="button" data-open-cat="' + esc(el.cat_id) + '" class="font-bold text-xs text-sky-600 dark:text-sky-400 hover:underline cursor-pointer">' + esc(el.model_id) + '</button></td>' +
-        '<td class="py-2.5 px-3 font-bold text-slate-900 dark:text-slate-100">' + esc(el.name) + '</td>' +
-        '<td class="py-2.5 px-3 text-slate-700 dark:text-slate-300">' + esc(el.brand) + '</td>' +
-        '<td class="py-2.5 px-3 text-slate-700 dark:text-slate-300"><span class="inline-flex items-center gap-1.5"><i class="' + natureIcon(el.nature) + ' text-[10px] text-sky-600 dark:text-sky-400"></i>' + esc(el.nature) + '</span></td>' +
-        // Sunum eki kolonlar: U / Güç / Ağırlık / Ön-Arka port
-        '<td class="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 text-right">' + fmtU(j.ucapacity) + '</td>' +
-        '<td class="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 text-right">' + fmtW(j.power) + '</td>' +
-        '<td class="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 text-right">' + fmtKg(j.weight) + '</td>' +
-        '<td class="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 text-center whitespace-nowrap">' + portCount(j, 'front') + ' <span class="text-slate-400">/</span> ' + (pp ? '<span class="text-slate-400">—</span>' : portCount(j, 'back')) + '</td>' +
-        '<td class="py-2.5 px-3 text-slate-600 dark:text-slate-400">' + esc(el.full_name) + '</td>' +
-      '</tr>';
-    }).join('');
-    return '<table class="w-full text-left border-collapse text-xs">' +
-      '<thead class="sticky top-0 z-10 bg-slate-100 dark:bg-surface-base shadow-2xs">' +
-        '<tr class="bg-slate-100 dark:bg-surface-base text-slate-800 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-border-subtle select-none">' +
-          th('Model ID', 'w-28') + th(L.colName) + th(L.colBrand) + th(L.colNature) +
-          th('U', 'text-right w-14') + th('Güç (W)', 'text-right w-20') + th('Ağırlık (kg)', 'text-right w-24') + th('Ön / Arka Port', 'text-center w-28') + th(L.colFullName) +
-        '</tr></thead>' +
-      '<tbody class="divide-y divide-slate-100 dark:divide-border-subtle text-xs text-slate-800 dark:text-slate-200">' +
-        (st.ELEMENT_DATA.length ? rows : emptyHtml(9)) +
-      '</tbody></table>';
-  }
-
-  function cardsHtml() {
-    if (!st.ELEMENT_DATA.length) return emptyHtml(0);
+  // ---- Kart (katalog) görünümü — sunum eki; tablo kutusunun içinde, aynı süzme ve sayfalama ----
+  function cardsHtml(rows) {
+    if (!rows.length) return '<div class="p-8 text-center text-slate-400 dark:text-slate-500"><i class="pi pi-inbox text-2xl mb-1 block opacity-40"></i><span class="text-xs font-semibold">' + L.errEmpty + '</span></div>';
     const tile = (label, val) => '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-slate-800 rounded-[2px] px-1 py-1 text-center min-w-0">' +
       '<div class="text-[9px] font-bold text-slate-400 uppercase tracking-wide">' + label + '</div><div class="text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 truncate">' + val + '</div></div>';
     return '<div class="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">' +
-      st.ELEMENT_DATA.map(el => {
+      rows.map(el => {
         const j = el.jsn || {};
         const pp = el.nature === 'Patch Panel';
         const img = j.front_img
@@ -349,47 +238,74 @@
         '</button>';
       }).join('') + '</div>';
   }
-
-  function footerHtml() {
-    const lastOff = st.isLoading || (st.page_total > 0 && st.page_cur + 1 >= st.page_total);
-    const firstOff = st.isLoading || st.page_cur === 0;
-    return '<div class="p-2.5 px-3 border-t border-slate-200 dark:border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs bg-slate-50 dark:bg-surface-base select-none shrink-0">' +
-      '<div class="text-slate-500 dark:text-slate-400 font-medium">' + L.totalRecords +
-        '<span class="font-bold text-slate-900 dark:text-slate-100 ml-1 px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded-[2px]">' + st.total_records + '</span></div>' +
-      '<div class="flex flex-wrap items-center gap-3 self-end sm:self-auto">' +
-        '<div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"><span>' + L.pageSize + ':</span>' +
-          '<input id="pageSize" type="number" data-page-size value="' + st.page_rng + '" min="1" max="999" class="w-14 px-1.5 py-0.5 bg-white dark:bg-surface-card border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-800 dark:text-slate-200 text-xs font-bold text-center focus:outline-none focus:ring-1 focus:ring-sky-500" /></div>' +
-        '<div class="flex items-center gap-1">' +
-          '<button type="button" data-pg="first"' + (firstOff ? ' disabled' : '') + ' title="' + L.firstTitle + '" class="' + PG_BTN + '"><i class="pi pi-angle-double-left text-xs"></i></button>' +
-          '<button type="button" data-pg="prev"' + (firstOff ? ' disabled' : '') + ' title="' + L.prevTitle + '" class="' + PG_BTN + '"><i class="pi pi-chevron-left text-[10px]"></i></button>' +
-          '<div class="flex items-center gap-1 px-1">' +
-            '<input type="number" data-page-input value="' + st.page_input + '" min="1" max="' + st.page_total + '"' + (st.isLoading ? ' disabled' : '') + ' class="w-10 px-1 py-0.5 bg-white dark:bg-surface-card border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-800 dark:text-slate-200 text-xs font-bold text-center focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
-            (st.page_total > 0 ? '<span class="text-slate-500 dark:text-slate-400 font-bold text-xs">/ ' + st.page_total + '</span>' : '') +
-          '</div>' +
-          '<button type="button" data-pg="next"' + (lastOff ? ' disabled' : '') + ' title="' + L.nextTitle + '" class="' + PG_BTN + '"><i class="pi pi-chevron-right text-[10px]"></i></button>' +
-          '<button type="button" data-pg="last"' + (lastOff ? ' disabled' : '') + ' title="' + L.lastTitle + '" class="' + PG_BTN + '"><i class="pi pi-angle-double-right text-xs"></i></button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
+  function afterBody(pageRows, start, host) {
+    const scroll = host.querySelector('[data-dt-scroll]');
+    const table = scroll.querySelector('table');
+    let grid = scroll.querySelector('[data-cl-grid]');
+    if (!grid) { grid = document.createElement('div'); grid.setAttribute('data-cl-grid', ''); scroll.appendChild(grid); }
+    const cards = st.view === 'cards';
+    table.style.display = cards ? 'none' : '';
+    grid.innerHTML = cards ? cardsHtml(pageRows) : '';
+    renderViewToggle();
+    const filtered = dt ? dt.getFiltered() : [];
+    if (reportMenu) reportMenu.update({ total: filtered.length, disabled: !filtered.length });
+  }
+  function renderViewToggle() {
+    const vt = listEl.querySelector('[data-viewtoggle]');
+    if (!vt) return;
+    const b = (v, icon, label) => '<button type="button" data-view="' + v + '" title="' + label + ' görünümü" class="px-2 py-1 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ' +
+      (st.view === v ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700') + '"><i class="' + icon + ' text-xs"></i><span class="hidden 2xl:inline">' + label + '</span></button>';
+    vt.innerHTML = b('table', 'pi pi-list', 'Liste') + b('cards', 'pi pi-objects-column', 'Kart');
   }
 
-  function renderData() {
-    const el = listEl.querySelector('[data-databox]');
-    if (!el) return;
-    const scroller = el.querySelector('[data-scroll]');
-    const top = scroller ? scroller.scrollTop : 0;
-    el.innerHTML =
-      '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-base text-xs select-none shrink-0">' +
-        '<div class="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200"><i class="pi pi-tags text-sky-600 dark:text-sky-400"></i><span>' + L.listTitle + '</span>' +
-          '<span class="text-slate-400 font-normal text-[11px]">[S' + (st.page_cur + 1) + (st.page_total > 0 ? ' / ' + st.page_total : '') + ']</span>' +
-          (st.nature ? '<span class="px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30">' + esc(st.nature) + '</span>' : '') +
-        '</div>' +
-        '<div class="flex items-center gap-2">' + conBadge() + '</div>' +
-      '</div>' +
-      '<div data-scroll class="flex-1 min-h-0 overflow-y-auto overflow-x-auto">' + (st.view === 'cards' ? cardsHtml() : tableHtml()) + '</div>' +
-      footerHtml();
-    const sc = el.querySelector('[data-scroll]');
-    if (sc && top) sc.scrollTop = top;
+  // Nitelik çipleri (sunum eki) → data-table hızlı filtreleri; sayı tüm katalog üzerinden
+  function quickFilters() {
+    const counts = {};
+    st.rows.forEach(i => { counts[i.nature] = (counts[i.nature] || 0) + 1; });
+    const keys = C.natures.map(n => n.key);
+    Object.keys(counts).forEach(k => { if (keys.indexOf(k) < 0) keys.push(k); });
+    return [{ label: 'Tümü (' + st.rows.length + ')', value: '' }].concat(keys.map(k => ({ label: k + ' (' + (counts[k] || 0) + ')', value: k })));
+  }
+
+  // ---- Başlık + data-table ----------------------------------------------------
+  function headerActionsHtml() {
+    return '<div class="flex items-center gap-2 max-lg:hidden">' +
+      // Sunum eki: yeni nitelik / yeni model
+      '<button type="button" data-act="new-nature" class="' + BTN_SEC + '" title="Yeni nitelik (kategori) tanımla"><i class="pi pi-folder-plus text-xs"></i><span>Yeni Nitelik</span></button>' +
+      '<button type="button" data-act="new-model" class="' + BTN_ADD + '" title="Kataloğa yeni cihaz modeli ekle"><i class="pi pi-plus text-xs"></i><span>Yeni Model</span></button>' +
+    '</div>';
+  }
+  function renderHeaderActions() { /* başlık düğmeleri durumdan bağımsız */ }
+  function renderChips() {
+    // Yeni nitelik eklenince hızlı filtre çiplerini yeniden kur (durum korunur)
+    if (!dt) return;
+    saveState();
+    mountTable();
+  }
+
+  function mountTable() {
+    const host = listEl.querySelector('[data-databox]');
+    if (reportMenu) { reportMenu.destroy(); reportMenu = null; }
+    dt = K.dataTable(host, {
+      columns: COLS,
+      rows: st.rows,
+      rowKey: r => r.cat_id,
+      search: st.search, filters: st.filters, showFilters: st.showFilters,
+      quickFilters: quickFilters(), quick: st.nature, quickFn: (r, v) => !v || r.nature === v,
+      page: st.page, pageSize: st.pageSize, mobileCards: true,
+      conStatus: getConClass,
+      emptyText: st.isLoading ? L.errNoData : L.errEmpty,
+      actions: '<div data-viewtoggle class="flex items-center border border-slate-200 dark:border-slate-700 rounded-[2px] overflow-hidden shrink-0 max-lg:hidden"></div><div data-cl-report></div>',
+      onRefresh: () => refresh1(true),
+      onChange: saveState,
+      afterBody
+    });
+    reportMenu = DCIM.report.menu(host.querySelector('[data-cl-report]'), {
+      scopes: [{ id: 'list', label: 'Filtrelenmiş liste', hint: 'Ekrandaki arama ve filtrelerle' }],
+      options: 'limit', unit: 'model', total: dt.getFiltered().length, inTable: true, disabled: !dt.getFiltered().length,
+      onExport: exportReport
+    });
+    renderViewToggle();
   }
 
   function renderList() {
@@ -397,176 +313,70 @@
       K.pageHeader({
         title: L.listTitle,
         breadcrumbs: [{ label: L.assetManagement }, { label: L.listTitle }],
-        actions: '<div data-header-actions></div>'
+        actions: headerActionsHtml()
       }).replace('mb-3 pb-2', 'shrink-0 mb-0 pb-2') +
-      toolbarHtml() +
-      '<div data-filter>' + filterHtml() + '</div>' +
-      '<div data-databox class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs overflow-hidden flex-1 min-h-0 flex flex-col"></div>';
-    renderHeaderActions();
-    renderChips();
-    renderData();
+      '<div data-databox class="flex-1 min-h-0 flex flex-col"></div>';
+    if (!st.rows.length) st.rows = parseCatListData(C.list());
+    mountTable();
   }
 
   // ---- Olaylar (liste) ------------------------------------------------------
-  function inputFilter() {
-    st.page_ofs = 0;
-    const fc = {};
-    Object.keys(st.f).forEach(k => { if (st.f[k] && st.f[k].trim() !== '') fc[k] = st.f[k].trim(); });
-    st.where = Object.keys(fc).length ? JSON.stringify(fc) : '{}';
-    refresh1(false);
-  }
-  function openFilter() {
-    st.filter_switch = st.filter_switch === 1 ? 0 : 1;
-    if (st.filter_switch === 0) {
-      Object.keys(st.f).forEach(k => { st.f[k] = ''; });
-      const prev = st.where;
-      st.where = '{}';
-      if (st.page_ofs !== 0 || prev !== '{}') { st.page_ofs = 0; }
-    }
-    listEl.querySelector('[data-filter]').innerHTML = filterHtml();
-    renderHeaderActions();
-    refresh1(false);
-  }
-  function setPage(ofs) { st.page_ofs = ofs; refresh1(false); }
-
   listEl.addEventListener('click', e => {
     const open = e.target.closest('[data-open-cat]');
-    if (open) { openCatManager(open.getAttribute('data-open-cat')); return; }
-    const nat = e.target.closest('[data-nature]');
-    if (nat) { st.nature = nat.getAttribute('data-nature'); st.page_ofs = 0; refresh1(false); return; }
+    if (open) { saveState(); openCatManager(open.getAttribute('data-open-cat')); return; }
     const vw = e.target.closest('[data-view]');
-    if (vw) { st.view = vw.getAttribute('data-view'); storage.set('dcim_catlist_view', st.view); renderChips(); renderData(); return; }
-    const pg = e.target.closest('[data-pg]');
-    if (pg && !pg.disabled) {
-      const a = pg.getAttribute('data-pg');
-      if (a === 'first' && st.page_cur > 0) setPage(0);
-      else if (a === 'prev' && st.page_cur > 0) setPage(st.page_cur - 1);
-      else if (a === 'next' && !(st.page_total > 0 && st.page_cur + 1 >= st.page_total)) setPage(st.page_cur + 1);
-      else if (a === 'last' && st.page_total > 0 && st.page_cur < st.page_total - 1) setPage(st.page_total - 1);
-      return;
-    }
+    if (vw) { st.view = vw.getAttribute('data-view'); storage.set('dcim_catlist_view', st.view); dt.renderBody(); return; }
     const act = e.target.closest('[data-act]');
     if (!act || act.disabled) return;
     const a = act.getAttribute('data-act');
-    if (a === 'filter') openFilter();
-    else if (a === 'apply') inputFilter();
-    else if (a === 'refresh') refresh1(true);
-    else if (a === 'report') openReport();
-    else if (a === 'new-model') openNewModel();
+    if (a === 'new-model') openNewModel();
     else if (a === 'new-nature') openNewNature();
-    else if (a === 'search-clear') {
-      st.search = '';
-      const inp = listEl.querySelector('[data-search]');
-      if (inp) { inp.value = ''; inp.focus(); }
-      act.classList.add('hidden');
-      st.page_ofs = 0;
-      refresh1(false);
-    }
   });
-  listEl.addEventListener('input', e => {
-    if (e.target.matches('[data-f]')) st.f[e.target.getAttribute('data-f')] = e.target.value;
-    else if (e.target.matches('[data-search]')) {
-      st.search = e.target.value;
-      const clr = listEl.querySelector('[data-act="search-clear"]');
-      if (clr) clr.classList.toggle('hidden', !st.search);
-      st.page_ofs = 0;
-      refresh1(false);
-    }
-  });
-  listEl.addEventListener('keyup', e => {
-    if (e.key !== 'Enter') return;
-    if (e.target.matches('[data-f]')) inputFilter();
-    else if (e.target.matches('[data-page-input]')) onPageInputSubmit(e.target);
-  });
-  listEl.addEventListener('change', e => {
-    if (e.target.matches('[data-page-size]')) {
-      let v = parseInt(e.target.value, 10) || 1;
-      if (v > 999) v = 999; else if (v < 1) v = 1;
-      st.page_rng = v;
-      st.page_ofs = 0;
-      refresh1(false);
-    } else if (e.target.matches('[data-page-input]')) onPageInputSubmit(e.target);
-  });
-  function onPageInputSubmit(inp) {
-    let target = Math.round(Number(inp.value));
-    if (!target) { inp.value = st.page_cur + 1; return; }
-    if (target < 1) target = 1; else if (st.page_total > 0 && target > st.page_total) target = st.page_total;
-    inp.value = target;
-    if (st.page_ofs !== target - 1) setPage(target - 1);
-  }
 
   // ===========================================================================
-  // RAPOR PENCERESİ (AssetCatReportPopupComponent)
+  // RAPOR (app-report-export-menu → exportReport: "Model Kütüphanesi Raporu")
   // ===========================================================================
+  function reportFilterText() {
+    const labels = { model_id: 'Model ID', name: 'Model Adı', brand: 'Marka', nature: 'Nitelik', full_name: 'Tam Model Adı' };
+    const f = (dt && dt.state.filters) || {};
+    const parts = Object.keys(labels).filter(k => f[k] && String(f[k]).trim()).map(k => labels[k] + ': ' + String(f[k]).trim());
+    if (dt && dt.state.quick) parts.push('Nitelik: ' + dt.state.quick);
+    return parts.join(', ');
+  }
+  function exportReport(req) {
+    const all = dt.getFiltered();
+    const rows = DCIM.report.applyLimit(all, req);
+    const fmt = req.format === 'pdf' ? 'PDF' : req.format === 'xlsx' ? 'Excel' : 'CSV';
+    const q = dt.state.search.trim();
+    const filters = [q ? 'arama "' + q + '"' : '', reportFilterText()].filter(Boolean);
+    const b = DCIM.report.busy(rows.length + ' model · ' + fmt + ' raporu hazırlanıyor');
+    setTimeout(() => {
+      b.close();
+      DCIM.report.generate({
+        title: 'Model Kütüphanesi Raporu',
+        subtitle: [filters.length ? 'Filtre: ' + filters.join(', ') : 'Tüm modeller', req.limit ? 'İlk ' + req.limit + ' / ' + all.length + ' model' : 'Tümü (' + all.length + ' model)'].join(' · '),
+        filename: 'Model_Kutuphanesi',
+        kpis: [
+          { label: 'Model', value: rows.length },
+          { label: 'Marka', value: new Set(rows.map(i => i.brand).filter(Boolean)).size },
+          { label: 'Nitelik', value: new Set(rows.map(i => i.nature).filter(Boolean)).size }
+        ],
+        sections: [{
+          title: 'Model listesi',
+          columns: [
+            { key: 'model_id', label: 'Model ID' }, { key: 'name', label: 'Model Adı' }, { key: 'brand', label: 'Marka' },
+            { key: 'nature', label: 'Nitelik' }, { key: 'full_name', label: 'Tam Model Adı' }
+          ],
+          rows: rows.map(i => ({ model_id: i.model_id, name: i.name, brand: i.brand, nature: i.nature, full_name: i.full_name }))
+        }],
+        notes: ['Varlık Yönetimi · ' + rows.length + ' / ' + st.rows.length + ' model']
+      }, req.format);
+      toast('Model Kütüphanesi Raporu (' + fmt + ') oluşturuldu: ' + rows.length + ' kayıt.', 'success', 'Rapor');
+    }, 600);
+  }
   function openReport() {
-    const rp = { loading: false, searched: false, data: [] };
-    const host = document.createElement('div');
-    host.className = 'fixed inset-0 z-[9999] bg-slate-900/60 flex items-center justify-center p-4 sm:p-6 animate-fade-in';
-    const close = () => { host.remove(); document.removeEventListener('keydown', onKey); };
-    const onKey = e => { if (e.key === 'Escape') close(); };
-    const cols = [
-      { header: 'Model ID', value: r => r.model_id }, { header: 'Model Adı', value: r => r.name }, { header: 'Marka', value: r => r.brand },
-      { header: 'Nitelik', value: r => r.nature }, { header: 'Tam Model Adı', value: r => r.full_name },
-      { header: 'U Kapasitesi', value: r => num(r.jsn.ucapacity) }, { header: 'Güç (W)', value: r => num(r.jsn.power) }, { header: 'Ağırlık (kg)', value: r => num(r.jsn.weight) },
-      { header: 'Ön Port', value: r => portCount(r.jsn, 'front') }, { header: 'Arka Port', value: r => portCount(r.jsn, 'back') }
-    ];
-    const th = l => '<th class="px-4 py-3 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">' + l + '</th>';
-    function render() {
-      const body = rp.loading
-        ? '<div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10"><div class="w-10 h-10 border-4 border-slate-200 dark:border-slate-700 border-t-sky-500 dark:border-t-sky-400 rounded-full animate-spin mb-4"></div><span class="text-sm font-medium text-slate-600 dark:text-slate-300">' + RP.loading + '</span></div>'
-        : !rp.searched
-          ? '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center"><div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4"><i class="pi pi-search text-2xl text-slate-400 dark:text-slate-500"></i></div><p class="text-sm font-medium">' + RP.description + '</p></div>'
-          : !rp.data.length
-            ? '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center"><i class="pi pi-inbox text-5xl mb-4 text-slate-300 dark:text-slate-600"></i><p class="text-sm font-medium">' + RP.noData + '</p></div>'
-            : '<table class="w-full text-left border-collapse text-xs whitespace-nowrap"><thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800/80 backdrop-blur-md shadow-sm"><tr>' +
-                th('Model ID') + th('Model Adı') + th('Marka') + th('Nitelik') + th('Tam Model Adı') + '</tr></thead><tbody class="divide-y divide-slate-100 dark:divide-slate-800">' +
-                rp.data.slice(0, 20).map(i => '<tr class="border-b border-slate-100 dark:border-slate-800/50 hover:bg-sky-50/50 dark:hover:bg-sky-900/10 transition-colors">' +
-                  '<td class="px-4 py-2.5 font-mono text-sky-600 dark:text-sky-400 font-medium">' + esc(i.model_id) + '</td>' +
-                  '<td class="px-4 py-2.5 text-slate-800 dark:text-slate-200 font-medium">' + esc(i.name) + '</td>' +
-                  '<td class="px-4 py-2.5 text-slate-700 dark:text-slate-300">' + esc(i.brand) + '</td>' +
-                  '<td class="px-4 py-2.5 text-slate-700 dark:text-slate-300"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">' + esc(i.nature) + '</span></td>' +
-                  '<td class="px-4 py-2.5 text-slate-600 dark:text-slate-300">' + esc(i.full_name) + '</td></tr>').join('') +
-                (rp.data.length > 20 ? '<tr class="bg-slate-50 dark:bg-slate-800/40"><td colspan="5" class="px-4 py-3 text-center text-xs italic text-slate-500 dark:text-slate-400">' + RP.moreResults1 + (rp.data.length - 20) + RP.moreResults2 + '</td></tr>' : '') +
-              '</tbody></table>';
-      host.innerHTML =
-        '<div data-rp-panel class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-lg shadow-2xl w-full max-w-[95vw] sm:max-w-7xl flex flex-col max-h-[90vh] transform transition-all animate-modal-pop">' +
-          '<div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/90 dark:bg-slate-900/90 rounded-t-lg shrink-0">' +
-            '<div class="flex items-center gap-3"><div class="w-10 h-10 rounded-md bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-500"><i class="pi pi-tags text-lg"></i></div>' +
-              '<div><h2 class="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">' + RP.title + '</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">' + RP.description + '</p></div></div>' +
-            '<button type="button" data-rp="close" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer outline-none"><i class="pi pi-times"></i></button>' +
-          '</div>' +
-          '<div class="p-4 bg-white dark:bg-surface-card border-b border-slate-200 dark:border-slate-800 shrink-0 flex flex-wrap items-center justify-between gap-3">' +
-            '<p class="text-xs text-slate-600 dark:text-slate-300">' + RP.description + '</p>' +
-            '<button type="button" data-rp="search"' + (rp.loading ? ' disabled' : '') + ' class="h-[38px] px-5 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white text-xs font-bold rounded transition-colors shadow-sm flex items-center gap-2 uppercase tracking-wide cursor-pointer">' +
-              '<i class="pi ' + (rp.loading ? 'pi-spinner pi-spin' : 'pi-search') + '"></i><span>' + (rp.loading ? RP.fetchingData : RP.fetchAllData) + '</span></button>' +
-          '</div>' +
-          (rp.data.length && !rp.loading
-            ? '<div class="px-5 py-3 bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-800 shrink-0 flex flex-wrap items-center justify-between gap-3">' +
-                '<div class="flex gap-2">' +
-                  '<button type="button" data-rp="pdf" class="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50 text-xs font-semibold rounded transition-colors flex items-center gap-2 cursor-pointer"><i class="pi pi-file-pdf"></i>' + RP.pdfDownload + '</button>' +
-                  '<button type="button" data-rp="excel" class="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 text-xs font-semibold rounded transition-colors flex items-center gap-2 cursor-pointer"><i class="pi pi-file-excel"></i>' + RP.excelDownload + '</button>' +
-                '</div>' +
-                '<div class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">' + RP.recordCount1 + rp.data.length + RP.recordCount2 + '</div>' +
-              '</div>'
-            : '') +
-          '<div class="flex-1 overflow-auto bg-white dark:bg-[#0f172a] relative min-h-[300px]">' + body + '</div>' +
-        '</div>';
-    }
-    host.addEventListener('click', e => {
-      if (e.target === host) { close(); return; }
-      const b = e.target.closest('[data-rp]');
-      if (!b || b.disabled) return;
-      const a = b.getAttribute('data-rp');
-      if (a === 'close') close();
-      else if (a === 'search') {
-        rp.loading = true; render();
-        setTimeout(() => { rp.data = parseCatListData(C.list()); rp.loading = false; rp.searched = true; render(); }, 650);
-      } else if (a === 'excel') K.exportExcel('Kategori_Listesi_Raporu', cols, rp.data);
-      else if (a === 'pdf') K.exportPdf();
-    });
-    document.addEventListener('keydown', onKey);
-    render();
-    document.body.appendChild(host);
+    const btn = listEl.querySelector('[data-cl-report] [data-rk-btn]');
+    if (btn) btn.click();
   }
 
   // ===========================================================================

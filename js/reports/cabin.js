@@ -54,7 +54,7 @@
         { value: 'CMR/T00', label: '1.Kat', ridPrefixes: ['K1'] },
         { value: 'CMR/T02', label: '2.Kat', ridPrefixes: ['K2'] },
         { value: 'CMR/T03', label: '3.Kat', ridPrefixes: ['K3'] },
-        { value: 'CMR/T04', label: 'IDC4', ridPrefixes: ['4', 'IDC4'] }
+        { value: 'CMR/T04', label: 'DCB', ridPrefixes: ['4', 'DCB'] }
       ];
       const SENSOR_TYPES = [
         { value: 'TEMP_BOT', label: 'Sıcaklık Alt' },
@@ -67,12 +67,12 @@
       const CALC_TYPES = [{ value: 'Average', label: 'Ortalama' }, { value: 'Minimum', label: 'Minimum' }, { value: 'Maximum', label: 'Maksimum' }];
       const COLORS = ['#36a2eb', '#ff6384', '#4bc0c0', '#ff9f40', '#9966ff', '#ffcd56', '#c9cbcf', '#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
 
-      // Sunum açılışı: ?cabinet=1BJ53 derin bağlantısıyla aynı (yüksek sıcaklık alarmı olan kabin) + "Geçen Hafta"
+      // Sunum açılışı: ?cabinet=1DU06 derin bağlantısıyla aynı (yüksek sıcaklık alarmı olan kabin) + "Geçen Hafta"
       const initRange = R5.presetRange('past_week');
       const state = {
         selectedFloors: [FLOORS[0]],
         moduleOptions: [], filteredModuleOptions: [], moduleSearchText: '',
-        module: ['CMR/T00::1BJ53'],
+        module: ['CMR/T00::1DU06'],
         sensorTypes: ['TEMP_BOT', 'TEMP_MID', 'TEMP_TOP'],
         selectedValueType: 'Average',
         reportMode: 'daily',
@@ -284,50 +284,46 @@
 
       function popupHtml() {
         if (!state.showDataPopup) return '';
+        const RM = DCIM.reportModal;
         const off = state.popupData.length === 0;
+        const dis = off ? ' disabled' : '';
+        const rowCount = state.popupData.reduce((n, g) => n + ((g.result && g.result.length) || 0), 0);
         let body;
         if (state.isLoadingPopupData) {
-          body = '<div class="flex flex-col items-center justify-center py-12 text-center">' +
+          body = '<div class="rpt-state">' +
             '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl mb-3"></i>' +
             '<p class="text-slate-700 dark:text-slate-300 text-sm font-medium">' + esc(T.processingData) + '</p>' +
             (state.chunkProgress ? bar('w-64 bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden mt-3 mb-1') + '<p class="text-xs text-sky-600 dark:text-sky-300 font-mono mt-1">' + esc(state.chunkProgress) + '</p>' : '') +
           '</div>';
         } else if (!off) {
-          body = '<div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded">' +
-            '<table class="w-full text-xs text-left text-slate-700 dark:text-slate-300">' +
-              '<thead class="bg-slate-100 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 font-semibold border-b border-slate-200 dark:border-border-subtle uppercase tracking-wider"><tr>' +
-                [T.colFloor, T.colCabinetName, T.colSensorName, valueTypeLabel(), T.colDate].map(h => '<th class="px-4 py-3">' + esc(h) + '</th>').join('') +
+          body = '<table class="rpt-table">' +
+              '<thead><tr>' +
+                [T.colFloor, T.colCabinetName, T.colSensorName, valueTypeLabel(), T.colDate].map(h => '<th>' + esc(h) + '</th>').join('') +
               '</tr></thead>' +
-              '<tbody class="divide-y divide-slate-200 dark:divide-border-subtle">' +
+              '<tbody>' +
                 state.popupData.map(g => g.result.map(it =>
-                  '<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">' +
-                    '<td class="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">' + esc(katOfRid(it.rid)) + '</td>' +
-                    '<td class="px-4 py-2.5 text-sky-600 dark:text-sky-400 font-semibold" data-cabin-chart="' + esc(it.rid) + '" title="' + esc(T.cpTitle) + '" style="cursor: pointer">' + esc(kabinOfRid(it.rid)) + '</td>' +
-                    '<td class="px-4 py-2.5 text-slate-700 dark:text-slate-300">' + esc(sensorName(sensorOfRid(it.rid))) + '</td>' +
-                    '<td class="px-4 py-2.5 font-mono text-slate-900 dark:text-slate-100">' + esc(formatValue(it.val, it.rid)) +
+                  '<tr>' +
+                    '<td class="font-medium text-slate-800 dark:text-slate-200">' + esc(katOfRid(it.rid)) + '</td>' +
+                    '<td class="text-sky-600 dark:text-sky-400 font-semibold" data-cabin-chart="' + esc(it.rid) + '" title="' + esc(T.cpTitle) + '" style="cursor: pointer">' + esc(kabinOfRid(it.rid)) + '</td>' +
+                    '<td class="text-slate-700 dark:text-slate-300">' + esc(sensorName(sensorOfRid(it.rid))) + '</td>' +
+                    '<td class="font-mono text-slate-900 dark:text-slate-100">' + esc(formatValue(it.val, it.rid)) +
                       (!isDoor(it.rid) ? ' <span class="text-slate-500 dark:text-slate-400 text-[11px] ml-1">' + esc(it.measureUnit) + '</span>' : '') + '</td>' +
-                    '<td class="px-4 py-2.5 text-slate-500 dark:text-slate-400 font-mono">' + esc(itemDate(it)) + '</td>' +
+                    '<td class="text-slate-500 dark:text-slate-400 font-mono">' + esc(itemDate(it)) + '</td>' +
                   '</tr>').join('')).join('') +
-              '</tbody></table></div>';
+              '</tbody></table>';
         } else {
           body = kit.emptyState({ message: T.noData });
         }
-        return '<div class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-sm z-[200000] flex items-center justify-center p-4" data-popup-backdrop>' +
-          '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-lg shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden text-slate-800 dark:text-slate-100">' +
-            '<div class="flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-slate-900/50">' +
-              '<div class="flex items-center gap-3">' +
-                '<div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400"><i class="pi pi-table text-lg"></i></div>' +
-                '<h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">' + esc(T.popupTitle) + '</h3>' +
-              '</div>' +
-              '<div class="flex items-center gap-2">' +
-                R5.button({ variant: 'secondary', icon: 'pi pi-file-pdf', label: T.pdfDownload, disabled: off, attrs: 'data-act="pdf"' }) +
-                R5.button({ variant: 'secondary', icon: 'pi pi-file-excel', label: T.excelDownload, disabled: off, attrs: 'data-act="excel"' }) +
-                R5.button({ variant: 'secondary', icon: 'pi pi-file-archive', label: T.zipDownload, disabled: off, attrs: 'data-act="zip"' }) +
-                '<button type="button" data-act="close-popup" class="w-8 h-8 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors text-lg font-bold ml-2">×</button>' +
-              '</div>' +
-            '</div>' +
-            '<div class="p-6 overflow-y-auto flex-1 custom-scrollbar">' + body + '</div>' +
-          '</div></div>';
+        // Ortak rapor pop-up görünümü (app-report-modal)
+        return RM.html({
+          title: T.popupTitle, subtitle: T.title, icon: 'pi pi-table', tone: 'sky', size: 'lg', z: 'z-[200000]',
+          attrs: 'data-popup-backdrop',
+          actions: !state.isLoadingPopupData && !off ? RM.btn('pdf', 'pi pi-file-pdf', T.pdfDownload, 'data-act="pdf"' + dis) +
+            RM.btn('excel', 'pi pi-file-excel', T.excelDownload, 'data-act="excel"' + dis) +
+            RM.btn('zip', 'pi pi-folder', T.zipDownload, 'data-act="zip"' + dis) : '',
+          summary: !state.isLoadingPopupData && !off ? RM.total(rowCount) : '',
+          body
+        }).replace('data-rpt-close', 'data-rpt-close data-act="close-popup"');
       }
 
       el.innerHTML = '<div class="space-y-4" data-main></div><div data-overlay></div><div data-popup></div>';
@@ -487,22 +483,22 @@
           { key: 'hum', dot: 'bg-[#95d5b2]', color: '#95d5b2', title: T.cpHumValues, series: T.cpHum, unit: T.cpHumUnit, match: s => s.indexOf('HUM') === 0 }
         ];
 
-        const host = document.createElement('div');
-        host.className = 'fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-sm z-[200000] flex items-center justify-center p-4 overflow-y-auto';
         const filtered = () => cabinData.filter(d => cabinKey(d.rid) === selected);
-        const bodyHtml = () =>
-          '<div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg p-4 flex flex-wrap items-center justify-between gap-4">' +
-            '<div class="flex items-center gap-3">' +
-              '<label for="cabinSelect" class="text-xs font-medium text-slate-700 dark:text-slate-300">' + esc(T.cpSelectCabin) + '</label>' +
-              '<select id="cabinSelect" data-cp-select class="scada-input min-w-[200px] text-xs bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded px-3 py-1.5 focus:border-sky-500 focus:outline-none">' +
+        // Kabin seçimi (reportFilters şeridi)
+        const filtersHtml = () =>
+          '<div class="flex flex-wrap items-end justify-between gap-4 max-lg:gap-2">' +
+            '<div class="min-w-[220px] max-lg:w-full">' +
+              '<label for="cabinSelect" class="rpt-label">' + esc(T.cpSelectCabin.replace(/:$/, '')) + '</label>' +
+              '<select id="cabinSelect" data-cp-select class="rpt-input rpt-input-plain">' +
                 available.map(c => '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
               '</select>' +
             '</div>' +
             (selected ? '<div class="text-xs text-slate-500 dark:text-slate-400">' + esc(T.cpSelectedCabin) + ' <strong class="text-sky-600 dark:text-sky-400 font-semibold">' + esc(selected) + '</strong></div>' : '') +
-          '</div>' +
-          '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">' +
+          '</div>';
+        const bodyHtml = () =>
+          '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-lg:gap-3">' +
             SECTIONS.map(s =>
-              '<div class="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-lg p-4 flex flex-col">' +
+              '<div class="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-lg p-4 max-lg:p-3 flex flex-col">' +
                 '<div class="flex items-center gap-2 mb-3"><span class="w-2.5 h-2.5 rounded-full ' + s.dot + '"></span>' +
                   '<h3 class="text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider">' + esc(s.title) + '</h3></div>' +
                 '<div class="relative w-full h-[260px] flex items-center justify-center"><canvas data-cp-chart="' + s.key + '" class="w-full h-full"></canvas></div>' +
@@ -515,23 +511,19 @@
             '</div>' +
           '</div>';
 
-        host.innerHTML =
-          '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-lg shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden text-slate-900 dark:text-slate-100" data-cp-panel>' +
-            '<div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-slate-900/50">' +
-              '<div class="flex items-center gap-3">' +
-                '<div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400"><i class="pi pi-chart-line text-lg"></i></div>' +
-                '<div><h2 class="text-base font-semibold text-slate-900 dark:text-slate-100">' + esc(T.cpTitle) + '</h2><p class="text-xs text-slate-500 dark:text-slate-400">' + esc(T.cpSubtitle) + '</p></div>' +
-              '</div>' +
-              '<button type="button" data-cp-close class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors flex items-center justify-center text-lg font-bold">×</button>' +
-            '</div>' +
-            '<div class="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar" data-cp-body></div>' +
-            '<div class="flex items-center justify-end gap-3 px-6 py-3.5 border-t border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-slate-900/50">' +
-              '<button type="button" data-cp-refresh class="px-4 py-2 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition-colors border border-slate-300 dark:border-slate-700 cursor-pointer"><i class="pi pi-refresh mr-1.5"></i> ' + esc(T.cpRefresh) + '</button>' +
-              '<button type="button" data-cp-close class="px-4 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition-colors shadow-sm cursor-pointer">' + esc(T.close) + '</button>' +
-            '</div>' +
-          '</div>';
+        // Ortak rapor pop-up görünümü (app-report-modal): filtre şeridi + "Grafikleri Yenile" + gövde
+        const wrap = document.createElement('div');
+        wrap.innerHTML = DCIM.reportModal.html({
+          title: T.cpTitle, subtitle: T.cpSubtitle, icon: 'pi pi-chart-line', tone: 'sky', size: 'lg', z: 'z-[200000]',
+          bodyClass: 'min-h-[300px] p-6 max-lg:p-3 space-y-6 max-lg:space-y-3',
+          filters: '<div data-cp-filters></div>',
+          actions: '<button type="button" data-cp-refresh class="rpt-btn rpt-btn-neutral"><i class="pi pi-refresh"></i>' + esc(T.cpRefresh) + '</button>',
+          body: ''
+        }).replace('data-rpt-close', 'data-rpt-close data-cp-close');
+        const host = wrap.firstElementChild;
         document.body.appendChild(host);
-        const bodyEl = host.querySelector('[data-cp-body]');
+        const bodyEl = host.querySelector('[data-rpt-body]');
+        const filtersEl = host.querySelector('[data-cp-filters]');
 
         const destroyCharts = () => Object.keys(charts).forEach(k => { charts[k].destroy(); delete charts[k]; });
         // prepareTimeSeriesChartData() + getTimeSeriesChartOptions()
@@ -574,7 +566,7 @@
             });
           });
         }
-        const renderBody = () => { destroyCharts(); bodyEl.innerHTML = bodyHtml(); buildCharts(); };
+        const renderBody = () => { destroyCharts(); filtersEl.innerHTML = filtersHtml(); bodyEl.innerHTML = bodyHtml(); buildCharts(); };
         renderBody();
 
         let refreshTimer = null;

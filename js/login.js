@@ -1,6 +1,6 @@
 /* ==========================================================================
    DCIM Sunum — Giriş Sayfası (NewUICMPLoginComponent karşılığı)
-   Gerçek kimlik doğrulama yoktur: kısa bir spinner sonrası 2d.html'e yönlendirir.
+   Gerçek kimlik doğrulama yoktur: kısa bir spinner sonrası dashboard.html'e (Genel Bakış) yönlendirir.
    ========================================================================== */
 (function () {
   'use strict';
@@ -102,8 +102,8 @@
       store.session('dcim_user', user);
       if (remember.checked) store.set('dcim_remember_user', user);
       else store.remove('dcim_remember_user');
-      showMessage('success', 'Giriş başarılı. Dijital İkiz ekranına yönlendiriliyorsunuz...');
-      setTimeout(() => { window.location.href = '2d.html'; }, 450);
+      showMessage('success', 'Giriş başarılı. Genel Bakış ekranına yönlendiriliyorsunuz...');
+      setTimeout(() => { window.location.href = 'dashboard.html'; }, 450);
     }, 1100);
   });
 })();

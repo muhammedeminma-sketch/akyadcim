@@ -26,7 +26,8 @@
         { key: 'ups', label: 'SDP Raporu', icon: 'pi pi-server' },
         { key: 'transformer', label: 'Trafo Raporu', icon: 'pi pi-database' },
         { key: 'switch-redundancy', label: 'Şalter Yük Yedeklilik Raporu', icon: 'pi pi-power-off' },
-        { key: 'capacity', label: 'Kapasite Raporu', icon: 'pi pi-percentage' }
+        { key: 'capacity', label: 'Kapasite Raporu', icon: 'pi pi-percentage' },
+        { key: 'capacity-forecast', label: 'Kapasite Tahmini', icon: 'pi pi-chart-scatter' }
       ]
     },
     {

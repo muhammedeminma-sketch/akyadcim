@@ -1,0 +1,7 @@
+/* Mühendislik ana sayfası (engineering-home.component.ts styles) */
+.eng-tnum { font-variant-numeric: tabular-nums; }
+/* build-extra-css.js rakamla başlayan 2xl: sınıflarını üretmiyor (check-classes kaçışlı adı da eşleştiriyor) */
+@media (width >= 96rem) {
+  .\32xl\:col-span-2 { grid-column: span 2 / span 2; }
+  .\32xl\:grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}

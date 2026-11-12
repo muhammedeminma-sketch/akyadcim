@@ -129,7 +129,7 @@
           (st.period !== 'instant' ? button({ variant: 'primary', icon: 'pi pi-filter', label: 'Rapor Oluştur', attrs: 'data-action="generate"' + dis }) : '') +
           button({ variant: 'secondary', icon: 'pi pi-file-pdf', label: 'PDF İndir', attrs: 'data-action="pdf"' + dis }) +
           button({ variant: 'secondary', icon: 'pi pi-file-excel', label: 'Excel İndir', attrs: 'data-action="excel"' + dis }) +
-          button({ variant: 'secondary', icon: 'pi pi-file-archive', label: 'ZIP İndir', attrs: 'data-action="zip"' + dis })
+          button({ variant: 'secondary', icon: 'pi pi-folder', label: 'ZIP İndir', attrs: 'data-action="zip"' + dis })
       });
     }
 
@@ -237,45 +237,38 @@
 
     function renderPopup() {
       if (!st.showPopup) return '';
+      const RM = DCIM.reportModal;
       const dis = st.loadingReport ? ' disabled' : '';
       const body = st.loadingReport
-        ? '<div class="py-12 flex flex-col items-center justify-center gap-3"><i class="pi pi-spin pi-spinner text-3xl text-sky-500"></i>' +
+        ? '<div class="rpt-state gap-3"><i class="pi pi-spin pi-spinner text-3xl text-sky-500"></i>' +
             '<p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Veriler Hazırlanıyor...</p></div>'
-        : '<div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded-[2px]"><table class="w-full text-left border-collapse"><thead>' +
-            '<tr class="' + THEAD_TR + '">' +
-              '<th class="' + TH + '">Bileşen</th><th class="' + TH + '">Birim</th><th class="' + TH + '">Anlık Değer</th>' +
-              '<th class="' + TH + '">Kullanım (%)</th><th class="' + TH + '">Eşik (%)</th><th class="py-2.5 px-3.5 text-center">Durum</th>' +
-            '</tr></thead><tbody class="' + TBODY + '">' +
+        : '<table class="rpt-table"><thead><tr>' +
+              '<th>Bileşen</th><th>Birim</th><th>Anlık Değer</th>' +
+              '<th>Kullanım (%)</th><th>Eşik (%)</th><th class="text-center">Durum</th>' +
+            '</tr></thead><tbody class="text-slate-700 dark:text-slate-200">' +
             items.map(it =>
-              '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover">' +
-                '<td class="py-2.5 px-3.5 font-semibold">' + esc(COMPONENT_LABEL[it.key]) + '</td>' +
-                '<td class="py-2.5 px-3.5 font-mono text-slate-500">' + esc(it.unit) + '</td>' +
-                '<td class="py-2.5 px-3.5 font-mono font-medium">' + it.currentVal + '</td>' +
-                '<td class="py-2.5 px-3.5 font-mono font-bold">' + it.currentPct + '%</td>' +
-                '<td class="py-2.5 px-3.5 font-mono text-slate-500">' + it.threshold + '%</td>' +
-                '<td class="py-2.5 px-3.5 text-center">' + statusBadge(statusOf(it), statusLabel(it)) + '</td>' +
+              '<tr>' +
+                '<td class="font-semibold">' + esc(COMPONENT_LABEL[it.key]) + '</td>' +
+                '<td class="font-mono text-slate-500">' + esc(it.unit) + '</td>' +
+                '<td class="font-mono font-medium">' + it.currentVal + '</td>' +
+                '<td class="font-mono font-bold">' + it.currentPct + '%</td>' +
+                '<td class="font-mono text-slate-500">' + it.threshold + '%</td>' +
+                '<td class="text-center">' + statusBadge(statusOf(it), statusLabel(it)) + '</td>' +
               '</tr>').join('') +
-            '</tbody></table></div>';
-      return '<div data-backdrop="popup" class="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 flex items-center justify-center p-4">' +
-        '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xl w-full max-w-4xl overflow-hidden transform transition-all">' +
-          '<div class="px-5 py-4 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-panel">' +
-            '<div class="flex items-center gap-2.5 flex-wrap">' +
-              '<i class="pi pi-file-pdf text-sky-500 text-lg"></i>' +
-              '<h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Kapasite Raporu</h3>' +
-              '<span class="px-2 py-0.5 text-[11px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 rounded-[2px]">' +
-                esc(periodLabel()) + '&nbsp;|&nbsp; ' + esc(st.startDate) + ' – ' + esc(st.endDate) + '</span>' +
-              '<span class="px-2 py-0.5 text-[11px] font-semibold bg-slate-100 dark:bg-surface-panel text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-border-subtle rounded-[2px]">Kapsam: ' + esc(scopeLabel()) + '</span>' +
-            '</div>' +
-            '<button type="button" data-action="close-popup" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"><i class="pi pi-times text-base"></i></button>' +
-          '</div>' +
-          '<div class="p-5 max-h-[70vh] overflow-y-auto">' + body + '</div>' +
-          '<div class="px-5 py-3 border-t border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-surface-panel flex items-center justify-end gap-2">' +
-            button({ variant: 'secondary', icon: 'pi pi-file-pdf', label: 'PDF İndir', attrs: 'data-action="pdf"' + dis }) +
-            button({ variant: 'secondary', icon: 'pi pi-file-excel', label: 'Excel İndir', attrs: 'data-action="excel"' + dis }) +
-            button({ variant: 'secondary', icon: 'pi pi-file-archive', label: 'ZIP İndir', attrs: 'data-action="zip"' + dis }) +
-            button({ variant: 'ghost', label: 'İptal', attrs: 'data-action="close-popup"' }) +
-          '</div>' +
-        '</div></div>';
+            '</tbody></table>';
+      // Ortak rapor pop-up görünümü (app-report-modal)
+      return RM.html({
+        title: 'Kapasite Raporu', subtitle: 'KAPASİTE KULLANIM RAPORLAMA', icon: 'pi pi-file-pdf', tone: 'sky', size: 'lg', z: 'z-50',
+        attrs: 'data-backdrop="popup"',
+        badge: '<span class="px-2 py-0.5 text-[11px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 rounded-[2px]">' +
+            esc(periodLabel()) + '&nbsp;|&nbsp; ' + esc(st.startDate) + ' – ' + esc(st.endDate) + '</span>' +
+          '<span class="px-2 py-0.5 text-[11px] font-semibold bg-slate-100 dark:bg-surface-panel text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-border-subtle rounded-[2px]">Kapsam: ' + esc(scopeLabel()) + '</span>',
+        actions: st.loadingReport ? '' : RM.btn('pdf', 'pi pi-file-pdf', 'PDF İndir', 'data-action="pdf"' + dis) +
+          RM.btn('excel', 'pi pi-file-excel', 'Excel İndir', 'data-action="excel"' + dis) +
+          RM.btn('zip', 'pi pi-folder', 'ZIP İndir', 'data-action="zip"' + dis),
+        summary: st.loadingReport ? '' : RM.total(items.length),
+        body
+      }).replace('data-rpt-close', 'data-rpt-close data-action="close-popup"');
     }
 
     function renderSettings() {

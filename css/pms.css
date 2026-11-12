@@ -40,7 +40,8 @@ html.dark .dark\:hover\:bg-surface-hover:hover { background-color: var(--color-s
    pms-dashboard/pms.scss (:host → .pms-host)
    ========================================================================== */
 .pms-host {
-  display: block; height: 100%; min-height: 0; overflow: hidden;
+  /* Kısa ekranda (dizüstü) içerik sığmazsa sayfa kayar (QA #166); yatay taşma yok */
+  display: block; height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto;
   --ring: 92px;
   --pms-card: #ffffff;
   --pms-card-2: #f8fafc;
@@ -86,9 +87,10 @@ html.dark .pms-host {
   --pms-info-text: #fcd34d;
 }
 
-/* Tek sayfa: sayfa kaydırması yok; satırlar ekran yüksekliğine kilitli, kaydırma yalnız kutuların içinde */
+/* Tek sayfa: satırlar ekran yüksekliğine kilitli, kaydırma kutuların içinde. Yükseklik 640px altına inerse
+   panolar ezilip kesilmesin diye taban yükseklik korunur ve .pms-host kayar (QA #166) */
 .pms-host .pms-page {
-  height: 100%; min-height: 0; overflow: hidden; padding: 8px; gap: 8px;
+  height: 100%; min-height: 640px; overflow: hidden; padding: 8px; gap: 8px;
   display: grid; grid-template-rows: auto auto minmax(0, 1fr);
 }
 .pms-host .kpi-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; min-width: 0; }
@@ -109,7 +111,7 @@ html.dark .pms-host {
 .pms-host .kpi-label, .pms-host .kpi-value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .pms-host .pms-page-an {
-  height: 100%; min-height: 0; overflow: hidden; padding: 8px; gap: 8px;
+  height: 100%; min-height: 420px; overflow: hidden; padding: 8px; gap: 8px;
   display: grid; grid-template-rows: auto minmax(0, 1fr);
 }
 .pms-host .an-scroll { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
@@ -272,13 +274,19 @@ html.dark .pms-host .pms-dlg-backdrop { background: rgba(0, 0, 0, .6); }
   .pms-host .legend { gap: 1px; font-size: 10px; }
   .pms-host .spark { display: none; }
 }
-/* Telefon genişliği: ızgara tek sütuna iner ve sayfa kaydırılır */
-@media (max-width: 760px) {
-  .pms-host .pms-page { overflow: auto; display: flex; flex-direction: column; }
+/* Tablet: KPI 3 sütun, grafikler 2 sütun */
+@media (max-width: 1024px) {
+  .pms-host .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pms-host .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Telefon/dikey tablet: tek sütun, sayfa kayar (kutular içerik boyunda) */
+@media (max-width: 768px) {
+  .pms-host { overflow-y: auto; }
+  .pms-host .pms-page, .pms-host .pms-page-an { height: auto; overflow: visible; grid-template-rows: auto; }
   .pms-host .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pms-host .pms-main { display: flex; flex-direction: column; }
-  .pms-host .charts { grid-template-columns: minmax(0, 1fr); }
-  .pms-host .area-src, .pms-host .area-alm, .pms-host .area-std { max-height: 420px; }
+  .pms-host .pms-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "charts" "src" "alm" "std"; }
+  .pms-host .panel { max-height: 70vh; }
+  .pms-host .an-scroll { overflow: visible; }
 }
 
 /* ==========================================================================
@@ -936,3 +944,17 @@ html.dark .dark\:bg-indigo-900\/40 { background-color: rgb(49 46 129 / 0.4); }
 /* İşaret sınıfları (orijinal şablonla aynı adlar; stil taşımaz) */
 .pms-host .chart-panel { min-width: 0; }
 .rect-host .rect-root { min-width: 0; }
+
+/* ==========================================================================
+   energy-general-view.component.scss — meteoroloji çipi ve dar ekran başlığı
+   ========================================================================== */
+/* Meteoroloji çipi: aktif alarmda şiddet renginde yanıp söner */
+.meteo-chip.meteo-alarm { border-color: var(--c); color: var(--c); animation: meteo-blink 1s ease-in-out infinite; }
+@keyframes meteo-blink { 50% { background: color-mix(in srgb, var(--c) 28%, transparent); } }
+@media (prefers-reduced-motion: reduce) {
+  .meteo-chip.meteo-alarm { animation: none; background: color-mix(in srgb, var(--c) 18%, transparent); }
+}
+/* Telefon: başlık satırı kayar */
+@media (max-width: 640px) {
+  .page-header-row { flex-wrap: wrap; row-gap: 4px; }
+}

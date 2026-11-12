@@ -83,3 +83,126 @@
 @keyframes cm-blinker {
   50% { opacity: 0.3; }
 }
+
+/* ==========================================================================
+   Satır içi cihaz paneli animasyonu (cabinet-manager.component.scss birebir)
+   Kapalı hâl : [PDU 1] [Kabin 1] [Sensör 1] [Asset 0]
+   Açık hâl   : [PDU 0] [Kabin 1] [Sensör 1] [Asset 1]   (.cd-layout--asset-open)
+   xl ve üstünde flex-grow geçişi; xl altında (dikey yığın) PDU paneli anında gizlenir,
+   cihaz paneli fade/slide ile belirir. Seçiciler .cd-layout önekli: Tailwind .flex'i ezsin.
+   ========================================================================== */
+.cd-layout { --cd-duration: 520ms; }
+.cd-layout .cd-panel--asset { display: none; }
+
+@media (max-width: 1279.98px) {
+  .cd-layout.cd-layout--asset-open .cd-panel--side { display: none; }
+  .cd-layout.cd-layout--asset-open .cd-panel--asset {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 520px;
+    animation: cd-asset-enter 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+}
+@keyframes cd-asset-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* lg altı: cihaz detayı açıkken kabin ve sensör panelleri de gizlenir */
+@media (max-width: 1023.98px) {
+  .cd-layout.cd-layout--asset-open .cd-panel--manager,
+  .cd-layout.cd-layout--asset-open .cd-panel--sensors { display: none; }
+  .cd-layout.cd-layout--asset-open .cd-panel--asset { flex: 1 1 auto; min-height: 0; }
+}
+
+@media (min-width: 1280px) {
+  .cd-layout.cd-layout { gap: 0; margin-left: -0.625rem; }
+  .cd-layout .cd-panel {
+    display: flex;
+    flex: 1 1 0%;
+    min-width: 0;
+    margin-left: 0.625rem;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      flex-grow var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      margin-left var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      padding var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      border-width var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity calc(var(--cd-duration) * 0.7) ease,
+      visibility 0s linear 0s;
+  }
+  .cd-layout .cd-panel.cd-panel--asset {
+    flex-grow: 0;
+    margin-left: 0;
+    padding: 0;
+    border-width: 0;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    animation: none;
+    transition:
+      flex-grow var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      margin-left var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      padding var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      border-width var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity calc(var(--cd-duration) * 0.6) ease,
+      visibility 0s linear var(--cd-duration);
+  }
+  .cd-layout.cd-layout--asset-open .cd-panel.cd-panel--side {
+    display: flex;
+    flex-grow: 0;
+    margin-left: 0;
+    padding: 0;
+    border-width: 0;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      flex-grow var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      margin-left var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      padding var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      border-width var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity calc(var(--cd-duration) * 0.5) ease,
+      visibility 0s linear var(--cd-duration);
+  }
+  .cd-layout.cd-layout--asset-open .cd-panel.cd-panel--asset {
+    display: flex;
+    flex-grow: 1;
+    margin-left: 0.625rem;
+    padding: 0;
+    border-width: 1px;
+    min-height: 0;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      flex-grow var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      margin-left var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      border-width var(--cd-duration) cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity calc(var(--cd-duration) * 0.8) ease calc(var(--cd-duration) * 0.25),
+      visibility 0s linear 0s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cd-layout .cd-panel,
+  .cd-layout .cd-panel--asset {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    animation: none !important;
+  }
+}
+
+/* Kilitli / salt okunur alanlar tıklanabilir hissi vermez */
+#cm-root input:disabled,
+#cm-root select:disabled,
+#cm-root textarea:disabled,
+#cm-root button:disabled,
+#cm-root .scada-input[readonly]:not(.cursor-pointer),
+#cm-root .scada-textarea[readonly]:not(.cursor-pointer) {
+  cursor: not-allowed !important;
+}
+
+/* Dikey PDU şeridi metni ([writing-mode:vertical-rl] rotate-180 — styles.css derlemesinde yok) */
+.cd-vpdu-text { writing-mode: vertical-rl; transform: rotate(180deg); }

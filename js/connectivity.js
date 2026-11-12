@@ -5,7 +5,7 @@
    aynı ağaç yerleşimi (calculateTreeSize / assignPositions, NODE 240×80, GAP_X 20, GAP_Y 170),
    grup çerçeveleri, sürükle/yakınlaştır (wheel, ±, Sıfırla), aynı Türkçe etiketler.
    api.CTD_Data (queryCableTopologyDiagramApi, where={src_pan}) → DCIM.data.connectivity.query()
-   (gerçek CTD tablosu, js/mock/connectivity.data.js).
+   (kurgusal CTD tablosu: kat-1 kabinleri + UPS A/B hatları, js/mock/connectivity.data.js).
 
    Sunum eklemeleri (kaynakta yok):
    - SDP kökünün üstünde tek hat besleme zinciri: Trafo → ADP (Ana Dağıtım Panosu) → UPS → SDP,
@@ -20,8 +20,8 @@
    Derin bağlantılar:
      ?sdp=A5                 → A5 SDP PANOSU seçili açılır (A1..A7, B1..B7)
      ?sdp=A5&open=ups        → düğüm detayını açar (trafo | adp | ups | sdp)
-     ?cabinet=1AV42&side=B   → kabini besleyen B yolu SDP'si seçilir, yol açılır, PDU detayı gösterilir
-                               (side verilmezse A; örn. ?cabinet=1CB52&side=B)
+     ?cabinet=1NA06&side=B   → kabini besleyen B yolu SDP'si seçilir, yol açılır, PDU detayı gösterilir
+                               (side verilmezse A; örn. ?cabinet=1DL03&side=B)
    ========================================================================== */
 (function () {
   'use strict';
@@ -129,7 +129,7 @@
     const mk = o => Object.assign({ width: NODE_WIDTH, height: NODE_HEIGHT, isLeaf: false }, o);
 
     // Üst besleme zinciri (sunum eklemesi)
-    tempNodes.push(mk({ id: 'trafo', type: 'trafo', typeLabel: 'TRAFO (AG ÇIKIŞI)', label: up.trafo.replace(/_/g, ' ').replace('TRAFO', 'TRAFO '), subLabel: C.rated.trafo + ' kVA · 34,5/0,4 kV', parentId: null, level: 0, isLeaf: true, ref: { kind: 'trafo', id: up.trafo } }));
+    tempNodes.push(mk({ id: 'trafo', type: 'trafo', typeLabel: 'TRAFO (AG ÇIKIŞI)', label: up.trafoLabel || up.trafo.replace(/_/g, ' '), subLabel: C.rated.trafo + ' kVA · 34,5/0,4 kV', parentId: null, level: 0, isLeaf: true, ref: { kind: 'trafo', id: up.trafo } }));
     tempNodes.push(mk({ id: 'adp', type: 'adp', typeLabel: 'ANA DAĞITIM PANOSU (ADP)', label: up.adp, subLabel: up.side + ' Yolu · ' + up.ups.length + ' UPS besleme', parentId: 'trafo', level: 0, isLeaf: true, ref: { kind: 'adp', id: up.adp } }));
     tempNodes.push(mk({ id: 'ups', type: 'ups', typeLabel: 'UPS', label: 'UPS ' + sdp, subLabel: '', parentId: 'adp', level: 0, isLeaf: true, ref: { kind: 'ups', code: sdp } }));
 
@@ -572,7 +572,7 @@
     root.innerHTML =
       '<div class="shrink-0" data-header></div>' +
       '<div class="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-2" data-metrics></div>' +
-      '<div class="flex flex-1 min-h-0 flex-col xl:flex-row gap-2">' +
+      '<div class="flex flex-1 min-h-0 flex-col xl:flex-row gap-2 max-xl:flex-none">' +
         '<aside class="shrink-0 xl:w-64 2xl:w-72 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] p-3 flex flex-col gap-3 overflow-y-auto" data-aside></aside>' +
         '<div class="canvas-wrapper flex-1 min-h-[360px]" data-canvas>' +
           '<div class="canvas-topbar">' +

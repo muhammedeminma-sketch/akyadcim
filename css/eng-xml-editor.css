@@ -1,0 +1,2 @@
+/* Konfigürasyon Editörü (xml-editor): kök sınıf .eng-xml — config-home.component :host .tnum karşılığı Tailwind tabular-nums */
+.eng-xml .tabular-nums { font-variant-numeric: tabular-nums; }

@@ -1,13 +1,18 @@
 /* ==========================================================================
    DCIM Sunum — Telemetri Noktaları (NewUICMPTelemetryPointsComponent)
    Kaynak: new-ui/pages/telemetry-points/telemetry-points.component.{html,ts,scss}
-           + common/pop-ups/report-pop-up/points-report-popup (PointsReportPopupComponent)
            + components/properties-change (PropertiesChangeComponent, "AYARLAR PANELİ")
-           + common/pop-ups/historical-graph-popup (HistoricalGraphPopupComponent, Chart.js)
-   doc('CMR/*')/descendant::io sorgusu → DCIM.data.telemetry.points. app-data-table davranışı
-   alarms.js ile aynı kalıpta (arama, hızlı filtre, kolon içi filtreler, sıralama, sayfalama,
-   seçim, kolon görünürlüğü). Durum mantığı (getClassNo / getStaText / getStaBadgeStatus /
+           + common/pop-ups/historical-graph-popup (HistoricalGraphPopupComponent, Chart.js — yalnız ?graph=)
+           + shared/components/report-export-menu (app-report-export-menu, [table-actions] yuvasında)
+   doc('<kat dokümanı | CMR/*>')/descendant::io sorgusu → DCIM.data.telemetry.points
+   (kat dokümanları: js/mock/telemetry-points.data.js). app-data-table davranışı alarms.js ile aynı
+   kalıpta (arama, hızlı filtre, kolon içi filtreler, sıralama, sayfalama [varsayılan 50], seçim, kolon
+   görünürlüğü, lg altında mobil kartlar). Durum mantığı (getClassNo / getStaText / getStaBadgeStatus /
    getValColorClass / is_out / durum filtresi son nibble eşlemesi) TS'ten birebir port edildi.
+   Kat seçici (SITE_Floors): Tüm Katlar | 1. Kat · Tesis (CMR/T00) | 1. Kat · Beyaz Alan (CMR/T01) | 2. Kat | 3. Kat;
+   DOC sütun süzgeci kat seçiminden önceliklidir; DOC/arama büyük-küçük harf duyarsızdır (tr-TR).
+   Grafik sütunu orijinaldeki gibi kaldırıldı (eski pop-up veri çekmiyordu); tarih süzgeci kaldırıldı.
+   Mobilde (lg altı) kartlar salt okunurdur: değer yazma ve ayarlar paneli yok; Filtre tablo başlığında.
    Sunum ekleri (kaynakta yok): Nokta ID, Bağlı Cihaz, Protokol, İletişim (Online/Offline),
    Son Güncelleme kolonları; canlı simülasyon (3-5 sn'de bir rastgele noktalar güncellenir,
    değişen hücreler kısa süre yanıp söner) + duraklat/sürdür.
@@ -15,18 +20,19 @@
    Derin bağlantılar:
      ?filter=OLD            kaynaktaki gibi: filtre satırı açık + "Veri Alınamıyor" (Offline) noktalar
      ?filter=ALARM|WARNING  hızlı durum filtresi
-     ?q=1CE51               genel arama (events.html kaynak bağlantıları bunu kullanır)
-     ?doc=T02               DOC filtresi (CMR/T02)
+     ?q=1DM03               genel arama (events.html kaynak bağlantıları bunu kullanır)
+     ?floor=T00|T01|T02|T03 kat seçici (CMR/T00 = 1. Kat · Tesis, CMR/T01 = 1. Kat · Beyaz Alan, CMR/T02 = 2. Kat, CMR/T03 = 3. Kat)
+     ?doc=T02               DOC sütun süzgeci (CMR/T02; filtre satırı açılır)
      ?proto=MQTT            protokol filtresi (Modbus TCP | Modbus RTU | SNMP v3 | SNMP v2c | MQTT | BACnet/IP)
      ?graph=<tag>           nokta grafiğini aç     ?props=<tag>  ayarlar panelini aç
-     ?report=1              gerçek zamanlı veri raporu penceresini aç
+     ?report=1              rapor menüsünü açık başlat
      ?live=0                canlı simülasyonu kapalı başlat
    ========================================================================== */
 (function () {
   'use strict';
 
   const DCIM = window.DCIM;
-  const { esc, fmtDateTime, fmtDateKey, fmtTime, statusBadge, button, dialog, toast } = DCIM.ui;
+  const { esc, fmtDateTime, fmtTime, statusBadge, button, dialog, toast } = DCIM.ui;
   const kit = DCIM.kit;
   DCIM.shell.init({ active: 'telemetry' });
 
@@ -112,14 +118,21 @@
   ];
   const pFilter = (params.get('filter') || '').toUpperCase();
   const pProto = PROTOS.find(p => p.toLowerCase() === String(params.get('proto') || '').toLowerCase());
+  // Kat seçimi (floorDocOptions / selectedFloorDoc): boş = bütün dokümanlar
+  const FLOOR_DOCS = DCIM.data.telemetryFloors || [];
+  const pFloor = String(params.get('floor') || '').trim().toUpperCase();
+  const pFloorDoc = pFloor ? (FLOOR_DOCS.find(o => o.value === pFloor || o.value === 'CMR/' + pFloor) || {}).value || '' : '';
+  // Mobil görünüm (isMobileViewport): lg altı
+  const isMobile = () => window.matchMedia('(max-width: 1023.98px)').matches;
   const state = {
+    floorDoc: pFloorDoc,
     search: params.get('q') || '',
     filters: Object.assign({}, ['OLD', 'ALARM', 'WARNING', 'NORMAL', 'EMERGENCY'].indexOf(pFilter) >= 0 ? { sta: pFilter } : {},
       params.get('doc') ? { doc: params.get('doc') } : {}, pProto ? { proto: pProto } : {}),
     sortField: '',
     sortOrder: 1,
     page: 1,
-    pageSize: 15,
+    pageSize: 50,
     // kaynak: ?filter=OLD → filter_switch = 1
     showFilters: pFilter === 'OLD' || !!params.get('doc') || !!pProto,
     selected: new Set(),
@@ -127,29 +140,46 @@
     live: params.get('live') !== '0'
   };
 
+  // mobile: orijinal pointColumns (siraNo hide, DOC meta, Nokta primary, Ham meta, Değer sub, Birim meta, Tanım secondary, Durum badge);
+  // sunum ekleri (Nokta ID, Bağlı Cihaz, Protokol, İletişim, Son Güncelleme) kartta "Detayları Göster" altında.
+  // Grafik sütunu (actions) orijinaldeki gibi kaldırıldı; ?graph=<tag> derin bağlantısı çalışır.
   const COLUMNS = [
-    { field: 'siraNo', header: 'Sıra', width: '56px', wrap: false, filterable: false },
-    { field: 'pid', header: 'Nokta ID', sortable: true, width: '72px', wrap: false, filterable: false },
-    { field: 'qry_doc', header: 'DOC', sortable: true, width: '78px', wrap: false },
-    { field: 'rid', header: 'Tag Adı', sortable: true, minWidth: '190px', wrap: false },
-    { field: 'dev', header: 'Bağlı Cihaz', sortable: true, minWidth: '170px' },
-    { field: 'pro', header: 'Ham Değer', width: '92px', wrap: false },
-    { field: 'val', header: 'Değer', sortable: true, width: '96px', wrap: false },
-    { field: 'unit', header: 'Birim', width: '56px', wrap: false },
-    { field: 'desc', header: 'Tanım', minWidth: '200px' },
-    { field: 'proto', header: 'Protokol', sortable: true, width: '96px', wrap: false },
-    { field: 'comm', header: 'İletişim', sortable: true, width: '96px', wrap: false },
-    { field: 'tim', header: 'Son Güncelleme', sortable: true, width: '140px', wrap: false, filterable: false },
-    { field: 'sta', header: 'Durum', sortable: true, width: '150px', wrap: false },
-    { field: 'actions', header: '', width: '44px', wrap: false, filterable: false }
+    { field: 'siraNo', header: 'Sıra', width: '56px', wrap: false, filterable: false, mobile: 'hide' },
+    { field: 'pid', header: 'Nokta ID', sortable: true, width: '72px', wrap: false, filterable: false, mobile: 'extra' },
+    { field: 'qry_doc', header: 'DOC', sortable: true, width: '78px', wrap: false, mobile: 'meta' },
+    { field: 'rid', header: 'Tag Adı', sortable: true, minWidth: '190px', wrap: false, mobile: 'primary' },
+    { field: 'dev', header: 'Bağlı Cihaz', sortable: true, minWidth: '170px', mobile: 'extra', mobileBlock: true },
+    { field: 'pro', header: 'Ham Değer', width: '92px', wrap: false, mobile: 'meta' },
+    { field: 'val', header: 'Değer', sortable: true, width: '96px', wrap: false, mobile: 'sub', mobileIcon: 'pi-gauge' },
+    { field: 'unit', header: 'Birim', width: '56px', wrap: false, mobile: 'meta' },
+    { field: 'desc', header: 'Tanım', minWidth: '200px', mobile: 'secondary' },
+    { field: 'proto', header: 'Protokol', sortable: true, width: '96px', wrap: false, mobile: 'extra' },
+    { field: 'comm', header: 'İletişim', sortable: true, width: '96px', wrap: false, mobile: 'extra' },
+    { field: 'tim', header: 'Son Güncelleme', sortable: true, width: '140px', wrap: false, filterable: false, mobile: 'extra' },
+    { field: 'sta', header: 'Durum', sortable: true, width: '150px', wrap: false, mobile: 'badge' }
   ];
   const cols = () => COLUMNS.filter(c => !state.hiddenCols[c.field]);
+  // Mobil kart hücreleri (cardCellTemplates): salt okunur
+  const CARD_CELL = {
+    rid: p => '<span class="block whitespace-normal break-all leading-snug" title="' + esc(p.rid) + '">' + esc(p.rid) + '</span>',
+    val: p => '<span class="font-mono font-extrabold text-base tracking-tight ' + getValColorClass(p.sta) + '">' + esc(p.val) + '</span>',
+    pro: p => '<span class="font-mono">' + esc(p.pro) + '</span>'
+  };
+  const cardCols = () => cols().filter(c => c.mobile !== 'hide').map(c => Object.assign({}, c, {
+    card: (p, i) => (CARD_CELL[c.field] ? CARD_CELL[c.field](p) : cellHtml(c.field, p, i))
+  }));
+  const cardTone = p => {
+    const v = getClassNo(p.sta);
+    return v === 1 || v === 6 || v === 7 ? 'alarm' : v === 5 ? 'warning' : v === 2 ? 'lost' : '';
+  };
 
   // ---------------------------------------------------------------------------
   // Filtreleme / sıralama (inputFilter + getDocPath + get_qry mantığı)
   // ---------------------------------------------------------------------------
   const lc = v => String(v == null ? '' : v).toLocaleLowerCase('tr-TR');
-  const has = (v, s) => lc(v).indexOf(s) >= 0;
+  // Büyük/küçük harf duyarsız (QA #90): Türkçe ve İngilizce kurallarla (KLIMA / KLİMA / klima ikisi de bulunur)
+  const lcEn = v => String(v == null ? '' : v).toLowerCase();
+  const has = (v, s) => lc(v).indexOf(lc(s)) >= 0 || lcEn(v).indexOf(lcEn(s)) >= 0;
   function docPath(v) {
     const s = String(v || '').trim();
     if (!s) return 'CMR/';
@@ -171,18 +201,18 @@
   function filtered() {
     const f = state.filters;
     let list = POINTS.slice();
-    const q = lc(state.search.trim());
+    const q = state.search.trim();
     // contains(@id | @doc | @pro | @val | @unit | @desc) (+ sunum: cihaz, protokol)
     if (q) list = list.filter(p => [p.rid, p.qry_doc, p.pro, p.val, p.unit, p.desc, p.dev, p.proto].some(v => has(v, q)));
+    // getDocPath: sütundaki DOC süzgeci önceliklidir; yoksa başlıktaki kat seçimi, o da yoksa bütün dokümanlar
     if (f.doc && f.doc.trim()) { const d = docPath(f.doc); list = list.filter(p => p.qry_doc.toUpperCase().indexOf(d) === 0); }
+    else if (state.floorDoc) list = list.filter(p => p.qry_doc === state.floorDoc);
     [['rid', 'rid'], ['pro', 'pro'], ['val', 'val'], ['unit', 'unit'], ['desc', 'desc'], ['dev', 'dev']].forEach(([k, field]) => {
-      if (f[k] && f[k].trim()) { const s = lc(f[k].trim()); list = list.filter(p => has(p[field], s)); }
+      if (f[k] && f[k].trim()) { const s = f[k].trim(); list = list.filter(p => has(p[field], s)); }
     });
     if (f.proto) list = list.filter(p => p.proto === f.proto);
     if (f.comm) list = list.filter(p => commOf(p.sta) === f.comm);
     if (f.sta) list = list.filter(p => staMatch(p.sta, f.sta));
-    if (f.bgn) list = list.filter(p => fmtDateKey(p.tim) >= f.bgn);
-    if (f.end) list = list.filter(p => fmtDateKey(p.tim) <= f.end);
 
     if (state.sortField) {
       const key = p => {
@@ -214,37 +244,33 @@
   // ---------------------------------------------------------------------------
   function renderHeader() {
     const host = document.getElementById('tp-header');
+    // Kat seçimi (SITE_Floors) + Filtre (mobilde Filtre tablo başlığındadır)
     host.innerHTML = kit.pageHeader({
       title: 'NOKTALAR',
       breadcrumbs: [{ label: 'İzleme' }, { label: 'Telemetri Noktaları' }],
-      actions: '<div class="flex items-center gap-2">' +
-        button({ variant: state.showFilters ? 'primary' : 'secondary', icon: 'pi pi-filter', label: 'Filtre', attrs: 'data-act="filter" title="Filtreyi Aç/Kapat"' }) +
-        button({ variant: 'secondary', icon: 'pi pi-file', label: 'Rapor', attrs: 'data-act="report"' }) +
+      actions: '<div class="flex items-center gap-2 max-lg:w-[calc(100vw-1.5rem)]">' +
+        (FLOOR_DOCS.length > 1
+          ? '<select data-floor aria-label="Kat" class="h-8 px-2 text-xs font-semibold border border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-card text-slate-700 dark:text-slate-200 rounded-[2px] max-lg:w-full max-lg:h-10 max-lg:text-[13px] max-lg:rounded-[3px]">' +
+              opt('', 'Tüm Katlar', state.floorDoc) + FLOOR_DOCS.map(o => opt(o.value, o.label, state.floorDoc)).join('') + '</select>'
+          : '') +
+        '<span class="max-lg:hidden">' + button({ variant: state.showFilters ? 'primary' : 'secondary', icon: 'pi pi-filter', label: 'Filtre', attrs: 'data-act="filter" title="Filtreyi Aç/Kapat"' }) + '</span>' +
         '</div>'
     });
-    host.querySelector('[data-act="filter"]').onclick = () => { state.showFilters = !state.showFilters; renderHeader(); renderDateBar(); renderHead(); };
-    host.querySelector('[data-act="report"]').onclick = openReportPopup;
+    host.querySelector('[data-act="filter"]').onclick = toggleFilters;
+    const fl = host.querySelector('[data-floor]');
+    if (fl) fl.addEventListener('change', () => { state.floorDoc = fl.value; state.page = 1; renderBody(); });
   }
 
-  function renderDateBar() {
-    const host = document.getElementById('tp-datebar');
-    if (!state.showFilters) { host.className = 'hidden'; host.innerHTML = ''; return; }
-    host.className = 'shrink-0 flex flex-wrap items-end gap-2 px-2.5 py-2 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px]';
-    host.innerHTML =
-      '<div class="flex flex-col gap-1"><label class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Başlangıç Tarihi</label>' +
-        '<input type="date" data-d="bgn" value="' + esc(state.filters.bgn || '') + '" class="scada-input h-7 text-xs" aria-label="Başlangıç Tarihi" /></div>' +
-      '<div class="flex flex-col gap-1"><label class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Bitiş Tarihi</label>' +
-        '<input type="date" data-d="end" value="' + esc(state.filters.end || '') + '" class="scada-input h-7 text-xs" aria-label="Bitiş Tarihi" /></div>';
-    host.querySelectorAll('[data-d]').forEach(inp => inp.addEventListener('change', () => {
-      state.filters[inp.getAttribute('data-d')] = inp.value; state.page = 1; renderBody();
-    }));
+  function toggleFilters() {
+    state.showFilters = !state.showFilters;
+    renderHeader(); renderTools(); renderHead(); renderMobileFilters();
   }
 
   // ---------------------------------------------------------------------------
   // Tablo (app-data-table)
   // ---------------------------------------------------------------------------
-  const inputCls = 'w-full px-1.5 py-0.5 text-[11px] bg-white dark:bg-[#080c14] border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500';
-  const selectCls = 'w-full px-1 py-0.5 text-[11px] bg-white dark:bg-[#080c14] border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500';
+  const inputCls = 'w-full px-1.5 py-0.5 text-[11px] max-lg:h-10 max-lg:px-2.5 max-lg:text-base max-lg:font-medium max-lg:rounded-[3px] bg-white dark:bg-[#080c14] border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500';
+  const selectCls = 'w-full px-1 py-0.5 text-[11px] max-lg:h-10 max-lg:px-2.5 max-lg:text-base max-lg:font-medium max-lg:rounded-[3px] bg-white dark:bg-[#080c14] border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500';
   const opt = (v, l, cur) => '<option value="' + esc(v) + '"' + ((cur || '') === v ? ' selected' : '') + '>' + esc(l) + '</option>';
   const txtFilter = (key, ph) => '<input type="text" data-f="' + key + '" value="' + esc(state.filters[key] || '') + '" placeholder="' + esc(ph) + '" class="' + inputCls + '" />';
 
@@ -285,8 +311,6 @@
       case 'comm': return commBadge(p.sta);
       case 'tim': return '<span class="font-mono ' + (commOf(p.sta) === 'online' ? '' : 'text-orange-600 dark:text-orange-400') + '">' + fmtDateTime(p.tim) + '</span>';
       case 'sta': return badge(getStaBadgeStatus(p.sta), getStaText(p.sta));
-      case 'actions':
-        return '<button type="button" data-graph="' + esc(p.rid) + '" title="Grafik Görüntüle" class="p-1 rounded text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition-colors cursor-pointer"><i class="pi pi-chart-line text-xs"></i></button>';
       default: return '';
     }
   }
@@ -294,38 +318,45 @@
   const styleOf = c => (c.width ? 'width:' + c.width + ';' : '') + ((c.minWidth || c.width) ? 'min-width:' + (c.minWidth || c.width) + ';' : '');
   const $ = sel => document.querySelector('#tp-table ' + sel);
 
+  const TOOL_BTN = 'px-2.5 py-1 max-lg:py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 cursor-pointer';
+
   function renderTableShell() {
     const host = document.getElementById('tp-table');
     host.innerHTML =
-      '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0">' +
-        '<div class="flex flex-wrap items-center gap-2">' +
-          '<div class="relative w-60 sm:w-72">' +
+      '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0 max-lg:flex-col max-lg:items-stretch max-lg:gap-2">' +
+        '<div class="flex flex-wrap items-center gap-2 max-lg:w-full max-lg:flex-col max-lg:items-stretch">' +
+          '<div class="relative w-60 sm:w-72 max-lg:w-full">' +
             '<i class="pi pi-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>' +
-            '<input type="text" data-search placeholder="Ara" value="' + esc(state.search) + '" class="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
+            '<input type="text" data-search placeholder="Ara" value="' + esc(state.search) + '" class="w-full pl-8 pr-3 py-1 max-lg:py-2.5 text-xs max-lg:text-sm bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
           '</div>' +
-          '<div class="flex items-center gap-1" data-quick>' +
-            QUICK.map(q => '<button type="button" data-q="' + q.value + '" class="px-2 py-1 text-[11px] rounded-[2px] border transition-all cursor-pointer">' + esc(q.label) + '</button>').join('') +
+          '<div class="flex items-center gap-1 max-lg:max-w-full max-lg:overflow-x-auto max-lg:pb-0.5" data-quick>' +
+            QUICK.map(q => '<button type="button" data-q="' + q.value + '" class="px-2 py-1 max-lg:px-3 max-lg:py-1.5 max-lg:whitespace-nowrap max-lg:shrink-0 text-[11px] rounded-[2px] border transition-all cursor-pointer">' + esc(q.label) + '</button>').join('') +
           '</div>' +
         '</div>' +
-        '<div class="flex items-center gap-1.5 shrink-0">' +
-          '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0" title="Online"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Online</span></span>' +
+        '<div class="flex items-center gap-1.5 shrink-0 max-lg:w-full max-lg:flex-wrap">' +
+          '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0 max-lg:hidden" title="Online"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Online</span></span>' +
           '<div data-bulk class="hidden px-2 py-1 bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 rounded-[2px] text-[11px] font-bold flex items-center gap-1.5"></div>' +
-          // [table-actions] yuvası — sunum eki: canlı simülasyon
+          // [table-actions] yuvası — rapor menüsü + sunum eki: canlı simülasyon
+          '<div data-report-menu></div>' +
           '<span data-live-info class="hidden md:inline font-mono text-[10px] text-slate-500 dark:text-slate-400"></span>' +
           '<button type="button" data-live class="px-2.5 py-1 text-xs font-semibold border rounded-[2px] flex items-center gap-1.5 transition-all cursor-pointer"></button>' +
-          '<div class="relative">' +
-            '<button type="button" data-colmenu class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 cursor-pointer"><i class="pi pi-sliders-h text-xs"></i><span>Kolonlar</span></button>' +
+          // Mobilde Filtre tablo başlığında (Ara / Filtre / Yenile)
+          '<button type="button" data-mfilter title="Filtre" class="lg:hidden px-2.5 py-1.5 text-xs rounded-[2px] border flex items-center gap-1 transition-all cursor-pointer"><i class="pi pi-filter text-xs"></i><span>Filtre</span></button>' +
+          '<div class="relative max-lg:hidden">' +
+            '<button type="button" data-colmenu class="' + TOOL_BTN + '"><i class="pi pi-sliders-h text-xs"></i><span>Kolonlar</span></button>' +
             '<div data-colmenu-panel class="hidden absolute right-0 mt-1 w-44 bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-xl z-50 p-2 text-xs space-y-1"></div>' +
           '</div>' +
-          '<button type="button" data-refresh class="p-1.5 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] transition-colors cursor-pointer" title="Yenile"><i class="pi pi-refresh text-xs"></i></button>' +
+          '<button type="button" data-refresh class="' + TOOL_BTN + '" title="Yenile"><i class="pi pi-refresh text-xs"></i><span class="lg:hidden">Yenile</span></button>' +
         '</div>' +
       '</div>' +
-      '<div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto w-full custom-scrollbar" data-scroll>' +
+      '<div data-mfilters class="hidden"></div>' +
+      '<div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto w-full custom-scrollbar max-lg:hidden" data-scroll>' +
         '<table class="scada-table w-full text-left border-collapse text-xs">' +
           '<thead class="sticky top-0 z-10 shadow-2xs" data-thead></thead>' +
           '<tbody class="divide-y divide-slate-100 dark:divide-border-subtle text-xs text-slate-800 dark:text-slate-200" data-tbody></tbody>' +
         '</table>' +
       '</div>' +
+      '<div data-cards class="' + kit.CARDS_WRAP_CLS + '"></div>' +
       '<div class="py-2 px-3 border-t border-slate-200 dark:border-[#1b263b] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-slate-50 dark:bg-[#0b121e] shrink-0" data-footer></div>';
 
     let searchTimer = null;
@@ -338,9 +369,10 @@
       const v = b.getAttribute('data-q');
       state.filters.sta = v === 'all' ? '' : v;
       state.page = 1;
-      renderQuick(); renderHead(); renderBody();
+      renderQuick(); renderHead(); renderMobileFilters(); renderBody();
     }));
     $('[data-live]').addEventListener('click', () => { state.live = !state.live; renderLive(); scheduleLive(); });
+    $('[data-mfilter]').addEventListener('click', toggleFilters);
     const colBtn = $('[data-colmenu]');
     const colPanel = $('[data-colmenu-panel]');
     colBtn.addEventListener('click', e => { e.stopPropagation(); colPanel.classList.toggle('hidden'); renderColMenu(); });
@@ -349,23 +381,30 @@
     $('[data-refresh]').addEventListener('click', () => {
       const icon = $('[data-refresh] i');
       icon.className = 'pi pi-spin pi-spinner text-xs';
-      setTimeout(() => { icon.className = 'pi pi-refresh text-xs'; renderBody(); toast("Noktalar doc('CMR/*') kaynağından yenilendi.", 'success'); }, 600);
+      setTimeout(() => { icon.className = 'pi pi-refresh text-xs'; renderBody(); toast("Noktalar doc('" + (state.floorDoc || 'CMR/*') + "') kaynağından yenilendi.", 'success'); }, 600);
     });
 
-    const tbody = $('[data-tbody]');
-    tbody.addEventListener('click', e => {
-      const g = e.target.closest('[data-graph]');
-      if (g) { e.stopPropagation(); showGraph(g.getAttribute('data-graph')); return; }
+    // Rapor (app-report-export-menu, table-actions): Filtrelenmiş liste, "İlk N nokta"
+    reportMenu = DCIM.report.menu($('[data-report-menu]'), {
+      label: 'Rapor al', inTable: true, options: 'limit', unit: 'nokta', total: 0,
+      scopes: [{ id: 'list', label: 'Filtrelenmiş liste', hint: 'Ekrandaki arama ve filtrelerle' }],
+      onExport: exportReport
+    });
+
+    const onRowClick = e => {
       const pr = e.target.closest('[data-props]');
       if (pr) { e.stopPropagation(); openPropertiesChange(pr.getAttribute('data-props')); return; }
-      if (e.target.closest('[data-set]')) { e.stopPropagation(); return; }
+      if (e.target.closest('[data-set]') || e.target.closest('summary')) { e.stopPropagation(); return; }
       const row = e.target.closest('[data-row]');
       if (row) {
         const id = row.getAttribute('data-row');
         if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
         renderBody();
       }
-    });
+    };
+    const tbody = $('[data-tbody]');
+    tbody.addEventListener('click', onRowClick);
+    $('[data-cards]').addEventListener('click', onRowClick);
     // Çıkış noktası: Enter → setvalue(doc, id, val) → <doc>/<id>/pro/set
     tbody.addEventListener('keyup', e => {
       const inp = e.target.closest('[data-set]');
@@ -374,7 +413,42 @@
     });
   }
 
+  // Filtre düğmesi durumu (mobil tablo başlığı)
+  function renderTools() {
+    const b = $('[data-mfilter]');
+    if (!b) return;
+    b.className = 'lg:hidden px-2.5 py-1.5 text-xs rounded-[2px] border flex items-center gap-1 transition-all cursor-pointer ' +
+      (state.showFilters ? 'bg-sky-600 text-white font-bold border-sky-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700');
+  }
+
+  // Mobil süzgeç paneli: masaüstündeki kolon içi süzgeçlerin alt alta hâli (kart görünümünde thead gizli)
+  function renderMobileFilters() {
+    const host = $('[data-mfilters]');
+    if (!host) return;
+    if (!state.showFilters) { host.className = 'hidden'; host.innerHTML = ''; return; }
+    host.className = 'lg:hidden shrink-0 max-h-[45vh] overflow-y-auto grid grid-cols-2 gap-2 p-2.5 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-[#0b121e]';
+    host.innerHTML = cols().filter(c => c.filterable !== false && filterCell(c)).map(c =>
+      '<label class="flex flex-col gap-1 min-w-0' + (c.field === 'desc' || c.field === 'rid' ? ' col-span-2' : '') + '"><span class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">' + esc(c.header) + '</span>' + filterCell(c) + '</label>').join('') +
+      '<button type="button" data-clear-filters class="col-span-2 h-9 rounded-[3px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5"><i class="pi pi-filter-slash text-xs"></i>Temizle</button>';
+    bindFilterInputs(host);
+    host.querySelector('[data-clear-filters]').addEventListener('click', clearFilters);
+  }
+
+  function bindFilterInputs(scope) {
+    scope.querySelectorAll('[data-f]').forEach(inp => {
+      const ev = inp.tagName === 'SELECT' ? 'change' : 'input';
+      inp.addEventListener(ev, () => {
+        state.filters[inp.getAttribute('data-f')] = inp.value;
+        state.page = 1;
+        if (inp.getAttribute('data-f') === 'sta') renderQuick();
+        renderBody();
+      });
+    });
+  }
+
   function setvalue(p, raw) {
+    // Mobilde çıkış noktasına değer yazma yok (yalnızca görüntüleme)
+    if (isMobile()) return;
     if (!p || !raw) return;
     const n = parseFloat(raw.replace(',', '.'));
     if (isNaN(n)) { toast('Geçersiz değer: ' + raw, 'warning'); return; }
@@ -389,7 +463,7 @@
     const cur = state.filters.sta || 'all';
     document.querySelectorAll('#tp-table [data-q]').forEach(b => {
       const on = b.getAttribute('data-q') === cur;
-      b.className = 'px-2 py-1 text-[11px] rounded-[2px] border transition-all cursor-pointer ' +
+      b.className = 'px-2 py-1 max-lg:px-3 max-lg:py-1.5 max-lg:whitespace-nowrap max-lg:shrink-0 text-[11px] rounded-[2px] border transition-all cursor-pointer ' +
         (on ? 'bg-sky-600 text-white font-bold border-sky-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700');
     });
   }
@@ -434,15 +508,7 @@
       renderHead();
       renderBody();
     }));
-    thead.querySelectorAll('[data-f]').forEach(inp => {
-      const ev = inp.tagName === 'SELECT' ? 'change' : 'input';
-      inp.addEventListener(ev, () => {
-        state.filters[inp.getAttribute('data-f')] = inp.value;
-        state.page = 1;
-        if (inp.getAttribute('data-f') === 'sta') renderQuick();
-        renderBody();
-      });
-    });
+    bindFilterInputs(thead);
     const clr = thead.querySelector('[data-clear-filters]');
     if (clr) clr.addEventListener('click', clearFilters);
     thead.querySelector('[data-check-all]').addEventListener('change', e => {
@@ -453,17 +519,20 @@
   }
 
   function clearFilters() {
+    state.floorDoc = '';
     state.filters = {};
     state.search = '';
     state.page = 1;
     $('[data-search]').value = '';
+    renderHeader();
     renderQuick();
-    renderDateBar();
     renderHead();
+    renderMobileFilters();
     renderBody();
   }
 
   let lastFiltered = [];
+  let reportMenu = null;
   function currentPageRows() {
     const start = (state.page - 1) * state.pageSize;
     return lastFiltered.slice(start, start + state.pageSize);
@@ -488,6 +557,13 @@
           '</tr>';
       }).join('');
     }
+    // Mobil kartlar (lg altı)
+    $('[data-cards]').innerHTML = kit.dataCards(rows, cardCols(), {
+      start: (state.page - 1) * state.pageSize, tone: cardTone,
+      rowAttrs: p => 'data-row="' + esc(p.rid) + '"',
+      cardCls: p => (state.selected.has(p.rid) ? 'ring-1 ring-sky-500/60' : '')
+    });
+    if (reportMenu) reportMenu.update({ total: lastFiltered.length, disabled: !lastFiltered.length });
     const checkAll = $('[data-check-all]');
     if (checkAll) checkAll.checked = rows.length > 0 && rows.every(p => state.selected.has(p.rid));
 
@@ -503,14 +579,14 @@
     const footer = $('[data-footer]');
     footer.innerHTML =
       '<div class="text-slate-500 dark:text-slate-400 font-medium">Toplam <span class="font-bold text-slate-900 dark:text-slate-100">' + lastFiltered.length + '</span> kayıt listeleniyor.</div>' +
-      '<div class="flex items-center gap-3 self-end sm:self-auto">' +
+      '<div class="flex items-center gap-3 self-end sm:self-auto max-lg:w-full max-lg:justify-between">' +
         '<div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"><span>Sayfa Başına:</span>' +
           '<select data-pagesize class="bg-white dark:bg-[#080c14] border border-slate-200 dark:border-slate-700 rounded-[2px] px-2 py-0.5 text-slate-800 dark:text-slate-200 text-xs font-bold">' +
           [5, 10, 15, 20, 50, 100].map(n => '<option value="' + n + '"' + (n === state.pageSize ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>' +
         '<div class="flex items-center gap-1">' +
-          '<button type="button" data-page="-1"' + (state.page <= 1 ? ' disabled' : '') + ' class="w-7 h-7 rounded-[2px] border border-slate-200 dark:border-slate-700 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"><i class="pi pi-chevron-left text-[10px]"></i></button>' +
+          '<button type="button" data-page="-1"' + (state.page <= 1 ? ' disabled' : '') + ' class="w-7 h-7 max-lg:w-9 max-lg:h-9 rounded-[2px] border border-slate-200 dark:border-slate-700 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"><i class="pi pi-chevron-left text-[10px]"></i></button>' +
           '<span class="px-2 font-bold text-slate-800 dark:text-slate-200">' + state.page + ' / ' + totalPages + '</span>' +
-          '<button type="button" data-page="1"' + (state.page >= totalPages ? ' disabled' : '') + ' class="w-7 h-7 rounded-[2px] border border-slate-200 dark:border-slate-700 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"><i class="pi pi-chevron-right text-[10px]"></i></button>' +
+          '<button type="button" data-page="1"' + (state.page >= totalPages ? ' disabled' : '') + ' class="w-7 h-7 max-lg:w-9 max-lg:h-9 rounded-[2px] border border-slate-200 dark:border-slate-700 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"><i class="pi pi-chevron-right text-[10px]"></i></button>' +
         '</div>' +
       '</div>';
     footer.querySelector('[data-pagesize]').addEventListener('change', e => { state.pageSize = parseInt(e.target.value, 10); state.page = 1; renderBody(); });
@@ -518,6 +594,7 @@
       state.page += parseInt(b.getAttribute('data-page'), 10);
       renderBody();
       $('[data-scroll]').scrollTop = 0;
+      $('[data-cards]').scrollTop = 0;
     }));
   }
 
@@ -654,6 +731,8 @@
   const CON_OF = { 'Modbus TCP': 'con_mb_gw', 'Modbus RTU': 'con_rtu', 'SNMP v3': 'con_snmp', 'SNMP v2c': 'con_snmp', 'MQTT': 'con_mqtt', 'BACnet/IP': 'con_bacnet' };
 
   function openPropertiesChange(rid) {
+    // Mobilde nokta özelliği düzenleme yok (yalnızca görüntüleme)
+    if (isMobile()) return;
     const p = byRid[rid];
     if (!p) return;
     const r = DCIM.data.rng(DCIM.data.hash('props:' + rid));
@@ -720,103 +799,78 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Gerçek Zamanlı Veri Raporu (PointsReportPopupComponent)
+  // Rapor (exportReport): kat/DOC, arama, sütun ve durum süzgeçleriyle eşleşen noktaların tamamı
+  // (tablo yalnız bir sayfa gösterir); "İlk N nokta" seçilirse ilk N.
   // ---------------------------------------------------------------------------
-  function openReportPopup() {
-    const rs = { loading: false, searched: false, data: [], page: 0 };
-    const host = document.createElement('div');
-    host.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-hidden animate-fade-in';
-    const th = t => '<th class="px-3 py-3 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">' + t + '</th>';
-    function content() {
-      if (rs.loading) {
-        return '<div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-20">' +
-          '<div class="w-12 h-12 rounded-full border-4 border-slate-200 dark:border-slate-700 border-t-sky-500 animate-spin mb-4"></div>' +
-          '<p class="text-sm font-medium text-slate-600 dark:text-slate-400">Tüm veriler yükleniyor (Sayfa ' + (rs.page + 1) + ')...</p>' +
-          (rs.data.length ? '<span class="text-xs text-slate-400 mt-1">Şu ana kadar ' + rs.data.length + ' kayıt çekildi...</span>' : '') + '</div>';
-      }
-      if (!rs.searched) {
-        return '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center">' +
-          '<div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4"><i class="pi pi-database text-2xl text-slate-400 dark:text-slate-500"></i></div>' +
-          '<p class="text-sm font-medium">Verileri listelemek için yukarıdaki butona tıklayın.</p></div>';
-      }
-      if (!rs.data.length) return '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-8 text-center"><i class="pi pi-inbox text-5xl mb-4 text-slate-300 dark:text-slate-600"></i><p class="text-sm font-medium">Sistemde veri noktası bulunamadı.</p></div>';
-      return '<table class="w-full text-left border-collapse text-xs whitespace-nowrap">' +
-        '<thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800/80 backdrop-blur-md shadow-sm"><tr>' + th('#') + th('DOC') + th('Tanım') + th('Değer') + th('Birim') + th('Nokta') + th('Durum') + '</tr></thead><tbody>' +
-        rs.data.slice(0, 20).map((p, i) =>
-          '<tr class="border-b border-slate-100 dark:border-slate-800/50 hover:bg-sky-50/50 dark:hover:bg-sky-900/10 transition-colors">' +
-            '<td class="px-3 py-2 font-mono text-slate-500 dark:text-slate-400">' + (i + 1) + '</td>' +
-            '<td class="px-3 py-2 font-mono font-medium text-slate-800 dark:text-slate-200">' + esc(p.qry_doc) + '</td>' +
-            '<td class="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[320px] truncate" title="' + esc(p.desc) + '">' + esc(p.desc) + '</td>' +
-            '<td class="px-3 py-2 font-mono font-bold text-slate-800 dark:text-slate-100">' + esc(p.val) + '</td>' +
-            '<td class="px-3 py-2 font-medium text-slate-600 dark:text-slate-400">' + esc(p.unit) + '</td>' +
-            '<td class="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">' + esc(p.rid) + '</td>' +
-            '<td class="px-3 py-2">' + badge(getStaBadgeStatus(p.sta), getStaText(p.sta)) + '</td></tr>').join('') +
-        (rs.data.length > 20 ? '<tr class="bg-amber-50/70 dark:bg-amber-950/30"><td colspan="7" class="px-4 py-3 text-center text-xs font-semibold text-amber-700 dark:text-amber-400"><i class="pi pi-info-circle mr-1"></i>...ve ' + (rs.data.length - 20) + " kayıt daha (PDF'e tümü eklenecek).</td></tr>" : '') +
-        '</tbody></table>';
-    }
-    function render() {
-      host.innerHTML =
-        '<div data-panel class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden text-slate-800 dark:text-slate-100 animate-modal-pop">' +
-          '<div class="px-6 py-4 bg-slate-50/80 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between select-none">' +
-            '<div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/50 flex items-center justify-center text-sky-600 dark:text-sky-400"><i class="pi pi-database text-lg"></i></div>' +
-            '<div><h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">Gerçek Zamanlı Veri Raporu</h3><p class="text-xs text-slate-500 dark:text-slate-400">Canlı SCADA veri noktaları ve anlık durum raporu</p></div></div>' +
-            '<button type="button" data-close class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><i class="pi pi-times text-sm"></i></button>' +
-          '</div>' +
-          '<div class="p-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">' +
-            '<div class="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">' +
-              '<div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-sky-100/50 dark:bg-sky-900/30 flex items-center justify-center text-sky-600 dark:text-sky-400 flex-shrink-0"><i class="pi pi-info-circle text-sm"></i></div>' +
-              '<span class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-medium leading-relaxed">Rapor, sistemdeki tüm gerçek zamanlı veri noktalarını içerecektir.</span></div>' +
-              '<button type="button" data-fetch' + (rs.loading ? ' disabled' : '') + ' class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all duration-200 flex items-center justify-center gap-2 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">' +
-                '<i class="pi ' + (rs.loading ? 'pi-spin pi-spinner' : 'pi-cloud-download') + '"></i><span>' + (rs.loading ? 'Veri Çekiliyor...' : 'Tüm Veriyi Getir') + '</span></button>' +
-            '</div>' +
-          '</div>' +
-          (rs.data.length && !rs.loading
-            ? '<div class="px-6 py-2.5 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">' +
-                '<button type="button" data-pdf class="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900/40 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"><i class="pi pi-file-pdf"></i><span>PDF İndir</span></button>' +
-                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Toplam ' + rs.data.length + ' kayıt bulundu.</span>' +
-              '</div>'
-            : '') +
-          '<div class="flex-1 overflow-auto relative min-h-[320px] max-h-[60vh] bg-white dark:bg-slate-900 custom-scrollbar">' + content() + '</div>' +
-        '</div>';
-    }
-    function fetchAll() {
-      rs.loading = true; rs.searched = false; rs.data = []; rs.page = 0;
-      const chunk = 500;
-      render();
-      const step = () => {
-        rs.data = rs.data.concat(POINTS.slice(rs.page * chunk, (rs.page + 1) * chunk));
-        rs.page++;
-        if (rs.page * chunk < POINTS.length) { render(); setTimeout(step, 120); return; }
-        rs.loading = false; rs.searched = true; render();
-      };
-      setTimeout(step, 200);
-    }
-    const close = () => { document.removeEventListener('keydown', onKey); host.remove(); };
-    const onKey = e => { if (e.key === 'Escape') close(); };
-    host.addEventListener('click', e => {
-      if (!e.target.closest('[data-panel]') || e.target.closest('[data-close]')) { close(); return; }
-      if (e.target.closest('[data-fetch]') && !rs.loading) { fetchAll(); return; }
-      if (e.target.closest('[data-pdf]')) { close(); kit.exportPdf(); }
-    });
-    document.addEventListener('keydown', onKey);
-    render();
-    document.body.appendChild(host);
-    return { fetchAll };
+  function pointReportTone(sta) {
+    const v = getClassNo(sta);
+    if (v === 0) return '';
+    if (v === 1 || v === 6 || v === 7) return 'critical';
+    if (v === 2 || v === 5) return 'warning';
+    return 'normal';
+  }
+
+  function exportReport(req) {
+    const total = lastFiltered.length;
+    const rows = DCIM.report.applyLimit(lastFiltered, req).map((p, i) => ({
+      no: i + 1, doc: p.qry_doc, rid: p.rid, pro: p.pro, val: p.val, unit: p.unit, desc: p.desc, sta: getStaText(p.sta), tone: pointReportTone(p.sta), cls: getClassNo(p.sta)
+    }));
+    const count = classes => rows.filter(r => classes.indexOf(r.cls) >= 0).length;
+    const f = state.filters;
+    const floorLabel = state.floorDoc ? ((FLOOR_DOCS.find(o => o.value === state.floorDoc) || {}).label || state.floorDoc) : '';
+    const staLabel = { NORMAL: 'Normal', OLD: 'Veri Alınamıyor', WARNING: 'Uyarı', ALARM: 'Alarm', EMERGENCY: 'Acil' };
+    const filters = [
+      floorLabel ? 'kat: ' + floorLabel : '',
+      state.search.trim() ? 'arama "' + state.search.trim() + '"' : '',
+      (f.doc || '').trim() ? 'DOC: ' + f.doc.trim() : '',
+      (f.rid || '').trim() ? 'nokta: ' + f.rid.trim() : '',
+      (f.dev || '').trim() ? 'cihaz: ' + f.dev.trim() : '',
+      (f.pro || '').trim() ? 'ham değer: ' + f.pro.trim() : '',
+      (f.val || '').trim() ? 'değer: ' + f.val.trim() : '',
+      (f.unit || '').trim() ? 'birim: ' + f.unit.trim() : '',
+      (f.desc || '').trim() ? 'açıklama: ' + f.desc.trim() : '',
+      f.proto ? 'protokol: ' + f.proto : '',
+      f.comm ? 'iletişim: ' + f.comm : '',
+      f.sta ? 'durum: ' + (staLabel[f.sta] || f.sta) : ''
+    ].filter(Boolean);
+    const scopeText = req.limit && req.limit < total ? 'ilk ' + req.limit + ' / ' + total + ' nokta' : 'tüm ' + total + ' nokta';
+    DCIM.report.generate({
+      title: 'Telemetri Noktaları Raporu',
+      subtitle: (filters.length ? 'Filtre: ' + filters.join(', ') : 'Tüm noktalar') + ' · İzleme · ' + scopeText + ' · veri ' + new Date().toLocaleString('tr-TR'),
+      filename: 'Telemetri_Noktalari',
+      kpis: [
+        { label: 'Nokta', value: rows.length },
+        { label: 'Normal', value: count([3, 4]), tone: 'normal' },
+        { label: 'Uyarı', value: count([5]), tone: count([5]) ? 'warning' : 'normal' },
+        { label: 'Alarm / Tehlike', value: count([6, 7]), tone: count([6, 7]) ? 'critical' : 'normal' },
+        { label: 'Veri hatası / Arıza', value: count([1, 2]), tone: count([1, 2]) ? 'warning' : 'normal' }
+      ],
+      sections: [{
+        title: 'Telemetri noktaları', toneKey: 'tone', rows,
+        columns: [
+          { key: 'no', label: 'No', align: 'right' }, { key: 'doc', label: 'DOC' }, { key: 'rid', label: 'Nokta' },
+          { key: 'pro', label: 'Ham değer', align: 'right' }, { key: 'val', label: 'Değer', align: 'right' }, { key: 'unit', label: 'Birim' },
+          { key: 'desc', label: 'Açıklama' }, { key: 'sta', label: 'Durum' }
+        ]
+      }],
+      notes: ['Değerler raporun alındığı andaki AyXDB okumasıdır.']
+    }, req.format);
   }
 
   // ---------------------------------------------------------------------------
   // Başlat
   // ---------------------------------------------------------------------------
   renderHeader();
-  renderDateBar();
   renderTableShell();
+  renderTools();
   renderQuick();
   renderLive();
   renderHead();
+  renderMobileFilters();
   renderBody();
   scheduleLive();
 
   if (params.get('graph')) showGraph(params.get('graph'));
   else if (params.get('props')) openPropertiesChange(params.get('props'));
-  else if (params.get('report') === '1') openReportPopup().fetchAll();
+  else if (params.get('report') === '1') { const b = document.querySelector('#tp-table [data-report-menu] [data-rk-btn]'); if (b) b.click(); }
 })();

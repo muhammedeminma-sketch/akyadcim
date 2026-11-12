@@ -16,7 +16,7 @@
     { value: 'CMR/T00', label: '1.Kat' },
     { value: 'CMR/T02', label: '2.Kat' },
     { value: 'CMR/T03', label: '3.Kat' },
-    { value: 'CMR/T04', label: 'IDC4' }
+    { value: 'CMR/T04', label: 'DCB' }
   ];
   const DATA_TYPE_OPTIONS = [
     { value: 'PA_CURR,PB_CURR,PC_CURR', label: 'Akım' },
@@ -81,14 +81,27 @@
     return { start: ymd(start), end: ymd(end) };
   }
 
-  // KAT1_SAL1 → "Kat 1 Salon 1"
+  // site-model.service locLabel() karşılığı (b024610d2): salonun adı (SALON-n) başka bir katta da geçiyorsa
+  // kat adıyla verilir ("KAT-2 SALON-1"); kardeş adları tekil olan salonlar olduğu gibi kalır.
+  // Salon evreni: kurgusal yerleşimin salonları (DCIM_FLOOR_LAYOUTS) + sorulan kod.
+  function hallLabel(code) {
+    const m = String(code || '').match(/^KAT(\d+)_SAL(\d+)$/);
+    if (!m) return '';
+    const halls = new Set([m[0]]);
+    (window.DCIM_FLOOR_LAYOUTS || []).forEach(f => (f.salons || []).forEach((s, i) =>
+      halls.add('KAT' + f.floor + '_SAL' + ((String(s.id).match(/\d+/) || [i + 1])[0]))));
+    const name = h => h.replace(/^KAT\d+_/, '');
+    const count = {};
+    halls.forEach(h => { count[name(h)] = (count[name(h)] || 0) + 1; });
+    const shared = Array.from(halls).some(h => h.indexOf('KAT' + m[1] + '_') === 0 && count[name(h)] > 1);
+    return (shared ? 'KAT-' + m[1] + ' ' : '') + 'SALON-' + m[2];
+  }
+  // KAT2_SAL1 → "KAT-2 SALON-1"
   function formatRegionDisplay(regionId) {
     if (!regionId) return '';
-    const m = regionId.match(/KAT(\d+)_SAL(\d+)/);
-    if (m) return 'Kat ' + m[1] + ' Salon ' + m[2];
-    return regionId.replace(/_/g, ' ');
+    return hallLabel(regionId) || regionId.replace(/_/g, ' ');
   }
-  // A1_UPS_GIR1 → "Kat 1 Salon 1 - A1 SDP Giriş 1"
+  // A1_UPS_GIR1 → "KAT-1 SALON-1 - A1 SDP Giriş 1"
   function formatUpsDisplay(region, upsId) {
     if (!upsId) return '';
     const f = upsId.replace(/UPS/g, 'SDP').replace(/_/g, ' ').replace(/GIR(\d+)/g, 'Giriş $1').replace(/CIK(\d+)/g, 'Çıkış $1');
@@ -288,12 +301,13 @@
 
     function renderPopup() {
       if (!st.popup) return '';
+      const RM = DCIM.reportModal;
       const has = st.rows.length > 0;
       const dis = has ? '' : ' disabled';
       let body;
       if (st.loading) {
         const pct = parseInt(String(st.progress).replace('%', ''), 10) || 0;
-        body = '<div class="py-12 flex flex-col items-center justify-center text-center">' +
+        body = '<div class="rpt-state">' +
           '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl mb-3"></i>' +
           '<p class="text-slate-700 dark:text-slate-200 text-sm font-medium mb-3">Veriler İşleniyor Lütfen Bekleyiniz...</p>' +
           (st.progress ? '<div class="w-full max-w-md space-y-2">' +
@@ -303,44 +317,37 @@
         '</div>';
       } else if (has) {
         const shown = st.rows.slice(0, MAX_RENDER_ROWS);
-        body = '<div><div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
-          '<table class="w-full text-xs text-left border-collapse"><thead>' +
-            '<tr class="bg-slate-100 dark:bg-surface-panel text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-border-subtle">' +
-              '<th class="' + TH + '">Bölge</th><th class="' + TH + '">SDP</th><th class="' + TH + '">Veri Tipi</th>' +
-              '<th class="' + TH + '">' + esc(calcLabel()) + '</th><th class="p-2.5">Tarih</th>' +
+        body = '<table class="rpt-table"><thead><tr>' +
+              '<th>Bölge</th><th>SDP</th><th>Veri Tipi</th>' +
+              '<th class="text-right">' + esc(calcLabel()) + '</th><th class="text-center">Tarih</th>' +
             '</tr></thead>' +
-            '<tbody class="divide-y divide-slate-200 dark:divide-border-subtle font-mono text-[11px]">' +
+            '<tbody>' +
             shown.map(r =>
-              '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover/50 transition-colors text-slate-800 dark:text-slate-200">' +
-                '<td class="p-2.5 font-sans border-r border-slate-200 dark:border-border-subtle">' + esc(formatRegionDisplay(r.region)) + '</td>' +
-                '<td class="p-2.5 font-sans border-r border-slate-200 dark:border-border-subtle">' + esc(formatUpsDisplay(r.region, r.unit)) + '</td>' +
-                '<td class="p-2.5 border-r border-slate-200 dark:border-border-subtle text-slate-700 dark:text-slate-300">' + esc(r.dataType) + '</td>' +
-                '<td class="p-2.5 border-r border-slate-200 dark:border-border-subtle font-bold text-sky-600 dark:text-sky-400">' + esc(r.value) + '</td>' +
-                '<td class="p-2.5 text-slate-500 dark:text-slate-400">' + esc(fmtDM(r.date)) + '</td>' +
+              '<tr>' +
+                '<td class="text-slate-700 dark:text-slate-300">' + esc(formatRegionDisplay(r.region)) + '</td>' +
+                '<td class="font-medium text-slate-800 dark:text-slate-200">' + esc(formatUpsDisplay(r.region, r.unit)) + '</td>' +
+                '<td class="text-slate-700 dark:text-slate-300">' + esc(r.dataType) + '</td>' +
+                '<td class="text-right font-mono font-bold text-sky-600 dark:text-sky-400">' + esc(r.value) + '</td>' +
+                '<td class="text-center font-mono text-slate-500 dark:text-slate-400">' + esc(fmtDM(r.date)) + '</td>' +
               '</tr>').join('') +
             (st.rows.length > shown.length
-              ? '<tr><td colspan="5" class="p-2.5 font-sans text-center text-slate-500 dark:text-slate-400">İlk ' + MAX_RENDER_ROWS + ' / ' + st.rows.length + ' satır gösteriliyor — tamamı için Excel İndir.</td></tr>'
+              ? '<tr><td colspan="5" class="text-center text-slate-500 dark:text-slate-400">İlk ' + MAX_RENDER_ROWS + ' / ' + st.rows.length + ' satır gösteriliyor — tamamı için Excel İndir.</td></tr>'
               : '') +
-            '</tbody></table></div></div>';
+            '</tbody></table>';
       } else {
         body = kit.emptyState({ message: 'Seçilen kriterlere uygun veri bulunamadı.' });
       }
-      return '<div data-popup-backdrop class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 overflow-y-auto">' +
-        '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden my-auto">' +
-          '<div class="p-4 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-surface-panel/50">' +
-            '<div class="flex items-center gap-3">' +
-              '<h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"><i class="pi pi-server text-sky-500 dark:text-sky-400"></i><span>Filtrelenmiş SDP Verileri</span></h3>' +
-              statusBadge('info', calcLabel()) +
-            '</div>' +
-            '<div class="flex items-center gap-2">' +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: 'PDF İndir', attrs: 'data-action="pdf"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: 'Excel İndir', attrs: 'data-action="excel"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: 'ZIP İndir', attrs: 'data-action="zip"' + dis }) +
-              '<button type="button" data-action="close" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-hover rounded-[2px] transition-colors"><i class="pi pi-times"></i></button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="p-4 overflow-y-auto flex-1 space-y-4">' + body + '</div>' +
-        '</div></div>';
+      // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur)
+      return RM.html({
+        title: 'Filtrelenmiş SDP Verileri', subtitle: 'SDP DURUM RAPORLAMA', icon: 'pi pi-server', tone: 'sky', size: 'xl', z: 'z-[100000]',
+        attrs: 'data-popup-backdrop',
+        badge: statusBadge('info', calcLabel()),
+        actions: !st.loading && has ? RM.btn('pdf', 'pi pi-file-pdf', 'PDF İndir', 'data-action="pdf"' + dis) +
+          RM.btn('excel', 'pi pi-file-excel', 'Excel İndir', 'data-action="excel"' + dis) +
+          RM.btn('zip', 'pi pi-folder', 'ZIP İndir', 'data-action="zip"' + dis) : '',
+        summary: !st.loading && has ? RM.total(st.rows.length) : '',
+        body
+      }).replace('data-rpt-close', 'data-rpt-close data-action="close"');
     }
 
     // ---------------------------------------------------------------------

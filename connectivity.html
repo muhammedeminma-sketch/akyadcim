@@ -18,15 +18,18 @@
     <main class="flex-1 min-h-0 overflow-hidden bg-slate-100 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 p-2.5 sm:p-3 flex flex-col">
       <!-- app-connectivity-view (:host → .cv-host) -->
       <div class="cv-host">
-        <div class="h-full flex flex-col min-h-0 gap-2 overflow-hidden" id="cv-root"></div>
+        <div class="h-full flex flex-col min-h-0 gap-2 overflow-hidden max-xl:overflow-y-auto" id="cv-root"></div>
       </div>
     </main>
   </div>
 
   <script src="js/layout-data.js"></script>
   <script src="js/mock-data.js"></script>
+  <script src="js/mock/alarms.data.js"></script>
   <script src="js/shell.js"></script>
+  <script src="js/report-kit.js"></script>
   <script src="js/ui-kit.js"></script>
+  <script src="js/mock/connectivity.data.js"></script>
   <script src="js/connectivity.js"></script>
 </body>
 </html>

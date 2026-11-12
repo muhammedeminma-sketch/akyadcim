@@ -6,7 +6,7 @@
      CMR/T00  KAT1   → SDP UPS girişleri (DCIM.data.ups × GIR1/GIR2) + klima panoları (DCIM.data.panels) + 2 genel cihaz
               IDC    → klimalar (DCIM.data.climates) + enerji analizörleri (DCIM.data.energy.meterTables satırları)
                        + redresör panelleri (DCIM.data.energy.rectifiers)
-              HMI    → 3 PLC/HMI analizörü (sunum verisinde modellenmedi; proje XML'indeki sayılar)
+              HMI    → 3 PLC/HMI analizörü (sunum verisinde modellenmedi; kurgusal sayılar)
               H_U_R  → redresör modülleri (redresör paneli × 4 modül: H_U_RA_M1..M4, H_U_RB_M1..M4)
               K1S1   → Kabin sensör ağ geçitleri; IO = kabin sensör IO'ları (cabinetMgr.sensorIos) + ağ geçidi durum IO'ları
      CMR/T01  PDU_POD / PDU_NS → Kat 1 PDU'ları (cabinetMgr.pduDevs, dev_loc 'POD' / 'NON-S'),
@@ -23,9 +23,9 @@
   const D = DCIM.data;
   if (!D) return;
 
-  // Proje XML'inden (P24A01_S01 db_CMR_T00.xml) alınan, sunum verisinde karşılığı olmayan cihaz başı ortalamalar
-  const IO_PER = { sdp: 23, pano: 26, generic: 16, klm: 64, analyzer: 72, rect: 58, rectModule: 49, gateway: 4 };
-  const HMI = { dev: 3, bi: 4, io: 646 };
+  // Sunum verisinde karşılığı olmayan cihaz başı ortalamalar (kurgusal sabitler)
+  const IO_PER = { sdp: 24, pano: 28, generic: 18, klm: 60, analyzer: 70, rect: 56, rectModule: 48, gateway: 4 };
+  const HMI = { dev: 3, bi: 4, io: 612 };
 
   let cache = null;
 

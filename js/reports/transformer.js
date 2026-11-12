@@ -73,7 +73,7 @@
     return { start: ymd(start), end: ymd(end) };
   }
 
-  // A_TRAFO3_Q1 → "A Trafo3 Q1"
+  // A_TR1_Q1 → "A Trafo3 Q1"
   const formatTrafoDisplay = id => id ? id.replace(/_/g, ' ').replace(/TRAFO/g, 'Trafo') : '';
 
   // formatValue() birebir (trafo sürümü: kW/W, VA)
@@ -97,12 +97,12 @@
     const timers = new Set();
     const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); };
 
-    // Sunum için hazır seçim: IDC1, A-Trafo3 + B-Trafo1, Akım, Son 7 Gün
+    // Sunum için hazır seçim: DCA, A-Trafo3 + B-Trafo1, Akım, Son 7 Gün
     const initialRange = presetRange('past_week');
     const st = {
-      region: 'IDC1',
+      region: 'DCA',
       regionFilter: M.regions.slice(),
-      trafos: ['A_TRAFO3_Q1', 'B_TRAFO1_Q3'],
+      trafos: ['A_TR1_Q1', 'B_TR3_Q3'],
       trafoText: '',
       dataTypes: ['PA_CURR,PB_CURR,PC_CURR'],
       calc: 'Average',
@@ -240,7 +240,7 @@
       let body;
       if (st.loading) {
         const pct = parseInt(String(st.progress).replace('%', ''), 10) || 0;
-        body = '<div class="py-16 flex flex-col items-center justify-center text-center">' +
+        body = '<div class="rpt-state">' +
           '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl mb-3"></i>' +
           '<p class="text-slate-700 dark:text-slate-200 text-sm font-medium mb-4">Veriler İşleniyor Lütfen Bekleyiniz...</p>' +
           (st.progress ? '<div class="w-full max-w-md space-y-2">' +
@@ -250,45 +250,39 @@
         '</div>';
       } else if (has) {
         const shown = st.rows.slice(0, MAX_RENDER_ROWS);
-        body = '<div><div class="overflow-x-auto border border-slate-200 dark:border-border-subtle rounded-[2px]">' +
-          '<table class="w-full text-xs text-left border-collapse"><thead>' +
-            '<tr class="bg-slate-100 dark:bg-surface-panel text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-border-subtle">' +
-              '<th class="' + TH + '">Bölge</th><th class="' + TH + '">Trafo Ünitesi</th><th class="' + TH + '">Veri Tipi</th>' +
-              '<th class="p-2.5 text-right border-r border-slate-200 dark:border-border-subtle">' + esc(valueTypeLabel()) + '</th>' +
-              '<th class="p-2.5 text-center">Tarih</th>' +
+        body = '<table class="rpt-table"><thead><tr>' +
+              '<th>Bölge</th><th>Trafo Ünitesi</th><th>Veri Tipi</th>' +
+              '<th class="text-right">' + esc(valueTypeLabel()) + '</th>' +
+              '<th class="text-center">Tarih</th>' +
             '</tr></thead>' +
-            '<tbody class="divide-y divide-slate-200 dark:divide-border-subtle font-mono text-[11px]">' +
+            '<tbody>' +
             shown.map(r =>
-              '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover/50 transition-colors">' +
-                '<td class="p-2.5 font-sans font-medium text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-border-subtle">' + esc(r.region) + '</td>' +
-                '<td class="p-2.5 font-sans text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-border-subtle">' + esc(formatTrafoDisplay(r.unit)) + '</td>' +
-                '<td class="p-2.5 font-sans text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-border-subtle">' + esc(r.dataType) + '</td>' +
-                '<td class="p-2.5 text-right font-bold text-sky-600 dark:text-sky-400 border-r border-slate-200 dark:border-border-subtle">' + esc(r.value) + '</td>' +
-                '<td class="p-2.5 text-center text-slate-500 dark:text-slate-400 font-mono text-[10px]">' + esc(fmtDM(r.date)) + '</td>' +
+              '<tr>' +
+                '<td class="font-medium text-slate-800 dark:text-slate-200">' + esc(r.region) + '</td>' +
+                '<td class="text-slate-700 dark:text-slate-300">' + esc(formatTrafoDisplay(r.unit)) + '</td>' +
+                '<td class="text-slate-700 dark:text-slate-300">' + esc(r.dataType) + '</td>' +
+                '<td class="text-right font-mono font-bold text-sky-600 dark:text-sky-400">' + esc(r.value) + '</td>' +
+                '<td class="text-center font-mono text-slate-500 dark:text-slate-400">' + esc(fmtDM(r.date)) + '</td>' +
               '</tr>').join('') +
             (st.rows.length > shown.length
-              ? '<tr><td colspan="5" class="p-2.5 font-sans text-center text-slate-500 dark:text-slate-400">İlk ' + MAX_RENDER_ROWS + ' / ' + st.rows.length + ' satır gösteriliyor — tamamı için Excel İndir.</td></tr>'
+              ? '<tr><td colspan="5" class="text-center text-slate-500 dark:text-slate-400">İlk ' + MAX_RENDER_ROWS + ' / ' + st.rows.length + ' satır gösteriliyor — tamamı için Excel İndir.</td></tr>'
               : '') +
-            '</tbody></table></div></div>';
+            '</tbody></table>';
       } else {
         body = kit.emptyState({ message: 'Seçilen kriterlere uygun veri bulunamadı.' });
       }
-      return '<div data-popup-backdrop class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 overflow-y-auto">' +
-        '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden my-auto">' +
-          '<div class="p-4 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-surface-panel/50">' +
-            '<div class="flex items-center gap-3">' +
-              '<h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"><i class="pi pi-database text-sky-500 dark:text-sky-400"></i><span>Trafo Rapor Sonucu</span></h3>' +
-              statusBadge('info', valueTypeLabel()) +
-            '</div>' +
-            '<div class="flex items-center gap-2">' +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: 'PDF İndir', attrs: 'data-action="pdf"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: 'Excel İndir', attrs: 'data-action="excel"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: 'ZIP İndir', attrs: 'data-action="zip"' + dis }) +
-              '<button type="button" data-action="close" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-hover rounded-[2px] transition-colors"><i class="pi pi-times"></i></button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="p-4 overflow-y-auto flex-1 space-y-6">' + body + '</div>' +
-        '</div></div>';
+      // Ortak rapor pop-up görünümü (app-report-modal, referans Olay Raporu Oluştur)
+      const RM = DCIM.reportModal;
+      return RM.html({
+        title: 'Trafo Rapor Sonucu', subtitle: 'TRAFO DURUM RAPORLAMA', icon: 'pi pi-database', tone: 'sky', size: 'xl', z: 'z-[100000]',
+        attrs: 'data-popup-backdrop',
+        badge: statusBadge('info', valueTypeLabel()),
+        actions: !st.loading && has ? RM.btn('pdf', 'pi pi-file-pdf', 'PDF İndir', 'data-action="pdf"' + dis) +
+          RM.btn('excel', 'pi pi-file-excel', 'Excel İndir', 'data-action="excel"' + dis) +
+          RM.btn('zip', 'pi pi-folder', 'ZIP İndir', 'data-action="zip"' + dis) : '',
+        summary: !st.loading && has ? RM.total(st.rows.length) : '',
+        body
+      }).replace('data-rpt-close', 'data-rpt-close data-action="close"');
     }
 
     // İskelet + render

@@ -3,7 +3,7 @@
    Kaynak: new-ui/pages/energy/single-line/single-line.component.{ts,html,scss}
            new-ui/pages/energy/energy-general-view (app-schematic-toolbar başlığı, "Klasik görünüm",
            seçim kartı: Mekânsal konum (BMS) / Alarmlar / İşareti kaldır)
-   Veri: DCIM.data.pmsSingleLine (js/mock/pms-single-line.data.js — SCH kayıtlarından)
+   Veri: DCIM.data.pmsSingleLine (js/mock/pms-single-line.data.js — kurgusal tesis şemaları)
 
    Sözleşme (pms.js bunu kullanır):
      DCIM.pmsSingleLine.schemas            → [{ id, label }] (kenar çubuğu TEK HAT sırası)
@@ -45,7 +45,7 @@
   const normSev = s => (s === 'veri-yok' || s === 'kayip' ? 'kayip' : SEV_COLOR[s] && s !== 'normal' ? s : 'alarm');
 
   const KIND_NAME = { generator: 'Jeneratör', transformer: 'Trafo', switch: 'Kesici', fixed: 'Sabit bağlantı', ups: 'UPS', source: 'AC kaynak' };
-  const TYPE_OF = { g: 'generator', t: 'transformer', s: 'switch', f: 'switch-sabit', c: 'cable', c2: 'cable2', b: 'line_dashed', l: 'label' };
+  const TYPE_OF = { g: 'generator', t: 'transformer', a: 'ac_source', s: 'switch', f: 'switch-sabit', c: 'cable', c2: 'cable2', b: 'line_dashed', l: 'label' };
   const DEAD_SOURCE = new Set(['DEVREDIŞI', 'DEVREDISI', 'BAĞLANAMADI', 'BAGLANAMADI', 'OFF']);
 
   const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : (d || 0); };
@@ -83,7 +83,7 @@
     return schema.items.map(r => {
       const t = TYPE_OF[r[0]];
       const it = { id: r[1], originalType: t, label: r[2], devId: r[3] === '=' ? r[1] : r[3], x: r[4], y: r[5] };
-      if (r[0] === 'g' || r[0] === 't') { it.shape = 'svg-icon'; it.width = r[6]; it.height = 0; }
+      if (r[0] === 'g' || r[0] === 't' || r[0] === 'a') { it.shape = 'svg-icon'; it.width = r[6]; it.height = 0; }
       else if (r[0] === 's' || r[0] === 'f') { it.rotation = r[6]; it.initialRotation = r[7]; }
       else if (r[0] === 'l') it.fontSize = r[6];
       else { it.x2 = r[6]; it.y2 = r[7]; it.connectedToStart = r[8]; it.connectedToEnd = r[9]; }
@@ -361,7 +361,7 @@
   // Sunum canlı değerleri (tohumlu; enerjisiz öğede 0)
   // ---------------------------------------------------------------------------
   const f1 = n => n.toFixed(1), f0 = n => n.toFixed(0);
-  // 'IDC1_A_GEN4_Q5_DV' / 'GEN-4' → 4; jeneratör değilse 0
+  // 'DCA_A_GEN4_Q5_DV' / 'GEN-4' → 4; jeneratör değilse 0
   const genNo = s => { const m = /GEN-?(\d)/i.exec(String(s || '')); return m ? +m[1] : 0; };
   function valuesOf(n, tick) {
     const key = n.src.devId || n.id;

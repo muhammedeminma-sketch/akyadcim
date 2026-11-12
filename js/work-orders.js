@@ -1,23 +1,27 @@
 /* ==========================================================================
    DCIM Sunum — İş Emirleri (NewUICMPWorkOrdersComponent)
    Kaynak: new-ui/pages/work-orders/work-orders.component.{html,ts,scss}
-     + app-data-table (AppDataTableComponent): arama, hızlı filtre, kolon filtreleri, sıralama,
-       sayfalama (page_rng = 15), seçim, kolon görünürlüğü, Online rozeti, yenile
+     + app-data-table (AppDataTableComponent): genel arama, hızlı filtre, kolon filtreleri, sıralama,
+       sayfalama (page_rng = 50), seçim, kolon görünürlüğü, Online rozeti, yenile
      + WorkOrderDetailsComponent   (İş Emri Numarası → detay penceresi, not güncelleme, PDF)
      + WorkOrderStaComponent       (durum rozeti → durum akış diyagramı + zorunlu açıklama)
-     + WorkOrderReportPopupComponent (Rapor → tarih aralığı, PDF / Excel)
-   Veri: DCIM.data.workOrders.list (js/mock/work-orders.data.js) — doc('WOR/S00')/id('WOR_List')/item.
+     + app-report-export-menu      (Kasım 2026: eski "Rapor" düğmesi + work-order-report-popup yerine;
+       kapsam "Filtrelenmiş liste", tarih aralığı iş emrinin bildirim zamanına uygulanır)
+   Genel arama (onSearchChange → buildWhereQuery): iş emri no, sipariş no, hizmet no, sipariş adı, paket,
+     müşteri, enerji ürün ID, işlem yapan kullanıcılar ve notlar (tüm geçmiş); durum ve kolon filtreleriyle birlikte.
+   Mobil (lg altı): satırlar kart olur (İş emri no başlık, müşteri alt başlık, sipariş adı, durum rozeti —
+     süren iş emirleri nabız gibi atar; tarih/kullanıcı/not "Detayları Göster"de). Mobilde durum değiştirme yok.
+   Veri: DCIM.data.workOrders.list (js/mock-data.js "work-orders.html verisi") — doc('WOR/S00')/id('WOR_List')/item.
    Sunum ekleri (orijinalde yok): durum özet kartları, Öncelik / Atanan Teknisyen / Termin Tarihi
-     kolonları, "Yeni İş Emri Oluştur" formu, satıra tıklayınca detay, arama kutusunun istemci tarafı
-     çalışması, detayda kabin / ekipman derin bağlantıları.
+     kolonları, "Yeni İş Emri Oluştur" formu, satıra tıklayınca detay, detayda kabin / ekipman derin bağlantıları.
    Derin bağlantılar:
-     ?q=<metin>          arama kutusunu doldurur            (work-orders.html?q=1AV42)
+     ?q=<metin>          arama kutusunu doldurur            (work-orders.html?q=1NA06)
      ?sta=<0x030N>       hızlı durum filtresi               (work-orders.html?sta=0x0303)
      ?kpi=open|progress|waiting|done   özet kartı filtresi  (work-orders.html?kpi=waiting)
-     ?open=<rid|kabin|ekipman>  detay penceresini açar      (work-orders.html?open=1AV42)
+     ?open=<rid|kabin|ekipman>  detay penceresini açar      (work-orders.html?open=1NA06)
      ?status=<rid|kabin|ekipman> durum işlemi penceresini açar (work-orders.html?status=KLIMA%20109)
      ?new=1              Yeni İş Emri formunu açar
-     ?report=1           Rapor penceresini açar
+     ?report=1           rapor menüsünü (Rapor al) açık başlatır
      ?cols=all           gizli (varsayılanda kapalı) kolonları da gösterir
    ========================================================================== */
 (function () {
@@ -189,7 +193,7 @@
     sortField: '',
     sortOrder: 1,
     page: 1,
-    pageSize: 15,
+    pageSize: 50,
     showFilters: false,
     selected: new Set(),
     hiddenCols: {},
@@ -228,10 +232,14 @@
     items.sort((a, b) => new Date(b.tim_open) - new Date(a.tim_open));
     let rows = items.map(mapRow);
 
+    // Genel arama — orijinal: contains(@id | @ord_id | @erp_id | @wor_name | @svc_desc | @customer_name |
+    // @energy_product_id | @usr | @note); usr / note tüm geçmişi (JSON) kapsar. Sunum eki: teknisyen, öncelik, kabin/ekipman.
+    const flat = v => (v && typeof v === 'object' ? Object.keys(v).map(k => v[k]).join(' ') : v);
     const q = lc(state.search.trim());
     if (q) {
-      rows = rows.filter(r => [r.rid, r.ord_id, r.erp_id, r.customerName, r.energyProductId, r.svc_desc, r.wor_name, r.asn_usr, r.usr_last, r.note_last,
-        r.statusText, (PRIORITY[r.prio] || {}).label, r.rawItem.target, r.rawItem.loc_sub1].some(v => lc(v).indexOf(q) >= 0));
+      rows = rows.filter(r => [r.rid, r.ord_id, r.erp_id, r.wor_name, r.svc_desc, r.customerName, r.energyProductId,
+        flat(parseJsonObj(r.rawItem.usr)), flat(parseJsonObj(r.rawItem.note)),
+        r.asn_usr, (PRIORITY[r.prio] || {}).label, r.rawItem.target, r.rawItem.loc_sub1].some(v => lc(v).indexOf(q) >= 0));
     }
     Object.keys(state.filters).forEach(f => {
       const v = lc(String(state.filters[f] || '').trim());
@@ -256,12 +264,18 @@
     host.innerHTML = kit.pageHeader({
       title: 'SİPARİŞ LİSTESİ',
       breadcrumbs: [{ label: 'İş Emirleri' }, { label: 'SİPARİŞ LİSTESİ' }],
-      actions: '<div class="flex items-center gap-3">' +
-        button({ variant: 'secondary', icon: 'pi pi-file', label: 'Rapor', attrs: 'data-act="report"' }) +
+      actions: '<div class="flex items-center gap-3 max-lg:gap-2">' +
+        '<div data-report-menu></div>' +
         button({ variant: 'primary', icon: 'pi pi-plus', label: 'Yeni İş Emri Oluştur', attrs: 'data-act="new"' }) +
       '</div>'
     });
-    host.querySelector('[data-act="report"]').addEventListener('click', openReport);
+    // app-report-export-menu [scopes]="reportScopes" options="dateRange"
+    DCIM.report.menu(host.querySelector('[data-report-menu]'), {
+      scopes: [{ id: 'list', label: 'Filtrelenmiş liste', hint: 'Ekrandaki arama ve filtrelerle' }],
+      options: 'dateRange',
+      unit: 'iş emri',
+      onExport: exportReport
+    });
     host.querySelector('[data-act="new"]').addEventListener('click', openCreate);
   }
 
@@ -362,34 +376,36 @@
   function renderTableShell() {
     const host = document.getElementById('wo-table');
     host.innerHTML =
-      '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0">' +
-        '<div class="flex flex-wrap items-center gap-2">' +
-          '<div class="relative w-60 sm:w-72">' +
+      '<div class="p-2.5 px-3 border-b border-slate-200 dark:border-border-subtle flex flex-wrap items-center justify-between gap-2.5 bg-slate-50 dark:bg-surface-base shrink-0 max-lg:flex-col max-lg:items-stretch max-lg:gap-2">' +
+        '<div class="flex flex-wrap items-center gap-2 max-lg:w-full max-lg:flex-col max-lg:items-stretch">' +
+          '<div class="relative w-60 sm:w-72 max-lg:w-full">' +
             '<i class="pi pi-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>' +
-            '<input type="text" data-search placeholder="Ara" value="' + esc(state.search) + '" class="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
+            '<input type="text" data-search placeholder="Ara" title="İş emri / sipariş / hizmet no, müşteri, paket, enerji ürün ID, kullanıcı ve not" value="' + esc(state.search) + '" class="w-full pl-8 pr-3 py-1 max-lg:py-2.5 text-xs max-lg:text-sm bg-white dark:bg-surface-base border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500" />' +
           '</div>' +
-          '<div class="flex flex-wrap items-center gap-1" data-quick>' +
+          '<div class="flex flex-wrap items-center gap-1 max-lg:flex-nowrap max-lg:max-w-full max-lg:overflow-x-auto max-lg:pb-0.5" data-quick>' +
             QUICK.map(q => '<button type="button" data-q="' + q.value + '" class="px-2 py-1 text-[11px] rounded-[2px] border transition-all cursor-pointer">' + esc(q.label) + '</button>').join('') +
           '</div>' +
           '<span data-chips class="flex items-center gap-1"></span>' +
         '</div>' +
-        '<div class="flex items-center gap-1.5 shrink-0">' +
-          '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0" title="Online"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Online</span></span>' +
+        '<div class="flex items-center gap-1.5 shrink-0 max-lg:w-full max-lg:flex-wrap">' +
+          '<span class="px-2 py-0.5 text-[10px] font-bold rounded-[2px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0 max-lg:hidden" title="Online"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Online</span></span>' +
           '<div data-bulk class="hidden px-2 py-1 bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 rounded-[2px] text-[11px] font-bold flex items-center gap-1.5"></div>' +
           '<button type="button" data-filter-toggle class="px-2.5 py-1 text-xs rounded-[2px] border flex items-center gap-1 transition-all cursor-pointer" title="Filtre"><i class="pi pi-filter text-xs"></i><span>Filtre</span></button>' +
-          '<div class="relative">' +
+          '<div class="relative max-lg:hidden">' +
             '<button type="button" data-colmenu class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 cursor-pointer"><i class="pi pi-sliders-h text-xs"></i><span>Kolonlar</span></button>' +
             '<div data-colmenu-panel class="hidden absolute right-0 mt-1 w-56 max-h-[60vh] overflow-y-auto bg-white dark:bg-surface-card border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-xl z-50 p-2 text-xs space-y-1"></div>' +
           '</div>' +
           '<button type="button" data-refresh class="p-1.5 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2px] transition-colors cursor-pointer" title="Yenile"><i class="pi pi-refresh text-xs"></i></button>' +
         '</div>' +
       '</div>' +
-      '<div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto w-full custom-scrollbar" data-scroll>' +
+      '<div data-mfilters class="hidden lg:hidden shrink-0 max-h-[42vh] overflow-y-auto p-2 grid grid-cols-1 gap-1.5 border-b border-slate-200 dark:border-border-subtle bg-slate-50 dark:bg-[#0b121e]"></div>' +
+      '<div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto w-full custom-scrollbar max-lg:hidden" data-scroll>' +
         '<table class="scada-table w-full text-left border-collapse text-xs">' +
           '<thead class="sticky top-0 z-10 shadow-2xs" data-thead></thead>' +
           '<tbody class="divide-y divide-slate-100 dark:divide-border-subtle text-xs text-slate-800 dark:text-slate-200" data-tbody></tbody>' +
         '</table>' +
       '</div>' +
+      '<div data-cards class="' + kit.CARDS_WRAP_CLS + '"></div>' +
       '<div class="py-2 px-3 border-t border-slate-200 dark:border-[#1b263b] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-slate-50 dark:bg-[#0b121e] shrink-0" data-footer></div>';
 
     let searchTimer = null;
@@ -432,16 +448,74 @@
       }
       openDetails(rid);
     });
+    // Mobil kart: dokunma → detay penceresi (durum değiştirme mobilde yok)
+    host.querySelector('[data-cards]').addEventListener('click', e => {
+      if (e.target.closest('summary,a')) return;
+      const card = e.target.closest('[data-card]');
+      if (card) openDetails(card.getAttribute('data-card'));
+    });
+  }
+
+  // Mobil kart sütunları (columns → mobile: primary | meta | extra | sub | secondary | badge; seqNo desktopOnly)
+  const isWorkOrderLive = no => no !== 0 && no !== 4 && no !== 5;
+  const CARD_COLS = [
+    { field: 'rid', header: 'İş Emri Numarası', mobile: 'primary', card: r => '<span class="font-mono text-sky-600 dark:text-sky-400">' + esc(r.rid) + '</span>' },
+    { field: 'sta', header: 'Durum', mobile: 'badge', card: r =>
+      // staCardTemplate: sta-c rozeti (masaüstüyle aynı renk); süren iş emri nabız gibi atar
+      '<span class="text-slate-800 dark:text-slate-200"><span class="inline-flex items-center gap-1.5 h-6 pl-2 pr-2.5 wo-pill text-[11px] font-semibold whitespace-nowrap ' + staC(r.statusNo) + (isWorkOrderLive(r.statusNo) ? ' nu-pulse-chip' : '') + '">' +
+        '<span class="relative flex w-2 h-2 shrink-0">' +
+          (isWorkOrderLive(r.statusNo) ? '<span class="absolute inline-flex w-full h-full wo-pill bg-current opacity-60 animate-ping"></span>' : '') +
+          '<span class="relative inline-flex w-2 h-2 wo-pill bg-current"></span></span>' + esc(r.statusText) + '</span></span>' },
+    { field: 'customerName', header: 'Müşteri Adı', mobile: 'sub' },
+    { field: 'wor_name', header: 'Sipariş Adı', mobile: 'secondary' },
+    { field: 'ord_id', header: 'Sipariş Numarası', mobile: 'meta' },
+    { field: 'erp_id', header: 'Hizmet No', mobile: 'meta' },
+    { field: 'energyProductId', header: 'Enerji Ürün ID', mobile: 'meta' },
+    { field: 'svc_desc', header: 'Paket Adı', mobile: 'meta' },
+    { field: 'prio', header: 'Öncelik', mobile: 'meta', card: r => priorityBadge(r.prio) },
+    { field: 'tim_open_formatted', header: 'Sipariş Bildirim Zamanı', mobile: 'extra' },
+    { field: 'tim_plan_formatted', header: 'Sipariş Planlama Zamanı', mobile: 'extra' },
+    { field: 'tim_begn_formatted', header: 'Sipariş Başlama Zamanı', mobile: 'extra' },
+    { field: 'tim_end_formatted', header: 'Sipariş Tamamlanma Zamanı', mobile: 'extra' },
+    { field: 'elp_tim', header: 'Geçen Zaman', mobile: 'extra' },
+    { field: 'asn_usr', header: 'Atanan Teknisyen', mobile: 'extra' },
+    { field: 'tim_due_formatted', header: 'Termin Tarihi', mobile: 'extra', card: dueCell },
+    { field: 'usr_last', header: 'En Son İşlem Yapan Kullanıcı', mobile: 'extra' },
+    { field: 'note_last', header: 'En Son Not', mobile: 'extra', mobileBlock: true }
+  ];
+
+  function renderMobileFilters() {
+    const mf = document.querySelector('#wo-table [data-mfilters]');
+    mf.classList.toggle('hidden', !state.showFilters);
+    mf.innerHTML = state.showFilters
+      ? cols().filter(c => c.filterable !== false).map(c =>
+          '<label class="flex flex-col gap-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">' + esc(c.header) +
+          '<input type="text" data-f="' + c.field + '" value="' + esc(state.filters[c.field] || '') + '" placeholder="Filtre" class="' + filterInputCls + ' max-lg:h-10 max-lg:px-2.5 max-lg:text-base max-lg:font-medium max-lg:rounded-[3px]" /></label>').join('') +
+        '<button type="button" data-clear-filters class="h-9 rounded-[3px] border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5 cursor-pointer"><i class="pi pi-filter-slash text-xs"></i>Temizle</button>'
+      : '';
+    mf.querySelectorAll('[data-f]').forEach(inp => inp.addEventListener('input', () => {
+      state.filters[inp.getAttribute('data-f')] = inp.value;
+      state.page = 1;
+      renderBody();
+    }));
+    const clr = mf.querySelector('[data-clear-filters]');
+    if (clr) clr.addEventListener('click', clearAllFilters);
+  }
+  // onClearFilters(): kolon filtreleri + arama + hızlı filtre sıfırlanır
+  function clearAllFilters() {
+    state.filters = {}; state.search = ''; state.quick = 'all'; state.kpi = ''; state.page = 1;
+    document.querySelector('#wo-table [data-search]').value = '';
+    renderAll();
   }
 
   function renderToolbar() {
     document.querySelectorAll('#wo-table [data-q]').forEach(b => {
       const on = b.getAttribute('data-q') === state.quick;
-      b.className = 'px-2 py-1 text-[11px] rounded-[2px] border transition-all cursor-pointer ' +
+      b.className = 'px-2 py-1 max-lg:px-3 max-lg:py-1.5 max-lg:whitespace-nowrap max-lg:shrink-0 text-[11px] rounded-[2px] border transition-all cursor-pointer ' +
         (on ? 'bg-sky-600 text-white font-bold border-sky-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700');
     });
     const ft = document.querySelector('#wo-table [data-filter-toggle]');
-    ft.className = 'px-2.5 py-1 text-xs rounded-[2px] border flex items-center gap-1 transition-all cursor-pointer ' +
+    ft.className = 'px-2.5 py-1 max-lg:py-1.5 text-xs rounded-[2px] border flex items-center gap-1 transition-all cursor-pointer ' +
       (state.showFilters ? 'bg-sky-600 text-white font-bold border-sky-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700');
 
     const chips = document.querySelector('#wo-table [data-chips]');
@@ -502,16 +576,12 @@
       renderBody();
     }));
     const clr = thead.querySelector('[data-clear-filters]');
-    if (clr) clr.addEventListener('click', () => {
-      // onClearFilters(): kolon filtreleri + arama + hızlı filtre sıfırlanır
-      state.filters = {}; state.search = ''; state.quick = 'all'; state.kpi = ''; state.page = 1;
-      document.querySelector('#wo-table [data-search]').value = '';
-      renderAll();
-    });
+    if (clr) clr.addEventListener('click', clearAllFilters);
     thead.querySelector('[data-check-all]').addEventListener('change', e => {
       if (e.target.checked) currentPageRows().forEach(r => state.selected.add(r.rid)); else state.selected.clear();
       renderBody();
     });
+    renderMobileFilters();
   }
 
   let lastFiltered = [];
@@ -539,6 +609,12 @@
       }).join('');
     }
     state.flashRid = '';
+    // Mobil kartlar (lg altı) — kart nötr kalır, durum rozetle gösterilir
+    document.querySelector('#wo-table [data-cards]').innerHTML = kit.dataCards(rows, CARD_COLS, {
+      start: (state.page - 1) * state.pageSize,
+      rowAttrs: r => 'data-card="' + esc(r.rid) + '"',
+      cardCls: () => 'cursor-pointer'
+    });
     const checkAll = document.querySelector('#wo-table [data-check-all]');
     if (checkAll) checkAll.checked = rows.length > 0 && rows.every(r => state.selected.has(r.rid));
 
@@ -548,8 +624,8 @@
       bulk.classList.remove('hidden');
       bulk.innerHTML = '<span>' + state.selected.size + ' seçili</span><button type="button" data-bulk-act class="underline hover:text-sky-800 dark:hover:text-sky-300" title="Seçili iş emirlerini Excel\'e aktar">İşlemler</button>';
       bulk.querySelector('[data-bulk-act]').onclick = () => {
-        const sel = LIST.filter(it => state.selected.has(it.rid)).map(mapRow);
-        exportRows('is_emirleri_secili', sel);
+        const sel = LIST.filter(it => state.selected.has(it.rid));
+        DCIM.report.generate(buildReport(sel, null, 'Seçili iş emirleri (' + sel.length + ')'), 'xlsx');
       };
     } else {
       bulk.classList.add('hidden');
@@ -559,7 +635,7 @@
     const footer = document.querySelector('#wo-table [data-footer]');
     footer.innerHTML =
       '<div class="text-slate-500 dark:text-slate-400 font-medium">Toplam <span class="font-bold text-slate-900 dark:text-slate-100">' + lastFiltered.length + '</span> kayıt listeleniyor.</div>' +
-      '<div class="flex items-center gap-3 self-end sm:self-auto">' +
+      '<div class="flex items-center gap-3 self-end sm:self-auto max-lg:w-full max-lg:justify-between">' +
         '<div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"><span>Sayfa Başına:</span>' +
           '<select data-pagesize class="bg-white dark:bg-[#080c14] border border-slate-200 dark:border-slate-700 rounded-[2px] px-2 py-0.5 text-slate-800 dark:text-slate-200 text-xs font-bold">' +
           [5, 10, 15, 20, 50, 100].map(n => '<option value="' + n + '"' + (n === state.pageSize ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>' +
@@ -574,31 +650,81 @@
       state.page += parseInt(b.getAttribute('data-page'), 10);
       renderBody();
       document.querySelector('#wo-table [data-scroll]').scrollTop = 0;
+      document.querySelector('#wo-table [data-cards]').scrollTop = 0;
     }));
   }
 
-  // Excel (CSV) dışa aktarım — rapor penceresindeki kolon düzeni
-  function exportRows(name, rows) {
-    kit.exportExcel(name, [
-      { header: 'Sıra', value: r => r.seqNo },
-      { header: 'İş Emri No', value: r => r.rid },
-      { header: 'Sipariş No', value: r => r.ord_id },
-      { header: 'Hizmet No', value: r => r.erp_id },
-      { header: 'Sipariş Bildirim', value: r => r.tim_open_formatted },
-      { header: 'Sipariş Planlama', value: r => r.tim_plan_formatted },
-      { header: 'Sipariş Başlama', value: r => r.tim_begn_formatted },
-      { header: 'Sipariş Tamamlanma', value: r => r.tim_end_formatted },
-      { header: 'Geçen Zaman', value: r => r.elp_tim },
-      { header: 'Müşteri Adı', value: r => r.customerName },
-      { header: 'Enerji Ürün ID', value: r => r.energyProductId },
-      { header: 'Paket Adı', value: r => r.svc_desc },
-      { header: 'Sipariş Adı', value: r => r.wor_name },
-      { header: 'Öncelik', value: r => (PRIORITY[r.prio] || PRIORITY.medium).label },
-      { header: 'Atanan Teknisyen', value: r => r.asn_usr },
-      { header: 'Termin Tarihi', value: r => r.tim_due_formatted },
-      { header: 'En Son Not', value: r => r.note_last },
-      { header: 'Durum', value: r => r.statusText }
-    ], rows);
+  // ---------------------------------------------------------------------------
+  // Rapor (app-report-export-menu → exportReport / buildReport)
+  // WOR_List'in tarih süzgeci yoktur: ekrandaki süzgeçlerle eşleşen tüm kayıtlar alınır, seçilen aralık
+  // bildirim zamanına (tim_open) uygulanır; ekrandaki sayfa değişmez.
+  // ---------------------------------------------------------------------------
+  const fmtShort = d => (d ? pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : '…');
+  const requestLabel = req => (req && (req.from || req.to) ? fmtShort(req.from) + ' – ' + fmtShort(req.to) : '');
+  // workOrderReportTone(): sta-r paleti (0/5 gri, 1/3 mavi, 2/6 sarı, 4 yeşil, 8 kırmızı)
+  function workOrderTone(no) {
+    switch (no) {
+      case 1: case 3: return 'info';
+      case 2: case 6: return 'warning';
+      case 4: return 'normal';
+      case 8: return 'alarm';
+      default: return '';
+    }
+  }
+
+  function buildReport(items, req, scopeLabel) {
+    const quick = QUICK.find(q => q.value === state.quick);
+    const kpi = KPI.find(k => k.key === state.kpi);
+    const colLabel = f => (COLUMNS.find(c => c.field === f) || { header: f }).header;
+    const filters = [
+      state.search.trim() ? 'arama "' + state.search.trim() + '"' : '',
+      state.quick !== 'all' ? 'durum: ' + (quick ? quick.label : state.quick) : '',
+      kpi ? 'grup: ' + kpi.label : ''
+    ].concat(Object.keys(state.filters).filter(f => String(state.filters[f] || '').trim()).map(f => colLabel(f) + ' "' + String(state.filters[f]).trim() + '"'))
+      .filter(Boolean);
+    const cls = it => getClassNo(it.sta);
+    const done = items.filter(it => cls(it) === 4).length;
+    const cancelled = items.filter(it => cls(it) === 0 || cls(it) === 8).length;
+    const open = items.length - done - cancelled;
+    const range = requestLabel(req);
+    const blank = v => (v === '-' ? '' : v);
+    return {
+      title: 'İş Emirleri Raporu',
+      subtitle: (range ? 'Bildirim zamanı: ' + range : scopeLabel || 'İş emri listesi') + (filters.length ? ' · Filtre: ' + filters.join(', ') : '') + ' · Sipariş · ' + items.length + ' iş emri',
+      filename: 'Is_Emirleri',
+      kpis: [
+        { label: 'İş emri', value: items.length },
+        { label: 'Süren', value: open, tone: open ? 'info' : 'normal' },
+        { label: 'Tamamlandı', value: done, tone: 'normal' },
+        { label: 'İptal', value: cancelled }
+      ],
+      sections: [{
+        title: 'İş emri listesi',
+        toneKey: 'tone',
+        columns: [
+          { key: 'rid', label: 'İş emri no' }, { key: 'ord_id', label: 'Sipariş no' }, { key: 'erp_id', label: 'Hizmet no' },
+          { key: 'open', label: 'Bildirim' }, { key: 'plan', label: 'Planlama' }, { key: 'begn', label: 'Başlangıç' }, { key: 'end', label: 'Tamamlanma' },
+          { key: 'elp', label: 'Geçen süre' }, { key: 'customer', label: 'Müşteri' }, { key: 'epid', label: 'Enerji ürün ID' }, { key: 'svc', label: 'Paket' },
+          { key: 'name', label: 'Sipariş adı' }, { key: 'usr', label: 'Son kullanıcı' }, { key: 'note', label: 'Son not' }, { key: 'sta', label: 'Durum' }
+        ],
+        rows: items.map(it => {
+          const r = mapRow(it, 0);
+          return {
+            rid: r.rid, ord_id: blank(r.ord_id), erp_id: blank(r.erp_id), open: blank(r.tim_open_formatted), plan: blank(r.tim_plan_formatted),
+            begn: blank(r.tim_begn_formatted), end: blank(r.tim_end_formatted), elp: r.elp_tim, customer: blank(r.customerName),
+            epid: blank(r.energyProductId), svc: blank(r.svc_desc), name: blank(r.wor_name), usr: blank(r.usr_last), note: blank(r.note_last),
+            sta: r.statusText, tone: workOrderTone(r.statusNo)
+          };
+        })
+      }],
+      notes: ['Kayıtlar iş emri listesinden (WOR_List) okunur; tarih aralığı iş emrinin bildirim zamanına uygulanır. Geçen süre rapor anına göredir.']
+        .concat(items.length ? [] : ['Seçilen aralıkta iş emri yok.'])
+    };
+  }
+
+  function exportReport(req) {
+    const items = DCIM.report.applyRange(filtered().map(r => r.rawItem), req, 'tim_open');
+    DCIM.report.generate(buildReport(items, req), req.format);
   }
 
   // ---------------------------------------------------------------------------
@@ -760,6 +886,8 @@
   };
 
   function openStatus(rid) {
+    // processWor(): mobilde durum değiştirme yok (yalnızca görüntüleme) — isMobileViewport()
+    if (window.matchMedia('(max-width: 1023.98px)').matches) return;
     const it = findItem(rid);
     if (!it) return;
     const current = String(getClassNo(it.sta));
@@ -878,113 +1006,6 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Rapor (WorkOrderReportPopupComponent)
-  // ---------------------------------------------------------------------------
-  function openReport() {
-    const today = new Date();
-    const start = new Date(today.getTime() - 30 * 86400000);
-    let data = [];
-    const body =
-      '<div class="-m-5 flex flex-col">' +
-        '<div class="p-5 bg-white dark:bg-surface-card border-b border-slate-200 dark:border-slate-800 shrink-0">' +
-          '<div class="flex flex-col sm:flex-row gap-4 items-end">' +
-            '<div class="w-full sm:w-auto flex-1"><label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Başlangıç Tarihi (Açılış):</label>' +
-              '<div class="relative"><span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none"><i class="pi pi-calendar text-sm"></i></span>' +
-              '<input type="date" data-r-start value="' + fmtDateKey(start) + '" class="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-surface-base border border-slate-300 dark:border-slate-700 rounded text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 transition-all cursor-pointer"></div></div>' +
-            '<div class="w-full sm:w-auto flex-1"><label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Bitiş Tarihi (Açılış):</label>' +
-              '<div class="relative"><span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none"><i class="pi pi-calendar text-sm"></i></span>' +
-              '<input type="date" data-r-end value="' + fmtDateKey(today) + '" class="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-surface-base border border-slate-300 dark:border-slate-700 rounded text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 transition-all cursor-pointer"></div></div>' +
-            '<div class="w-full sm:w-auto flex-[0.5]"><button type="button" data-r-search class="w-full h-[38px] bg-sky-600 hover:bg-sky-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white text-xs font-bold rounded transition-colors shadow-sm flex justify-center items-center gap-2 uppercase tracking-wide cursor-pointer"><i class="pi pi-search"></i>Ara</button></div>' +
-          '</div>' +
-        '</div>' +
-        '<div data-r-actions class="hidden px-5 py-3 bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-800 shrink-0 flex flex-wrap items-center justify-between gap-3">' +
-          '<div class="flex gap-2">' +
-            '<button type="button" data-r-pdf class="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50 text-xs font-semibold rounded transition-colors flex items-center gap-2 cursor-pointer"><i class="pi pi-file-pdf"></i>PDF İndir</button>' +
-            '<button type="button" data-r-excel class="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 text-xs font-semibold rounded transition-colors flex items-center gap-2 cursor-pointer"><i class="pi pi-file-excel"></i>Excel İndir</button>' +
-          '</div>' +
-          '<div data-r-count class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700"></div>' +
-        '</div>' +
-        '<div data-r-table class="flex-1 overflow-auto bg-white dark:bg-[#0f172a] relative min-h-[300px] max-h-[50vh] custom-scrollbar">' +
-          '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center">' +
-            '<div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4"><i class="pi pi-calendar-times text-2xl text-slate-400 dark:text-slate-500"></i></div>' +
-            '<p class="text-sm font-medium">Lütfen bir tarih aralığı seçip arama yapın.</p>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    const d = dialog({
-      title: 'Sipariş Listesi Raporu Oluştur',
-      subtitle: 'Sipariş verilerini filtreleyin ve dışa aktarın',
-      variant: 'info',
-      maxWidth: 'max-w-7xl',
-      showCancel: false,
-      confirmLabel: 'Kapat',
-      body
-    });
-    const $ = s => d.body.querySelector(s);
-    $('[data-r-search]').addEventListener('click', () => {
-      const s = $('[data-r-start]').value;
-      const e = $('[data-r-end]').value;
-      if (!s || !e) { toast('Lütfen başlangıç ve bitiş tarihlerini seçiniz.', 'warning'); return; }
-      if (s > e) { toast('Başlangıç tarihi bitiş tarihinden büyük olamaz!', 'error'); return; }
-      const btn = $('[data-r-search]');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="pi pi-spinner pi-spin"></i>Aranıyor...';
-      $('[data-r-table]').innerHTML = '<div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10">' +
-        '<div class="w-10 h-10 border-4 border-slate-200 dark:border-slate-700 border-t-sky-500 dark:border-t-sky-400 rounded-full animate-spin mb-4"></div>' +
-        '<span class="text-sm font-medium text-slate-600 dark:text-slate-300">Veriler yükleniyor...</span></div>';
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="pi pi-search"></i>Ara';
-        data = LIST.filter(it => { const k = fmtDateKey(new Date(it.tim_open)); return k >= s && k <= e; })
-          .sort((a, b) => new Date(a.tim_open) - new Date(b.tim_open)).map(mapRow);
-        data.forEach((r, i) => { r.seqNo = i + 1; });
-        renderReportTable();
-      }, 650);
-    });
-    $('[data-r-pdf]').addEventListener('click', () => { toast('PDF raporu oluşturuldu!', 'success'); kit.exportPdf(); });
-    $('[data-r-excel]').addEventListener('click', () => {
-      if (!data.length) { toast('Excel oluşturmak için veri bulunmamaktadır.', 'warning'); return; }
-      exportRows('Siparis_Listesi_Raporu_' + $('[data-r-start]').value + '_' + $('[data-r-end]').value, data);
-    });
-
-    function renderReportTable() {
-      const actions = $('[data-r-actions]');
-      const tbl = $('[data-r-table]');
-      if (!data.length) {
-        actions.classList.add('hidden');
-        tbl.innerHTML = '<div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center"><i class="pi pi-inbox text-5xl mb-4 text-slate-300 dark:text-slate-600"></i><p class="text-sm font-medium">Seçilen tarih aralığında veri bulunamadı.</p></div>';
-        return;
-      }
-      actions.classList.remove('hidden');
-      $('[data-r-count]').textContent = 'Toplam ' + data.length + ' kayıt';
-      const th = l => '<th class="px-3 py-3 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">' + esc(l) + '</th>';
-      tbl.innerHTML = '<table class="w-full text-left border-collapse text-xs whitespace-nowrap">' +
-        '<thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800/80 backdrop-blur-md shadow-sm"><tr>' +
-          ['Sıra', 'İş Emri No', 'Sipariş No', 'Hizmet No', 'Sipariş Bildirim', 'Sipariş Planlama', 'Sipariş Başlama', 'Sipariş Tamamlanma', 'Geçen Zaman', 'Müşteri Adı', 'Enerji Ürün ID', 'Paket Adı', 'Sipariş Adı', 'En Son Not', 'Durum'].map(th).join('') +
-        '</tr></thead><tbody>' +
-        data.map(r => '<tr class="border-b border-slate-100 dark:border-slate-800/50 hover:bg-sky-50/50 dark:hover:bg-sky-900/10 transition-colors ' + staR(r.statusNo) + '">' +
-          '<td class="px-3 py-2 text-slate-500 dark:text-slate-400 font-mono">' + r.seqNo + '</td>' +
-          '<td class="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">' + esc(r.rid) + '</td>' +
-          '<td class="px-3 py-2 text-slate-700 dark:text-slate-300">' + esc(r.ord_id) + '</td>' +
-          '<td class="px-3 py-2 text-slate-700 dark:text-slate-300">' + esc(r.erp_id) + '</td>' +
-          '<td class="px-3 py-2 text-slate-600 dark:text-slate-400">' + esc(r.tim_open_formatted) + '</td>' +
-          '<td class="px-3 py-2 text-slate-600 dark:text-slate-400">' + esc(r.tim_plan_formatted) + '</td>' +
-          '<td class="px-3 py-2 text-slate-600 dark:text-slate-400">' + esc(r.tim_begn_formatted) + '</td>' +
-          '<td class="px-3 py-2 text-slate-600 dark:text-slate-400">' + esc(r.tim_end_formatted) + '</td>' +
-          '<td class="px-3 py-2 font-mono text-slate-500 dark:text-slate-400">' + esc(r.elp_tim) + '</td>' +
-          '<td class="px-3 py-2 text-slate-700 dark:text-slate-300">' + esc(r.customerName) + '</td>' +
-          '<td class="px-3 py-2 text-slate-700 dark:text-slate-300">' + esc(r.energyProductId) + '</td>' +
-          '<td class="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[150px] truncate" title="' + esc(r.svc_desc) + '">' + esc(r.svc_desc) + '</td>' +
-          '<td class="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[150px] truncate" title="' + esc(r.wor_name) + '">' + esc(r.wor_name) + '</td>' +
-          '<td class="px-3 py-2 text-slate-600 dark:text-slate-400 max-w-[200px] truncate" title="' + esc(r.note_last) + '">' + esc(r.note_last) + '</td>' +
-          '<td class="px-3 py-2"><span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold ' + staC(r.statusNo) + '">' + esc(STA_FULL[r.statusNo] || r.statusText) + '</span></td>' +
-        '</tr>').join('') +
-        '</tbody></table>';
-    }
-    return d;
-  }
-
-  // ---------------------------------------------------------------------------
   // Yeni İş Emri Oluştur (sunum eki — orijinalde iş emirleri ERP/WOR entegrasyonundan gelir)
   // ---------------------------------------------------------------------------
   const toLocalInput = dt => dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate()) + 'T' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
@@ -996,7 +1017,7 @@
     const techOpts = WO.technicians.map(t => ({ value: t.name, label: t.name + ' — ' + t.team }));
     const body =
       '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3" data-form>' +
-        '<div class="sm:col-span-2">' + kit.formField({ label: 'Sipariş Adı', hint: 'İş emri başlığı', required: true, control: '<input type="text" data-in="title" maxlength="120" placeholder="Örn. Kabin 1AV43 Server Montajı (4U)" class="' + I + '" />' }) + '</div>' +
+        '<div class="sm:col-span-2">' + kit.formField({ label: 'Sipariş Adı', hint: 'İş emri başlığı', required: true, control: '<input type="text" data-in="title" maxlength="120" placeholder="Örn. Kabin 1NA07 Server Montajı (4U)" class="' + I + '" />' }) + '</div>' +
         kit.formField({ label: 'Hizmet Tipi', control: kit.select('data-in="type"', WO.services.map(s => ({ value: s.value, label: s.label })), 'fault') }) +
         kit.formField({ label: 'Öncelik', required: true, control: kit.select('data-in="prio"', Object.keys(PRIORITY).map(k => ({ value: k, label: PRIORITY[k].label })), 'medium') }) +
         kit.formField({ label: 'Kabin / Ekipman', required: true, control: kit.select('data-in="target"', [{ value: '', label: '-Seçiniz-' }].concat(WO.targets), '') }) +
@@ -1116,5 +1137,5 @@
   if (openKey) openDetails(openKey.rid);
   else if (statusKey) openStatus(statusKey.rid);
   else if (params.get('new') === '1') openCreate();
-  else if (params.get('report') === '1') openReport();
+  else if (params.get('report') === '1') { const b = document.querySelector('#wo-header [data-rk-btn]'); if (b) b.click(); }
 })();

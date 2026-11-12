@@ -49,7 +49,7 @@
     { id: 'T01', label: '1.Kat' },
     { id: 'T02', label: '2.Kat' },
     { id: 'T03', label: '3.Kat' },
-    { id: 'T04', label: 'IDC4' }
+    { id: 'T04', label: 'DCB' }
   ];
 
   const COLUMNS = [
@@ -130,6 +130,8 @@
       salonSeg = segs[1] || '';
       podSeg = segs[2] || '';
     }
+    // b024610d2: katın kendi konum kaydı (tek salonlu kat) salon değildir; kabinler bütün kat (GENEL) altında toplanır
+    if (salonSeg && segs[0] && normalizeKey(salonSeg) === normalizeKey(segs[0])) salonSeg = '';
     return { salonSeg, podSeg };
   }
   function mapCabinetInfo(item, floorId) {
@@ -158,7 +160,7 @@
     const floor = localizedFloor(o.floorId);
     const salon = o.rawSalonSeg ? localizedSalonName(o.rawSalonSeg) : '';
     const num = extractNumber(o.rawPodSeg);
-    // Sunum: NS1/NS2 ağ sıraları "POD n" etiketine dönüştürülmez (POD-1/POD-2 ile karışmasın)
+    // Sunum: NW-1/NW-2 ağ sıraları "POD n" etiketine dönüştürülmez (POD-1/POD-2 ile karışmasın)
     const pod = num && /^POD/i.test(o.rawPodSeg) ? 'POD ' + num : (o.rawPodSeg || 'POD');
     return salon ? (floor + ' ' + salon + ' - ' + pod).trim() : (floor + ' ' + pod).trim();
   }
@@ -358,46 +360,37 @@
 
     function popupHtml() {
       if (!state.showPopup) return '';
+      const RM = DCIM.reportModal;
       const cols = selectedColumns();
       const noData = state.isLoading || state.displayData.length === 0;
       const dis = noData ? ' disabled' : '';
       let body;
       if (state.isLoading) {
-        body = '<div class="py-16 flex flex-col items-center justify-center gap-3">' +
-          '<i class="pi pi-spin pi-spinner text-sky-400 text-3xl"></i>' +
-          '<p class="text-slate-300 text-sm font-medium">' + esc(T.preparingReport) + '</p></div>';
+        body = '<div class="rpt-state gap-3">' +
+          '<i class="pi pi-spin pi-spinner text-sky-500 dark:text-sky-400 text-3xl"></i>' +
+          '<p class="text-slate-700 dark:text-slate-300 text-sm font-medium">' + esc(T.preparingReport) + '</p></div>';
       } else if (state.displayData.length) {
-        body = '<div class="flex-1 overflow-auto border border-slate-200 dark:border-border-subtle rounded-[2px] min-h-0">' +
-          '<table class="w-full text-left text-xs border-collapse min-w-max"><thead>' +
-            '<tr class="sticky top-0 bg-slate-100 dark:bg-surface-panel border-b border-slate-200 dark:border-border-subtle text-slate-700 dark:text-slate-300 font-semibold tracking-wider uppercase z-10 shadow-sm">' +
-              cols.map(c => '<th class="px-3.5 py-2.5 whitespace-nowrap border-r border-slate-200 dark:border-border-subtle last:border-r-0 bg-slate-100 dark:bg-surface-panel">' + esc(c.label) + '</th>').join('') +
+        body = '<table class="rpt-table min-w-max"><thead><tr>' +
+              cols.map(c => '<th class="whitespace-nowrap">' + esc(c.label) + '</th>').join('') +
             '</tr></thead>' +
-            '<tbody class="divide-y divide-slate-200 dark:divide-border-subtle text-slate-800 dark:text-slate-200">' +
-              state.displayData.map(row => '<tr class="hover:bg-slate-50 dark:hover:bg-surface-hover transition-colors">' +
-                cols.map(c => '<td class="px-3.5 py-2 whitespace-nowrap border-r border-slate-200 dark:border-border-subtle last:border-r-0 font-mono text-[11px]">' + esc(row[c.key] || '-') + '</td>').join('') +
+            '<tbody class="text-slate-800 dark:text-slate-200">' +
+              state.displayData.map(row => '<tr>' +
+                cols.map(c => '<td class="whitespace-nowrap font-mono">' + esc(row[c.key] || '-') + '</td>').join('') +
               '</tr>').join('') +
-            '</tbody></table></div>';
+            '</tbody></table>';
       } else {
         body = kit.emptyState({ icon: 'pi pi-inbox', message: T.noDataFound });
       }
-      return '<div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200000] flex items-center justify-center p-4" data-popup-overlay>' +
-        '<div class="bg-white dark:bg-surface-card border border-slate-200 dark:border-border-muted rounded-[2px] shadow-2xl flex flex-col w-full max-w-[95vw] xl:max-w-7xl max-h-[85vh] overflow-hidden">' +
-          '<div class="px-5 py-4 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-panel flex-shrink-0">' +
-            '<div class="flex items-center gap-3">' +
-              '<i class="pi pi-list text-sky-600 dark:text-sky-400 text-lg"></i>' +
-              '<h3 class="text-base font-bold text-slate-800 dark:text-white tracking-wide">' + esc(T.resultsTitle) +
-                '<span class="text-xs font-normal text-slate-500 dark:text-slate-400 ml-2">(' + state.displayData.length + ' ' + esc(T.records) + ')</span></h3>' +
-            '</div>' +
-            '<div class="flex items-center gap-2">' +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-excel', label: T.downloadExcel, attrs: 'data-act="excel"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-archive', label: T.downloadZip, attrs: 'data-act="zip"' + dis }) +
-              button({ variant: 'secondary', size: 'sm', icon: 'pi pi-file-pdf', label: T.downloadPdf, attrs: 'data-act="pdf"' + dis }) +
-              '<button type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 ml-2 transition-colors" data-act="close"><i class="pi pi-times text-lg"></i></button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="p-5 flex-1 flex flex-col min-h-0 overflow-hidden">' + body + '</div>' +
-        '</div>' +
-      '</div>';
+      // Ortak rapor pop-up görünümü (app-report-modal)
+      return RM.html({
+        title: T.resultsTitle, subtitle: T.title, icon: 'pi pi-list', tone: 'sky', size: 'xl', z: 'z-[200000]',
+        attrs: 'data-popup-overlay',
+        actions: noData ? '' : RM.btn('pdf', 'pi pi-file-pdf', T.downloadPdf, 'data-act="pdf"' + dis) +
+          RM.btn('excel', 'pi pi-file-excel', T.downloadExcel, 'data-act="excel"' + dis) +
+          RM.btn('zip', 'pi pi-folder', T.downloadZip, 'data-act="zip"' + dis),
+        summary: noData ? '' : RM.total(state.displayData.length),
+        body
+      }).replace('data-rpt-close', 'data-rpt-close data-act="close"');
     }
 
     el.innerHTML = '<div class="space-y-4">' +

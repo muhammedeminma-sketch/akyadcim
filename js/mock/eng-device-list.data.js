@@ -6,14 +6,14 @@
      doc('CMR/T01')/descendant::dev[@id='<id>']  (con_host, con_port, pro_ver, ...)     → details(id)
      XDB_SetValue(.../@con_host ...) / {"cmd":2,"id":"<id>"} (silme)                    → update(id) / remove(id)
    Cihaz kimlikleri mapToDevice() ayrıştırmasının beklediği biçimdedir:
-     K<kabin>_PDU_<A|B>_DV          PDU (gerçek db_CMR_T01.xml ile aynı; dev_loc = "1.KAT/1.SALON/POD 9/BJ SIRASI")
+     K<kabin>_PDU_<A|B>_DV          PDU (AyXDB kimlik biçimi; dev_loc kurgusal, ör. "1.KAT/1.SALON/POD 3/DA SIRASI")
      <POD>_<kabin>_ID01_DV          Kabin sensör modülü (Modbus ID 01)
      KAT1_SAL1_<A5>_UPS             UPS (DCIM.data.ups[].devId — system-health / telemetri ile aynı)
-     IDC1_KLM109_DV, KAT1_SAL1_*_KLM_PANO_DV, PMM_n, SNS_GW_<POD>  klima / pano / analizör / ağ geçidi
+     KAT1_SAL1_KLM109_DV, KAT1_SAL1_*_KLM_PANO_DV, PMM_n, SNS_GW_<POD>  klima / pano / analizör / ağ geçidi
    STA (AyXDB, 0x03 önekli cihaz durumu): 0x0303 normal, 0x0307 uyarı, 0x030B alarm, 0x030F acil,
-     0x0300 devre dışı, 0x0301 bağlanamadı, 0x0302 eski. Senaryo: DCIM.data.pdu.scenario (1AV42 PDU-B alarm,
-     1CB52 PDU-B uyarı), system-health sensör durumları (1BJ53/1BC37 alarm, 1BQ55/1CE56/1BX50/1BU54 uyarı),
-     1CE51 sensör modülü + UPS B7 haberleşme kaybı (bağlanamadı), PMM-7 planlı devre dışı,
+     0x0300 devre dışı, 0x0301 bağlanamadı, 0x0302 eski. Senaryo: DCIM.data.pdu.scenario (1NA06 PDU-B alarm,
+     1DL03 PDU-B uyarı), system-health sensör durumları (1DU06/1DA07 alarm, 1DS07/1DL01/1DP02/1DN05 uyarı),
+     1DM03 sensör modülü + UPS B7 haberleşme kaybı (bağlanamadı), PMM-7 planlı devre dışı,
      UPS A5 / KLIMA 109 alarm, UPS A3 / UPS B4 / KLIMA 104 / KLIMA 112 / A1 KLIMA PANOSU uyarı.
    Sunum varsayımı: gerçek sahada CMR/T01 yalnızca PDU'ları içerir (UPS/klima/pano CMR/T00'dadır);
      sunumda Salon 1 listesi tüm saha cihazlarını gösterir.
@@ -29,7 +29,7 @@
   const STA = { normal: '0x0303', warning: '0x0307', alarm: '0x030B', critical: '0x030F', disabled: '0x0300', lost: '0x0301', stale: '0x0302' };
 
   // system-health.html (D.health) ile aynı sensör modülü durumları
-  const SENSOR_STATE = { '1BJ53': 'alarm', '1BC37': 'alarm', '1BQ55': 'warning', '1CE56': 'warning', '1BX50': 'warning', '1BU54': 'warning' };
+  const SENSOR_STATE = { '1DU06': 'alarm', '1DA07': 'alarm', '1DS07': 'warning', '1DL01': 'warning', '1DP02': 'warning', '1DN05': 'warning' };
   // Salt okunur SNMP kimlik bilgileri (sunum değerleri — gerçek saha bilgisi değildir)
   const COMMUNITY = { read: 'dcim-ro', v3User: 'dcim_snmp' };
 
@@ -91,7 +91,7 @@
           // cabinet-detail / pdu-detail ile aynı IP ve SNMP sürümü (DCIM.data.pdu)
           const devs = D.cabinetMgr && D.cabinetMgr.pduDevs ? D.cabinetMgr.pduDevs(dv._ref) : [];
           const d = devs.find(x => x.id === dv.id) || {};
-          return Object.assign(snmp(d.pro_ver || 'V2C', d.con_host || '-'), { ext_key: 'TTVM-' + dv._ref + '-' + dv._side });
+          return Object.assign(snmp(d.pro_ver || 'V2C', d.con_host || '-'), { ext_key: 'DC-' + dv._ref + '-' + dv._side });
         }
         case 'sns': {
           const c = D.findCabinet(dv._ref);

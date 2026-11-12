@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/tailwind-extra.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/3d.css">
 </head>
 <body class="dark">
   <div class="h-screen flex flex-col font-sans bg-slate-100 dark:bg-surface-base text-slate-900 dark:text-slate-100 transition-colors duration-150 overflow-hidden">
@@ -17,35 +18,70 @@
     <main class="flex-1 min-h-0 overflow-hidden bg-slate-100 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 p-2.5 sm:p-3 flex flex-col">
       <div class="flex flex-col h-[calc(100vh-5.25rem)] overflow-hidden gap-1.5">
 
-        <!-- Page Header (compact) -->
-        <div class="shrink-0 mb-1 pb-1 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800/80 select-none">
-          <div class="flex items-center gap-3">
-            <div>
+        <!-- Page Header (compact) + araç çubuğu (tek satır) -->
+        <div class="shrink-0 mb-1 pb-1 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800/80 select-none relative z-30">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="min-w-0">
               <nav class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 mb-0.5 font-medium">
-                <a href="2d.html" class="hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"><i class="pi pi-home text-[10px]"></i></a>
+                <a href="dashboard.html" class="hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"><i class="pi pi-home text-[10px]"></i></a>
                 <i class="pi pi-chevron-right text-[8px] text-slate-400"></i>
                 <span class="text-slate-700 dark:text-slate-300 font-bold">Operasyon</span>
                 <i class="pi pi-chevron-right text-[8px] text-slate-400"></i>
                 <span class="text-slate-700 dark:text-slate-300 font-bold">Dijital İkiz (3D)</span>
               </nav>
               <div class="flex items-center gap-2">
-                <h1 class="text-sm md:text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100">1. Kat 1. Salon Sistem Odası</h1>
+                <h1 id="page-title" class="text-sm md:text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100 truncate">1. Kat 1. Salon Sistem Odası</h1>
               </div>
             </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2.5 shrink-0 ml-auto">
-            <div class="flex flex-wrap items-center gap-2">
-              <!-- GRUP 1: Sahne telemetrisi -->
-              <div class="h-9 flex items-center gap-2.5 bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] px-2.5 shadow-2xs text-xs">
-                <div class="h-full flex items-center gap-1.5 px-0.5">
-                  <i class="pi pi-server text-sky-500 text-xs"></i>
-                  <div><span class="text-[9.5px] text-slate-500 dark:text-slate-400 font-extrabold uppercase block leading-none tracking-tight">Kabin</span><span class="font-mono font-black text-slate-900 dark:text-slate-100 text-xs leading-tight" id="kpi-cabinets">0</span></div>
-                </div>
-                <div class="h-5 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
-                <div class="h-full flex items-center gap-1.5 px-0.5">
-                  <i class="pi pi-box text-blue-500 text-xs"></i>
-                  <div><span class="text-[9.5px] text-slate-500 dark:text-slate-400 font-extrabold uppercase block leading-none tracking-tight">Görünür Assetler</span><span class="font-mono font-black text-slate-900 dark:text-slate-100 text-xs leading-tight" id="kpi-assets">0</span></div>
-                </div>
+
+          <div class="flex flex-nowrap items-center gap-1.5 shrink-0 ml-auto">
+            <!-- GRUP 0: Kat Seçici (SITE_Floors; yeşil nokta: canlı veri) -->
+            <div class="h-9 inline-flex items-center bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] pl-2 pr-0.5 shadow-2xs gap-1.5" title="Kat seçimi · yeşil nokta: canlı veri, gri: yalnız kat planı">
+              <i class="pi pi-building text-xs text-sky-500"></i>
+              <span class="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400"></span>
+              <select id="floor-select" aria-label="Kat seçimi" class="h-8 pr-1 text-xs bg-slate-50 dark:bg-[#0b121e] border-0 text-slate-800 dark:text-slate-200 outline-none cursor-pointer font-bold"></select>
+            </div>
+
+            <!-- GRUP 0a: Durum renklendirme anahtarı -->
+            <label class="h-9 shrink-0 inline-flex items-center gap-2 px-2.5 bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs cursor-pointer select-none" title="Kabin, klima, klima panosu ve UPS'i 2D'deki durum renkleriyle boya">
+              <i class="pi pi-palette text-xs text-sky-500"></i>
+              <span class="text-xs font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">Durum rengi</span>
+              <input id="status-coloring" type="checkbox" class="sr-only peer" />
+              <div class="dt3d-switch peer-checked:bg-sky-500"></div>
+            </label>
+
+            <!-- GRUP 0a2: Zemin ısı haritası -->
+            <label class="h-9 shrink-0 inline-flex items-center gap-2 px-2.5 bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs cursor-pointer select-none" title="Zemini kabin sıcaklıklarıyla renklendir (ısı haritası)">
+              <i class="pi pi-sun text-xs text-orange-500"></i>
+              <span class="text-xs font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">Isı haritası</span>
+              <input id="heatmap-toggle" type="checkbox" class="sr-only peer" />
+              <div class="dt3d-switch peer-checked:bg-orange-500"></div>
+            </label>
+
+            <!-- GRUP 0b: Katman Yöneticisi (aşağı açılan menü) -->
+            <div class="relative z-30 shrink-0">
+              <button type="button" id="layers-btn" aria-expanded="false" title="Katman yöneticisini aç/kapat" class="h-9 px-3 flex items-center gap-1.5 bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] shadow-2xs text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer">
+                <i class="pi pi-sliders-h text-xs"></i>
+                <span class="whitespace-nowrap">Katman Yöneticisi</span>
+                <i class="pi pi-chevron-down text-[10px]" data-chevron></i>
+              </button>
+              <div id="layers-backdrop" class="hidden fixed inset-0 z-0 cursor-default"></div>
+              <div id="layers-menu" class="hidden absolute top-full left-0 mt-1.5 z-10 w-72 max-w-[calc(100vw-1.5rem)] max-h-[min(34rem,calc(100vh-14rem))] p-3 rounded-[4px] bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-slate-700/50 shadow-xl backdrop-blur text-slate-800 dark:text-slate-100 overflow-y-auto custom-scrollbar"></div>
+            </div>
+
+            <!-- GRUP 1: Sahne telemetrisi -->
+            <div class="h-9 flex items-center gap-2.5 bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] px-2.5 shadow-2xs text-xs">
+              <div class="h-full flex items-center gap-1.5 px-0.5">
+                <i class="pi pi-server text-sky-500 text-xs"></i>
+                <div><span class="text-[9.5px] text-slate-500 dark:text-slate-400 font-extrabold uppercase block leading-none tracking-tight">Kabin</span><span class="font-mono font-black text-slate-900 dark:text-slate-100 text-xs leading-tight" id="kpi-cabinets">0</span></div>
+              </div>
+              <div class="h-5 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
+              <div class="h-full flex items-center gap-1.5 px-0.5">
+                <i class="pi pi-box text-blue-500 text-xs"></i>
+                <div><span class="text-[9.5px] text-slate-500 dark:text-slate-400 font-extrabold uppercase block leading-none tracking-tight">Görünür Assetler</span><span class="font-mono font-black text-slate-900 dark:text-slate-100 text-xs leading-tight" id="kpi-assets">0</span></div>
+              </div>
+              <div class="dt3d-wide h-full items-center gap-2.5">
                 <div class="h-5 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
                 <div class="h-full flex items-center gap-1 px-0.5">
                   <div><span class="text-[9.5px] text-slate-500 dark:text-slate-400 font-extrabold uppercase block leading-none tracking-tight">FPS</span><span class="font-mono font-black text-emerald-600 dark:text-emerald-400 text-xs leading-tight" id="kpi-fps">--</span></div>
@@ -55,44 +91,42 @@
                   <div><span class="text-[9.5px] text-slate-500 dark:text-slate-400 font-extrabold uppercase block leading-none tracking-tight">DRAW</span><span class="font-mono font-black text-sky-600 dark:text-sky-400 text-xs leading-tight" id="kpi-draw">--</span></div>
                 </div>
               </div>
+            </div>
 
-              <!-- GRUP 2: Zoom & kamera önayarları -->
-              <div class="h-9 inline-flex items-center bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] p-0.5 shadow-2xs gap-0.5">
-                <button type="button" data-act="zoom-in" title="Yakınlaştır" class="h-8 w-8 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-plus text-xs"></i></button>
-                <button type="button" data-act="zoom-out" title="Uzaklaştır" class="h-8 w-8 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-minus text-xs"></i></button>
-                <div class="w-[1px] h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
-                <button type="button" data-act="cam-top" title="Üstten Görünüm" class="h-8 px-2.5 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-th-large text-xs"></i><span>Üstten</span></button>
-                <button type="button" data-act="cam-iso" title="İzometrik Görünüm" class="h-8 px-2.5 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-box text-xs"></i><span>İzometrik</span></button>
-                <button type="button" data-act="cam-reset" title="Tüm odaya dön / Sıfırla" class="h-8 px-2.5 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-arrows-alt text-xs"></i><span>Sıfırla</span></button>
-              </div>
+            <!-- GRUP 2: Zoom & ekrana sığdır -->
+            <div class="h-9 inline-flex items-center bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] p-0.5 shadow-2xs gap-0.5">
+              <button type="button" data-act="zoom-in" title="Yakınlaştır" class="h-8 w-8 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-plus text-xs"></i></button>
+              <button type="button" data-act="zoom-out" title="Uzaklaştır" class="h-8 w-8 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-minus text-xs"></i></button>
+              <div class="w-[1px] h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+              <button type="button" data-act="fit" title="Tüm odaya dön" class="h-8 min-w-8 px-2 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600 rounded-[2px] transition-colors cursor-pointer"><i class="pi pi-arrows-alt text-xs"></i><span class="dt3d-wide-inline">Tüm odaya dön</span></button>
+            </div>
 
-              <!-- GRUP 3: Kalite & Arama -->
-              <div class="h-9 inline-flex items-center bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] p-0.5 shadow-2xs gap-1">
-                <select id="quality" class="h-8 px-2 text-xs bg-transparent border-0 text-slate-800 dark:text-slate-200 outline-none cursor-pointer font-semibold" aria-label="Görüntü kalitesi">
-                  <option value="high">Yüksek kalite</option>
-                  <option value="balanced" selected>Dengeli kalite</option>
-                  <option value="performance">Performans</option>
-                </select>
-                <div class="w-[1px] h-5 bg-slate-200 dark:bg-slate-700"></div>
-                <div class="flex items-center gap-1">
-                  <input id="search" type="text" placeholder="Kabin ara: 1BJ53" class="h-8 w-32 sm:w-40 px-2.5 text-xs bg-transparent text-slate-800 dark:text-slate-200 placeholder:text-slate-400 outline-none" />
-                  <button type="button" data-act="find" class="h-8 px-2.5 text-xs rounded-[2px] bg-slate-200/80 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold transition-colors cursor-pointer flex items-center gap-1.5"><i class="pi pi-search text-xs"></i><span class="hidden sm:inline">Bul</span></button>
-                </div>
+            <!-- GRUP 3: Kalite & Arama -->
+            <div class="h-9 inline-flex items-center bg-slate-50 dark:bg-[#0b121e] border border-slate-200 dark:border-border-subtle rounded-[2px] p-0.5 shadow-2xs gap-1">
+              <select id="quality" class="h-8 px-2 text-xs bg-transparent border-0 text-slate-800 dark:text-slate-200 outline-none cursor-pointer font-semibold" aria-label="Görüntü kalitesi">
+                <option value="high" selected>Yüksek kalite</option>
+                <option value="balanced">Dengeli kalite</option>
+                <option value="performance">Performans</option>
+              </select>
+              <div class="w-[1px] h-5 bg-slate-200 dark:bg-slate-700"></div>
+              <div class="flex items-center gap-1">
+                <input id="search" type="text" placeholder="Kabin ara: 1DU06" class="h-8 w-28 px-2.5 text-xs bg-transparent text-slate-800 dark:text-slate-200 placeholder:text-slate-400 outline-none" />
+                <button type="button" data-act="find" title="Bul" class="h-8 min-w-8 px-2 text-xs rounded-[2px] bg-slate-200/80 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5"><i class="pi pi-search text-xs"></i><span class="dt3d-wide-inline">Bul</span></button>
               </div>
+            </div>
 
-              <!-- GRUP 4: 2D/3D & otomatik dönüş -->
-              <div class="h-9 inline-flex items-center bg-slate-50 dark:bg-[#0b121e] p-0.5 rounded-[2px] border border-slate-200 dark:border-border-subtle shadow-2xs gap-0.5">
-                <a href="2d.html" class="h-8 px-3 text-xs rounded-[2px] transition-colors cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 flex items-center justify-center font-bold" title="2D SCADA Şemasına Geç">2D</a>
-                <button type="button" class="h-8 px-3 text-xs rounded-[2px] transition-colors cursor-pointer font-bold bg-sky-600 text-white flex items-center justify-center">3D</button>
-                <div class="w-[1px] h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
-                <button type="button" data-act="rotate" id="rotate-btn" class="h-8 px-3 text-xs rounded-[2px] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600"><i class="pi pi-sync text-xs"></i><span>Otomatik döndür</span></button>
-              </div>
+            <!-- GRUP 4: 2D/3D & otomatik dönüş -->
+            <div class="h-9 inline-flex items-center bg-slate-50 dark:bg-[#0b121e] p-0.5 rounded-[2px] border border-slate-200 dark:border-border-subtle shadow-2xs gap-0.5">
+              <button type="button" data-act="to-2d" class="h-8 px-3 text-xs rounded-[2px] transition-colors cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 flex items-center justify-center font-bold" title="2D SCADA Şemasına Geç">2D</button>
+              <button type="button" class="h-8 px-3 text-xs rounded-[2px] transition-colors cursor-pointer font-bold bg-sky-600 text-white flex items-center justify-center">3D</button>
+              <div class="w-[1px] h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+              <button type="button" data-act="rotate" id="rotate-btn" title="Otomatik döndür" class="h-8 min-w-8 px-2 text-xs rounded-[2px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-sky-600"><i class="pi pi-sync text-xs"></i><span class="dt3d-wide-inline">Otomatik döndür</span></button>
             </div>
           </div>
         </div>
 
         <!-- 3D Canvas Body Wrapper -->
-        <div class="dcim-3d-wrapper flex-1 relative min-h-0 overflow-hidden bg-[#060c17] dark:bg-[#060c17] rounded-[2px] border border-slate-200 dark:border-border-subtle">
+        <div id="dt3d-wrap" class="dcim-3d-wrapper flex-1 relative min-h-0 overflow-hidden bg-[#060c17] dark:bg-[#060c17] rounded-[2px] border border-slate-200 dark:border-border-subtle">
           <canvas id="renderCanvas" aria-label="DCIM 3D sahnesi"></canvas>
 
           <!-- Yükleniyor -->
@@ -101,21 +135,36 @@
             <span class="font-semibold">3D sahne oluşturuluyor...</span>
           </div>
 
-          <!-- LEFT PANEL (LAYER MANAGER) -->
-          <aside id="layer-panel" class="floating-panel bottom-3 left-3 w-72 max-w-[calc(100vw-1.5rem)] p-3 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-slate-700/50 shadow-xl text-slate-800 dark:text-slate-100 max-h-[calc(100vh-6rem)] overflow-y-auto custom-scrollbar"></aside>
+          <!-- SOL PANEL: KABİN DETAYI (kabine tek tıklamada açılır) -->
+          <div id="left-drawer" class="hidden floating-drawer drawer-slide-left drawer-left-full top-3 bottom-3 left-3">
+            <button type="button" data-left-open title="Kabin detayını aç" class="drawer-handle top-3 h-9 px-3 flex items-center gap-2 bg-white/95 dark:bg-[#0b1320]/95 border border-l-0 border-slate-200 dark:border-slate-700/50 shadow-xl text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer">
+              <i class="pi pi-server text-xs"></i>
+              <span class="whitespace-nowrap max-w-[140px] truncate" data-left-name></span>
+              <i class="pi pi-chevron-right text-[10px]"></i>
+            </button>
+            <div id="inspector" class="floating-panel inspector-panel max-w-[calc(100vw-1.5rem)] p-3 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-slate-700/50 shadow-xl text-slate-800 dark:text-slate-100 overflow-y-auto custom-scrollbar"></div>
+          </div>
 
-          <!-- RIGHT PANEL -->
-          <aside id="detail-panel" class="floating-panel top-3 right-3 w-96 max-w-[calc(100vw-1.5rem)] p-3 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-slate-700/50 shadow-2xl text-slate-800 dark:text-slate-100 max-h-[calc(100vh-7rem)] overflow-y-auto custom-scrollbar"></aside>
+          <!-- SAĞ PANEL (Kablolar / Sensörler / Güç & PDU) -->
+          <div id="right-drawer" class="floating-drawer drawer-right top-3 right-3">
+            <button type="button" data-right-open title="Paneli genişlet" class="drawer-handle top-3 h-9 px-3 flex items-center gap-2 bg-white/95 dark:bg-[#0b1320]/95 border border-r-0 border-slate-200 dark:border-slate-700/50 shadow-2xl text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer">
+              <i class="pi pi-chevron-left text-[10px]"></i>
+              <i class="pi pi-server text-xs"></i>
+              <span class="whitespace-nowrap">Detay Paneli</span>
+              <span data-right-handle-extra class="flex items-center gap-1"></span>
+            </button>
+            <aside id="detail-panel" class="floating-panel w-96 max-w-[calc(100vw-1.5rem)] p-3 bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-slate-700/50 shadow-2xl text-slate-800 dark:text-slate-100 overflow-y-auto custom-scrollbar"></aside>
+          </div>
 
-          <!-- BOTTOM STATUS BAR -->
-          <div class="floating-panel bottom-2.5 left-76 right-100 hidden lg:flex items-center gap-3 px-3 py-1.5 bg-white/90 dark:bg-[#070c16]/90 border border-slate-200 dark:border-slate-800 text-[10px] text-slate-600 dark:text-slate-400 pointer-events-none">
-            <span><b class="text-blue-600 dark:text-sky-400">Hazır</b></span>
-            <span class="text-slate-400">|</span>
-            <span>Renderer: Three.js r166 / WebGL</span>
-            <span class="text-slate-400">|</span>
-            <span>Assetler: lazy seçili / opsiyonel komşular</span>
-            <span class="text-slate-400">|</span>
-            <span>Sol tık: seç · Çift tık: odaklan · Sağ tık: kaydır</span>
+          <!-- ISI HARİTASI LEJANDI (üst orta) -->
+          <div id="heat-legend" class="hidden floating-panel heat-legend-pos top-3 w-64 max-w-[calc(100vw-1.5rem)] px-3 py-2 bg-white/90 dark:bg-[#070c16]/90 border border-slate-200 dark:border-slate-800 text-[10px] text-slate-600 dark:text-slate-400 pointer-events-none"></div>
+
+          <!-- KAT YÜKLENİYOR -->
+          <div id="floor-loading" class="hidden absolute inset-0 z-20 grid place-items-center bg-slate-950/30 pointer-events-none">
+            <div class="flex items-center gap-2 px-3 py-2 rounded-[2px] bg-white/95 dark:bg-[#0b1320]/95 border border-slate-200 dark:border-slate-700/50 shadow-2xl text-xs font-semibold text-slate-800 dark:text-slate-100">
+              <i class="pi pi-spin pi-spinner text-sky-500"></i>
+              Kat planı yükleniyor…
+            </div>
           </div>
 
           <!-- HOVER TOOLTIP -->
@@ -131,8 +180,12 @@
   <script src="vendor/three.bundle.min.js"></script>
   <script src="js/layout-data.js"></script>
   <script src="js/mock-data.js"></script>
+  <script src="js/mock/alarms.data.js"></script>
+  <script src="js/mock/twin3d.data.js"></script>
   <script src="js/shell.js"></script>
+  <script src="js/report-kit.js"></script>
   <script src="js/ui-components.js"></script>
-  <script src="js/3d.js"></script>
+  <!-- Başlık hemen çizilir; ağır sahne betiği ilk boyamadan sonra yüklenir (geçişte navbar kaybolmasın) -->
+  <script>DCIM.shell.init({ active: '3d' }); requestAnimationFrame(function () { setTimeout(function () { var s = document.createElement('script'); s.src = 'js/3d.js'; document.body.appendChild(s); }, 0); });</script>
 </body>
 </html>

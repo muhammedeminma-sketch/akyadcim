@@ -142,3 +142,108 @@
 /* Rapor tablosundaki pdu-line (innerHTML, global stil yok → sade satır) */
 .cp-report-table .pdu-line { line-height: 1.5; }
 .cp-report-table .pdu-line strong { font-weight: 700; }
+
+/* --- customer-change.component.scss (yeni kat kat düzen): PDU seçim kutusu, port kutucukları, satır vurgusu --- */
+.cc-select {
+  display: flex; align-items: center; width: 100%; height: 36px; padding: 0 28px 0 10px; position: relative;
+  background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 2px; font-size: 12px; font-weight: 600; color: #1e293b;
+  text-align: left; cursor: pointer; transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.cc-select::after {
+  content: ''; position: absolute; right: 11px; top: 50%; margin-top: -2px;
+  border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #64748b;
+}
+.cc-select:hover { border-color: #0ea5e9; }
+.cc-select:focus, .cc-select.is-open { outline: none; border-color: #0284c7; box-shadow: 0 0 0 1px #0284c7; }
+.cc-select .cc-placeholder { color: #94a3b8; font-weight: 500; }
+.dark .cc-select { background-color: #080c14; border-color: #2a3b5c; color: #f1f5f9; }
+.dark .cc-select::after { border-top-color: #94a3b8; }
+.dark .cc-select:hover { border-color: #38bdf8; }
+.dark .cc-select:focus, .dark .cc-select.is-open { border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e9; }
+.dark .cc-select .cc-placeholder { color: #64748b; }
+
+.cc-port {
+  height: 28px; padding: 0 6px; border: 1px solid #cbd5e1; border-radius: 2px; background-color: #ffffff; color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+.cc-port:hover:not(:disabled) { border-color: #0ea5e9; color: #0369a1; }
+.cc-port.cc-port--on { background-color: #0284c7; border-color: #0284c7; color: #ffffff; }
+.cc-port.cc-port--on:hover:not(:disabled) { background-color: #0369a1; border-color: #0369a1; color: #ffffff; }
+.cc-port:disabled { cursor: not-allowed; opacity: 0.55; }
+.cc-port:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.45); }
+.dark .cc-port { background-color: #080c14; border-color: #2a3b5c; color: #cbd5e1; }
+.dark .cc-port:hover:not(:disabled) { border-color: #38bdf8; color: #7dd3fc; }
+.dark .cc-port.cc-port--on { background-color: #0284c7; border-color: #0ea5e9; color: #ffffff; }
+.dark .cc-port.cc-port--on:hover:not(:disabled) { background-color: #0369a1; color: #ffffff; }
+
+/* Başka kayda eşleşmiş çıkış: görünür, seçilemez (üzerine gelince müşteri adı — title) */
+.cc-port.cc-port--taken {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; border-style: dashed; border-color: #cbd5e1;
+  background-color: #f8fafc; background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgba(148, 163, 184, 0.16) 5px 6px);
+  color: #94a3b8; cursor: not-allowed;
+}
+.cc-port.cc-port--taken i { font-size: 9px; color: #d97706; }
+.cc-port.cc-port--taken:hover, .cc-port.cc-port--taken:focus-visible { border-color: #f59e0b; color: #64748b; }
+.dark .cc-port.cc-port--taken {
+  border-color: #2a3b5c; background-color: #0b111c; background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgba(148, 163, 184, 0.09) 5px 6px); color: #64748b;
+}
+.dark .cc-port.cc-port--taken i { color: #fbbf24; }
+.dark .cc-port.cc-port--taken:hover, .dark .cc-port.cc-port--taken:focus-visible { border-color: #f59e0b; color: #94a3b8; }
+
+/* 'PDU Ekle' ile eklenen satır: görünür alana kayınca birkaç saniye vurgulanır */
+.cc-row--flash { --cc-flash-bg: #e0f2fe; animation: cc-row-flash 2.4s ease-out 1; }
+.dark .cc-row--flash { --cc-flash-bg: #0c2a40; }
+@keyframes cc-row-flash {
+  0%, 18% { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.45); background-color: var(--cc-flash-bg); }
+  32% { box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.25); }
+  48% { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.45); background-color: var(--cc-flash-bg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-row--flash { animation: none; border-color: #0ea5e9 !important; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.45); }
+}
+.customer-change-dialog .scada-mat-select-panel .mat-mdc-option, .scada-mat-select-panel .mat-mdc-option { min-height: 34px; padding: 0 12px; font-size: 12px; }
+
+/* Mobil kart görünümü: PDU / IP kutuları kaydırmasız (matching-pdu.component.scss) */
+@media (max-width: 1023.98px) {
+  .pdu-chip-container, .ip-chip-container { max-height: none; overflow: visible; }
+}
+
+/* Mobil sekme çubuğu (user-app styles.css → .nu-mtabs, @media max-width 1023.98px) */
+@media (max-width: 1023.98px) {
+  #cp-root .nu-mtabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; width: 100%; padding: 0; background: transparent; border-bottom: 1px solid var(--color-slate-200, #e2e8f0); }
+  .dark #cp-root .nu-mtabs { border-bottom-color: var(--color-border-subtle, #1b263b); }
+  #cp-root .nu-mtabs > [role="tab"] {
+    min-width: 0; height: 2.75rem; margin-bottom: -1px; padding: 0 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0 !important; box-shadow: none;
+    color: var(--color-slate-500, #64748b); font-size: 13.5px; font-weight: 600; line-height: 1.15; text-align: center;
+  }
+  .dark #cp-root .nu-mtabs > [role="tab"] { color: var(--color-slate-400, #94a3b8); }
+  #cp-root .nu-mtabs > [role="tab"][aria-selected="true"] { border-bottom-color: var(--color-sky-600, #0284c7); color: var(--color-slate-900, #0f172a); }
+  .dark #cp-root .nu-mtabs > [role="tab"][aria-selected="true"] { border-bottom-color: var(--color-sky-400, #38bdf8); color: var(--color-slate-100, #f1f5f9); }
+  #cp-root .nu-mtabs > [role="tab"][aria-selected="true"] > .pi { color: var(--color-sky-600, #0284c7); }
+  .dark #cp-root .nu-mtabs > [role="tab"][aria-selected="true"] > .pi { color: var(--color-sky-400, #38bdf8); }
+}
+
+/* Tailwind'in bu sayfada yüklü CSS'te olmayan ara değerleri */
+:where(.text-\[10\.5px\]) { font-size: 10.5px; }
+
+/* customer-change @container düzeni (Tailwind @2xl/@3xl/@4xl/@6xl karşılıkları; tailwind-extra :where() ile sıfır
+   özgüllükte ürettiği için temel sınıfları ezemez — burada dialog kapsamında açıkça verilir) */
+.customer-change-dialog { container-type: inline-size; }
+@container (width >= 42rem) {
+  .customer-change-dialog .cc-summary { display: flex; }
+}
+@container (width >= 48rem) {
+  .customer-change-dialog .cc-row-grid { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); }
+  .customer-change-dialog .cc-row-pdu { border-bottom-width: 0; border-right-width: 1px; }
+}
+@container (width >= 56rem) {
+  .customer-change-dialog .cc-body { display: grid; grid-template-columns: 300px minmax(0, 1fr); overflow: hidden; }
+  .customer-change-dialog .cc-aside { border-bottom-width: 0; border-right-width: 1px; overflow-y: auto; }
+  .customer-change-dialog .cc-right { min-height: 0; }
+  .customer-change-dialog .cc-content { min-height: 0; overflow-y: auto; }
+}
+@container (width >= 72rem) {
+  .customer-change-dialog .cc-body { grid-template-columns: 330px minmax(0, 1fr); }
+}

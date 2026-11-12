@@ -37,3 +37,16 @@
 
 /* Durum akış diyagramındaki oklar (work-order-sta şablonundaki → ↑ ↓ karakterleri) */
 .wo-arrow { line-height: 1; }
+
+/* Mobil kart durum rozeti: süren iş emri (İptal / Tamamlandı / Durdu dışı) nabız gibi atar
+   (styles.css .nu-pulse-chip karşılığı; renk rozetin kendi yazı renginden, currentColor) */
+@keyframes nu-pulse-chip {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent), inset 0 0 0 999px color-mix(in srgb, currentColor 18%, transparent); }
+  70% { box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 0%, transparent), inset 0 0 0 999px color-mix(in srgb, currentColor 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent, inset 0 0 0 999px transparent; }
+}
+.nu-pulse-chip { animation: nu-pulse-chip 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+@media (prefers-reduced-motion: reduce) { .nu-pulse-chip { animation: none; } }
+
+/* Mobil kart rozeti ve noktası: hap biçimi (orijinalde rounded-full!) */
+.wo-pill { border-radius: 9999px !important; }

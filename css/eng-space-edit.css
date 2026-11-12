@@ -1,0 +1,67 @@
+/* Salon Planı Yönetimi (engineering.html#space-edit) — şematik SVG stilleri
+   schematic-viewer.component.scss + space-edit.component.scss karşılıkları (sunum sadeleştirmesi) */
+.se-svg { touch-action: none; }
+.se-svg.is-pan { cursor: grab; }
+.se-svg.is-panning { cursor: grabbing; }
+.se-svg.is-cross { cursor: crosshair; }
+.se-svg.is-text { cursor: text; }
+.se-svg.is-move { cursor: move; }
+
+.se-wall { fill: none; stroke: var(--schema-text-muted); stroke-width: 1.2; }
+.se-salon { fill: rgba(56, 189, 248, 0.025); stroke: var(--schema-border-muted); stroke-width: 1; stroke-dasharray: 6 4; }
+.se-salon-name { fill: var(--schema-text-muted); font-size: 13px; font-weight: 700; }
+.se-l1 { fill: rgba(148, 163, 184, 0.08); stroke: var(--schema-text-muted); stroke-width: 1; }
+
+.se-body { stroke: #797979; stroke-width: 1; }
+.se-cab { fill: #e2e8f0; }
+.se-clm { fill: #dbeafe; }
+.se-pnl { fill: #fef3c7; }
+.se-ups { fill: #d1fae5; }
+.dark .se-cab { fill: #1e293b; }
+.dark .se-clm { fill: #172a46; }
+.dark .se-pnl { fill: #3a2e12; }
+.dark .se-ups { fill: #11332a; }
+.dark .se-body { stroke: #475569; }
+.se-item:hover .se-body { stroke: #38bdf8; }
+.se-item.is-sel .se-body { stroke: #0ea5e9; stroke-width: 2.5; }
+.se-item.is-pick .se-body { stroke: #22d3ee; stroke-width: 3; }
+.se-label { fill: #0f172a; font-size: 11px; font-weight: 700; pointer-events: none; }
+.dark .se-label { fill: #e2e8f0; }
+.se-face { stroke: #0ea5e9; stroke-width: 3; stroke-linecap: round; pointer-events: none; }
+.dark .se-face { stroke: #38bdf8; }
+
+.se-text { fill: #0f172a; font-size: 11px; font-weight: 700; }
+.dark .se-text { fill: #f1f5f9; }
+.se-text.is-pod { font-size: 15px; }
+.se-text.is-sel { fill: #0284c7; }
+.dark .se-text.is-sel { fill: #38bdf8; }
+.se-text-hit { fill: transparent; }
+.se-text-g.is-sel .se-text-hit { fill: rgba(14, 165, 233, 0.12); stroke: #0ea5e9; stroke-width: 1; stroke-dasharray: 3 2; }
+
+.se-edge { fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
+.se-edge-hit { fill: none; stroke: transparent; stroke-width: 14; }
+.se-edge-g.is-erasable:hover .se-edge { stroke: #e11d48 !important; opacity: 1; }
+.se-node { fill: #ffffff; stroke-width: 1.5; }
+.se-riser { fill: #7c3aed; stroke: #ffffff; stroke-width: 1.5; }
+.se-riser-t { fill: #ffffff; font-size: 11px; font-weight: 800; pointer-events: none; }
+.se-pending { fill: #0ea5e9; }
+.se-preview-line { stroke-dasharray: 6 4; fill: none; opacity: 0.9; pointer-events: none; }
+
+.se-pod-hl { fill: rgba(14, 165, 233, 0.07); stroke: #0ea5e9; stroke-width: 2; stroke-dasharray: 8 5; pointer-events: none; }
+.se-pod-hl-t { fill: #0284c7; font-size: 13px; font-weight: 800; pointer-events: none; }
+.dark .se-pod-hl-t { fill: #38bdf8; }
+.se-path { fill: none; stroke: #06b6d4; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 12 6; pointer-events: none; }
+.se-selbox { fill: rgba(14, 165, 233, 0.1); stroke: #0ea5e9; stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
+
+.se-diff-add .se-body { stroke: #10b981; stroke-width: 3; }
+.se-diff-chg .se-body { stroke: #0ea5e9; stroke-width: 3; }
+.se-diff-mov .se-body { stroke: #f59e0b; stroke-width: 3; }
+.se-diff-del .se-body { stroke: #e11d48; stroke-width: 3; stroke-dasharray: 4 3; }
+
+.se-flash { animation: se-flash 1.6s ease-out 1; }
+@keyframes se-flash {
+  0% { box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.9); }
+  100% { box-shadow: 0 0 0 2px rgba(14, 165, 233, 0); }
+}
+.se-minimap-vp { fill: rgba(2, 132, 199, 0.08); stroke: #0284c7; stroke-width: 10; }
+.se-solo { box-shadow: 0 0 0 2px #fbbf24; }
